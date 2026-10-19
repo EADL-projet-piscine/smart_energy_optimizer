@@ -1,0 +1,25 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Environnements virtuels ---
+.venv/
+venv/
+env/
+
+# --- Machine Learning ---
+ml/mlruns/
+ml/mlartifacts/
+ml/data/raw/
+ml/data/processed/
+ml/models/
+*.pkl
+*.joblib

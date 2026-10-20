@@ -1,0 +1,86 @@
+
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v5
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+
+    - name: Install backend
+      run: python -m pip install -e "./app/back[dev]"
+
+    - name: Install ML
+      run: python -m pip install -e "./ml[dev]"
+
+    - name: Lint
+      run: ruff check .
+
+    - name: Check formatting
+      run: ruff format --check .
+
+    - name: Run tests
+      run: pytest
+
+
+
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          token-setup-trivy: ${{ secrets.GITHUB_TOKEN }}
+
+
+  # deploy-azure:
+  #   if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   environment: production
+
+  #   steps:
+  #     - uses: actions/checkout@v5
+
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.12"
+
+  #     - name: Install dependencies
+  #       run: pip install -e .
+
+  #     - name: Prepare deployment package
+  #       run: |
+  #         mkdir -p deploy
+  #         cp -r src pyproject.toml deploy/
+
+  #     - name: Deploy to Azure App Service
+  #       uses: azure/webapps-deploy@v3
+  #       with:
+  #         app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+  #         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+  #         package: deploy/

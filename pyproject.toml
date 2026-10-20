@@ -1,0 +1,40 @@
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-energy-optimizer"
+version = "0.1.0"
+description = "Application Smart Energy Optimizer"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ml*", "api*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app/back/src", "ml/src"]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "app/back/tests",
+    "ml/tests",
+]
+pythonpath = [
+    "app/back/src",
+    "ml/src",
+]

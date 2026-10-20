@@ -1,0 +1,9 @@
+# fichiers ignorés pour Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/*.tfvars.json
+infra/.terraform.tfstate.lock.info
+infra/.terraformrc
+infra/terraform.rc

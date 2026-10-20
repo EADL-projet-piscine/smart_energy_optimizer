@@ -11,6 +11,12 @@ Projet EADL — promotion READL006, groupe G4 Rennes.
 - Docker et Docker Compose
 - Git
 
+Les commandes sont données dans deux variantes : **Linux / macOS / WSL** et
+**Windows (PowerShell)**. Suivez celle qui correspond à votre terminal.
+Sous Windows, si vous avez WSL installé, tapez `wsl` puis suivez la
+première variante : c'est le plus simple et c'est l'environnement dans
+lequel le projet est testé.
+
 ## Structure du dépôt
 
     app/
@@ -40,6 +46,10 @@ docker compose up -d --build
 
 L'API est disponible sur http://localhost:8000 — rien d'autre à installer.
 
+Lancez cette commande depuis le dossier où se trouve le dépôt. Si le dépôt
+est dans WSL, lancez-la depuis WSL : un terminal Windows ne verra pas les
+mêmes chemins.
+
 Les étapes suivantes décrivent l'installation sans conteneur, utile pour
 développer avec le rechargement automatique.
 
@@ -57,6 +67,8 @@ PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 
 ### 4. Lancer l'application métier
 
+**Linux / macOS / WSL**
+
 ```bash
 cd app/back
 cp .env.example .env
@@ -65,6 +77,27 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 uvicorn smart_energy_app.main:app --reload
 ```
+
+**Windows (PowerShell)**
+
+```powershell
+cd app\back
+copy .env.example .env
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+uvicorn smart_energy_app.main:app --reload
+```
+
+Si PowerShell refuse d'exécuter le script d'activation, levez la
+restriction pour cette session seulement :
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Lancez les commandes **une par une**. Collées en bloc, certains terminaux
+perdent les retours à la ligne et les fusionnent.
 
 L'application est disponible sur http://127.0.0.1:8000
 
@@ -86,10 +119,22 @@ un conteneur, `localhost:5433` depuis la machine.
 
 ### 5. Lancer le service de prédiction
 
+**Linux / macOS / WSL**
+
 ```bash
 cd ml
 python3.12 -m venv .venv
 source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn smart_energy_ml.api.main:app --reload --port 8001
+```
+
+**Windows (PowerShell)**
+
+```powershell
+cd ml
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 uvicorn smart_energy_ml.api.main:app --reload --port 8001
 ```
@@ -101,6 +146,10 @@ Depuis `app/back` ou `ml/`, environnement virtuel activé :
 ```bash
 pytest
 ```
+
+Rappel de l'activation : `source .venv/bin/activate` sous Linux, macOS et
+WSL, `.venv\Scripts\Activate.ps1` sous PowerShell. L'invite doit afficher
+`(.venv)`.
 
 ## Qualité de code
 
@@ -130,6 +179,23 @@ par Git. Le fichier `.env.example` sert de modèle.
 docker compose down        # arrêter les conteneurs
 docker compose down -v     # arrêter et supprimer les données
 ```
+
+## En cas de problème
+
+**`source : Le terme «source» n'est pas reconnu`** — vous êtes dans
+PowerShell, pas dans un shell Unix. Suivez la variante Windows, ou tapez
+`wsl` pour basculer.
+
+**Deux commandes fusionnées** (`.venvsource`, `".[dev]"uvicorn`) — le
+copier-coller a perdu les retours à la ligne. Relancez les commandes une
+par une.
+
+**`port is already allocated`** — le port 8000 ou 5433 est déjà utilisé sur
+votre machine. Arrêtez le programme qui l'occupe, ou changez le port dans
+`docker-compose.yml`.
+
+**L'API répond `"database": "indisponible"`** — la base n'est pas joignable.
+Vérifiez `docker compose ps`, puis `docker compose logs db`.
 
 ## Conventions
 

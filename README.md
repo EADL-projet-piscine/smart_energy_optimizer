@@ -13,13 +13,15 @@ Projet EADL — promotion READL006, groupe G4 Rennes.
 
 ## Structure du dépôt
 
-    app/      Application métier — API consommée par le dashboard
+    app/
+      front/  Dashboard
+      back/   API métier — consommée par le dashboard
     ml/       Service de prédiction — modèle et API dédiée
-    infra/    Infrastructure (Terraform)
+    infra/    Infrastructure (Terraform, Data Factory)
     docs/     Documentation du projet
 
-`app` et `ml` sont deux services déployés séparément. Chacun a son propre
-`pyproject.toml` et son propre environnement virtuel.
+`app/back`, `app/front` et `ml` sont déployés séparément. Chaque service
+Python a son propre `pyproject.toml` et son propre environnement virtuel.
 
 ## Démarrage
 
@@ -30,7 +32,18 @@ git clone https://github.com/EADL-projet-piscine/smart_energy_optimizer.git
 cd smart_energy_optimizer
 ```
 
-### 2. Lancer la base de données
+### 2. Tout lancer d'un coup
+
+```bash
+docker compose up -d --build
+```
+
+L'API est disponible sur http://localhost:8000 — rien d'autre à installer.
+
+Les étapes suivantes décrivent l'installation sans conteneur, utile pour
+développer avec le rechargement automatique.
+
+### 3. Lancer la base de données seule
 
 ```bash
 docker compose up -d db
@@ -42,10 +55,10 @@ Attendre que la colonne `STATUS` indique `healthy`.
 PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 éviter les conflits avec une instance déjà installée).
 
-### 3. Lancer l'application métier
+### 4. Lancer l'application métier
 
 ```bash
-cd app
+cd app/back
 cp .env.example .env
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -65,10 +78,13 @@ Réponse attendue sur `/health` :
 ```
 
 Si `database` vaut `indisponible`, vérifier que le conteneur tourne
-(`docker compose ps`) et que `DATABASE_URL` dans `app/.env` pointe bien
-sur le port 5433.
+(`docker compose ps`) et que `DATABASE_URL` dans `app/back/.env` pointe
+bien sur le port 5433.
 
-### 4. Lancer le service de prédiction
+L'adresse de la base diffère selon le mode de lancement : `db:5432` depuis
+un conteneur, `localhost:5433` depuis la machine.
+
+### 5. Lancer le service de prédiction
 
 ```bash
 cd ml
@@ -80,7 +96,7 @@ uvicorn smart_energy_ml.api.main:app --reload --port 8001
 
 ## Tests
 
-Depuis `app/` ou `ml/`, environnement virtuel activé :
+Depuis `app/back` ou `ml/`, environnement virtuel activé :
 
 ```bash
 pytest
@@ -111,11 +127,14 @@ par Git. Le fichier `.env.example` sert de modèle.
 ## Arrêter l'environnement
 
 ```bash
-docker compose down        # arrêter la base
+docker compose down        # arrêter les conteneurs
 docker compose down -v     # arrêter et supprimer les données
 ```
 
 ## Conventions
+
+L'organisation du back-end est décrite dans `docs/conventions-back.md`, à
+lire avant d'écrire du code dans `app/back`.
 
 À compléter avec l'équipe : nommage des branches, format des messages de
 commit, processus de revue.

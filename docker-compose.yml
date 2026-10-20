@@ -16,5 +16,17 @@ services:
       timeout: 3s
       retries: 5
 
+  back:
+    build: ./app/back
+    container_name: enervision-back
+    environment:
+      DATABASE_URL: postgresql+psycopg://enervision:enervision@db:5432/enervision
+      ENERVISION_API_URL: https://api-mock.charlieandre.fr
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

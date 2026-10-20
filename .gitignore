@@ -23,3 +23,22 @@ ml/data/processed/
 ml/models/
 *.pkl
 *.joblib
+
+# --- Secrets et configuration locale ---
+.env
+.env.*
+!.env.example
+
+# --- IDE ---
+.idea/
+.vscode/
+
+# --- Système ---
+.DS_Store
+Thumbs.db
+
+# --- Logs et bases locales ---
+*.log
+*.db
+*.sqlite3
+*:Zone.Identifier

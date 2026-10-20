@@ -28,5 +28,14 @@ services:
       db:
         condition: service_healthy
 
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    image: smart-energy-ml:dev
+    ports:
+      - "8001:8000"
+    restart: unless-stopped
+    
 volumes:
   pgdata:

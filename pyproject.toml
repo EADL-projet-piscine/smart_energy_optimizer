@@ -24,16 +24,16 @@ dev = [
 where = ["."]
 include = ["ml*", "api*"]
 
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app/back/src", "ml/src"]
+
 [tool.pytest.ini_options]
 testpaths = [
     "app/back/tests",
     "ml/tests",
 ]
-
-[tool.ruff]
-line-length = 100
-target-version = "py312"
-src = ["app/back/src", "ml/src"]
 pythonpath = [
     "app/back/src",
     "ml/src",

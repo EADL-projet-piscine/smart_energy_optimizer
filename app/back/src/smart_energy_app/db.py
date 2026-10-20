@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from smart_energy_app.config import settings
 
@@ -14,6 +15,6 @@ def base_disponible() -> bool:
         with engine.connect() as connexion:
             connexion.execute(text("SELECT 1"))
         return True
-    except Exception as erreur:
+    except SQLAlchemyError as erreur:
         logger.error("Base de données injoignable : %s", erreur)
         return False

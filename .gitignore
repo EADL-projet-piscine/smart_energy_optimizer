@@ -40,4 +40,4 @@ Thumbs.db
 # --- Logs et bases locales ---
 *.log
 *.db
-*.sqlite3
+*.sqlite3*:Zone.Identifier

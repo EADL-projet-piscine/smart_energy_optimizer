@@ -50,6 +50,12 @@ Lancez cette commande depuis le dossier où se trouve le dépôt. Si le dépôt
 est dans WSL, lancez-la depuis WSL : un terminal Windows ne verra pas les
 mêmes chemins.
 
+Le microservice ML est également accessible sur http://localhost:8001.
+
+- http://localhost:8001/health — état du service ML
+- http://localhost:8001/docs — documentation interactive de l'API ML
+
+
 Les étapes suivantes décrivent l'installation sans conteneur, utile pour
 développer avec le rechargement automatique.
 

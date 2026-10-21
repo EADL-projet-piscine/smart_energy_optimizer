@@ -45,7 +45,7 @@ export function TableauDeBord() {
             {theme === 'dark' ? <IconeSoleil /> : <IconeLune />}
           </BoutonIcone>
           <BoutonIcone
-            onClick={() => actualiser(siteId)}
+            onClick={() => actualiser(siteId, undefined, true)}
             disabled={chargement}
             aria-label={
               resume?.source === 'demonstration'

@@ -38,7 +38,44 @@ git clone https://github.com/EADL-projet-piscine/smart_energy_optimizer.git
 cd smart_energy_optimizer
 ```
 
-### 2. Tout lancer d'un coup
+### 2. Installer les vérifications avant commit
+
+Un contrôle automatique met le code en forme et corrige les erreurs de
+style à chaque commit. À installer **une fois** après le clone :
+
+```bash
+sudo apt install pre-commit     # ou : pip install pre-commit
+pre-commit install
+```
+
+Sous Windows : `pip install pre-commit` dans votre environnement virtuel,
+ou `pipx install pre-commit`.
+
+Si un commit échoue avec « files were modified by this hook », c'est que
+des fichiers ont été corrigés automatiquement : relancez `git add -A` puis
+le commit.
+
+### 3. Configurer l'accès à l'API source
+
+```bash
+cd app/back
+cp .env.example .env
+```
+
+Puis renseignez dans `.env` les identifiants fournis par le formateur :
+
+```
+ENERVISION_USER=...
+ENERVISION_PASSWORD=...
+```
+
+Depuis le réseau de l'école, l'instance interne `http://10.43.43.80:8000`
+ne demande pas d'authentification : laissez les deux champs vides et
+changez `ENERVISION_API_URL`.
+
+Ne jamais mettre ces identifiants dans `.env.example`, qui est versionné.
+
+### 4. Tout lancer d'un coup
 
 ```bash
 docker compose up -d --build
@@ -59,7 +96,7 @@ Le microservice ML est également accessible sur http://localhost:8001.
 Les étapes suivantes décrivent l'installation sans conteneur, utile pour
 développer avec le rechargement automatique.
 
-### 3. Lancer la base de données seule
+### 5. Lancer la base de données seule
 
 ```bash
 docker compose up -d db
@@ -77,7 +114,6 @@ PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 
 ```bash
 cd app/back
-cp .env.example .env
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -234,7 +270,11 @@ par Git. Le fichier `.env.example` sert de modèle.
 |---|---|---|
 | `ENERVISION_API_URL` | URL de l'API source | `https://api-mock.charlieandre.fr` |
 | `ENERVISION_TIMEOUT_S` | Délai d'attente des appels API, en secondes | `10` |
+| `ENERVISION_USER` | Identifiant HTTP Basic de l'API source | vide |
+| `ENERVISION_PASSWORD` | Mot de passe HTTP Basic de l'API source | vide |
 | `DATABASE_URL` | Connexion PostgreSQL | `postgresql+psycopg://enervision:enervision@localhost:5433/enervision` |
+| `CONSUMPTION_REFRESH_S` | Intervalle de rafraîchissement de la mesure courante, en secondes | `60` |
+| `CONSUMPTION_STALENESS_S` | Âge à partir duquel une mesure est signalée périmée, en secondes | `120` |
 
 ## Arrêter l'environnement
 
@@ -253,12 +293,27 @@ PowerShell, pas dans un shell Unix. Suivez la variante Windows, ou tapez
 copier-coller a perdu les retours à la ligne. Relancez les commandes une
 par une.
 
+**`failed to connect to the docker API`** — Docker Desktop n'est pas lancé.
+L'ouvrir et attendre l'état *Engine running*.
+
 **`port is already allocated`** — le port 8000 ou 5433 est déjà utilisé sur
 votre machine. Arrêtez le programme qui l'occupe, ou changez le port dans
 `docker-compose.yml`.
 
 **L'API répond `"database": "indisponible"`** — la base n'est pas joignable.
 Vérifiez `docker compose ps`, puis `docker compose logs db`.
+
+**Les logs affichent `l'API a répondu 401`** — les identifiants de l'API
+source manquent ou sont faux. Vérifiez `ENERVISION_USER` et
+`ENERVISION_PASSWORD` dans `app/back/.env`, et relancez l'application : le
+fichier n'est lu qu'au démarrage.
+
+**`/api/consommation/resume` répond 503** — aucune mesure n'a encore été
+récupérée. Regardez les logs de l'application : le rafraîchissement tourne
+toutes les minutes et journalise chaque tentative.
+
+**`Temporary failure in name resolution` dans WSL** — le réseau de WSL est
+tombé. Depuis PowerShell : `wsl --shutdown`, puis rouvrir le terminal.
 
 ## Conventions
 

@@ -15,7 +15,7 @@ engine = create_engine(
 )
 
 
-def base_disponible() -> bool:
+def database_available() -> bool:
     try:
         with engine.connect() as connexion:
             connexion.execute(text("SELECT 1"))

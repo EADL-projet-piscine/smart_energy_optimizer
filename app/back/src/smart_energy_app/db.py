@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 engine = create_engine(settings.database_url, pool_pre_ping=True)
 
 
-def base_disponible() -> bool:
+def database_available() -> bool:
     try:
         with engine.connect() as connexion:
             connexion.execute(text("SELECT 1"))

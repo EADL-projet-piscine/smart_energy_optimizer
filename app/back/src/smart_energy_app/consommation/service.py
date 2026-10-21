@@ -1,6 +1,6 @@
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -20,7 +20,7 @@ class CurrentState:
     def age_seconds(self) -> float | None:
         if self.fetched_at is None:
             return None
-        return (datetime.now(timezone.utc) - self.fetched_at).total_seconds()
+        return (datetime.now(UTC) - self.fetched_at).total_seconds()
 
     def is_stale(self) -> bool:
         age = self.age_seconds()
@@ -42,7 +42,7 @@ async def refresh() -> bool:
             (time.monotonic() - started) * 1000,
         )
         return False
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - la boucle ne doit jamais mourir
         logger.warning(
             "Mesure courante indisponible en %.0f ms : %s",
             (time.monotonic() - started) * 1000,
@@ -51,7 +51,7 @@ async def refresh() -> bool:
         return False
 
     state.data = data
-    state.fetched_at = datetime.now(timezone.utc)
+    state.fetched_at = datetime.now(UTC)
     logger.info(
         "Mesure courante rafraîchie en %.0f ms (%d sites)",
         (time.monotonic() - started) * 1000,

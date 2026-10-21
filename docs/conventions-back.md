@@ -28,6 +28,7 @@ Chaque module vit dans `src/smart_energy_app/<domaine>/` et contient :
 | `service.py` | Les règles métier. C'est ici que se prennent les décisions. |
 | `repository.py` | Le seul endroit qui parle à la base de données. |
 | `client.py` | Les appels à une API extérieure, s'il y en a. |
+| `planificateur.py` | La tâche périodique du module, s'il en a une. |
 | `models.py` | Les tables SQLAlchemy. |
 | `schemas.py` | Les formats d'entrée et de sortie de l'API (Pydantic). |
 
@@ -77,10 +78,14 @@ __all__ = ["get_site", "list_sites"]
 | `main.py` | Assemble l'application et monte les routeurs. Pas de logique. |
 | `config.py` | Tous les paramètres, lus depuis l'environnement. |
 | `db.py` | Moteur SQLAlchemy et sessions. |
-| `commun/` | Ce qui sert à plusieurs modules : erreurs, pagination, conversion de fuseaux. |
+| `commun/` | Ce qui sert à plusieurs modules : adresses de l'API source (`enervision.py`), erreurs, pagination, conversion de fuseaux. |
 
 `commun/` est à utiliser avec parcimonie. Dès qu'on y met de la logique
 métier, il devient un fourre-tout dont tout le monde dépend.
+
+`commun/enervision.py` porte les chemins de l'API EnerVision sous forme de
+constantes. Aucun module ne réécrit une URL de la source à la main : il
+importe la constante correspondante.
 
 ## Ajouter un module
 
@@ -110,7 +115,7 @@ pistes.
 | `consommation` | Mesure courante et historique de consommation |
 | `previsions` | Prévisions du service ML et recommandations qui en découlent |
 | `alertes` | Alertes levées, leur sévérité et leur état |
-| `commun` | Erreurs, pagination, conversion de fuseaux |
+| `commun` | Adresses de l'API source, erreurs, pagination, conversion de fuseaux |
 
 `consommation` regroupe la mesure instantanée et l'historique : c'est la
 même grandeur, seule la source diffère — l'API EnerVision pour l'instant
@@ -126,6 +131,17 @@ défaillant) et ont leur propre cycle de vie — levée, consultée, acquittée.
 
 La collecte et l'ingestion ne figurent pas dans cette liste : elles sont
 portées par Azure Data Factory, hors du back-end.
+
+## Endpoints exposés
+
+| Endpoint | Module | Source |
+|---|---|---|
+| `GET /health` | — | état du service et de la base |
+| `GET /api/consommation/resume` | `consommation` | `/api/v1/stats/summary` |
+
+Les noms des endpoints reprennent ceux de l'API source quand ils en
+dérivent (`resume` pour `summary`), pour qu'on sache immédiatement d'où
+vient une donnée quand on débogue.
 
 ## Nommage
 
@@ -164,3 +180,23 @@ Un test ne doit pas dépendre du lancement de Docker ni d'un appel réseau
 réel. Si une fonction a besoin de la base, le test remplace le repository ;
 si elle appelle une API extérieure, le test lance un serveur local qui
 imite les réponses attendues.
+
+## Avant de pousser
+
+```bash
+cd ~/smart_energy_optimizer
+ruff check .
+ruff format --check .
+pytest
+```
+
+Ce sont exactement les trois commandes que lance la CI. Les passer en local
+évite de découvrir l'échec après le push — et de bloquer les autres, la CI
+étant commune à toutes les branches.
+
+Les deux premières sont lancées automatiquement à chaque commit si vous avez
+installé `pre-commit` (voir le README). Les relancer à la main reste utile
+avant d'ouvrir une pull request : le hook ne vérifie que les fichiers que
+vous avez modifiés, alors que la CI passe sur tout le dépôt — y compris sur
+le travail des autres, qui peut faire échouer votre pipeline sans que vous
+y soyez pour quelque chose.

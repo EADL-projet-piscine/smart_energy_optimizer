@@ -92,6 +92,7 @@ Le microservice ML est également accessible sur http://localhost:8001.
 - http://localhost:8001/health — état du service ML
 - http://localhost:8001/docs — documentation interactive de l'API ML
 
+
 Les étapes suivantes décrivent l'installation sans conteneur, utile pour
 développer avec le rechargement automatique.
 
@@ -107,7 +108,7 @@ Attendre que la colonne `STATUS` indique `healthy`.
 PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 éviter les conflits avec une instance déjà installée).
 
-### 6. Lancer l'application métier
+### 4. Lancer l'application métier
 
 **Linux / macOS / WSL**
 
@@ -123,6 +124,7 @@ uvicorn smart_energy_app.main:app --reload
 
 ```powershell
 cd app\back
+copy .env.example .env
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
@@ -143,7 +145,6 @@ L'application est disponible sur http://127.0.0.1:8000
 
 - http://127.0.0.1:8000/health — état du service et de la base
 - http://127.0.0.1:8000/docs — documentation de l'API
-- http://127.0.0.1:8000/api/consommation/resume — consommation courante des 7 sites
 
 Réponse attendue sur `/health` :
 
@@ -158,7 +159,7 @@ bien sur le port 5433.
 L'adresse de la base diffère selon le mode de lancement : `db:5432` depuis
 un conteneur, `localhost:5433` depuis la machine.
 
-### 7. Lancer le service de prédiction
+### 5. Lancer le service de prédiction
 
 **Linux / macOS / WSL**
 
@@ -202,9 +203,62 @@ ruff format .         # mettre en forme
 
 Configuration : ligne à 100 caractères, cible Python 3.12.
 
-Ces vérifications sont celles que lance la CI, depuis la racine du dépôt.
-Les passer en local avant de pousser évite de bloquer les autres : la CI
-est commune à toutes les branches.
+### Vérifications locales (pre-commit et pre-push)
+
+Deux hooks Git sont fournis, installés ensemble par une seule commande :
+
+| Moment | Contrôles | Effet |
+|---|---|---|
+| Avant chaque commit | `ruff check --fix`, `ruff format` | corrige et formate |
+| Avant chaque push | `ruff check`, `ruff format --check`, `pytest` | bloque le push en cas d'erreur, comme la CI |
+
+À installer une fois, depuis la racine du dépôt, dans un environnement
+virtuel **Python 3.12** activé avec les dépendances dev des deux services
+(`pre-commit` en fait partie) :
+
+```bash
+pre-commit install
+```
+
+Si le hook de commit a modifié des fichiers, le commit est interrompu :
+relisez les changements, ajoutez-les (`git add`) et relancez le commit.
+
+Le hook de push lance `pytest` avec l'environnement virtuel **activé** : si
+le push échoue avec `No module named pytest`, activez le `.venv` puis
+relancez. Pour tout vérifier sans pousser :
+
+```bash
+pre-commit run --all-files                         # contrôles du commit
+pre-commit run --hook-stage pre-push --all-files   # contrôles du push
+```
+
+La version de ruff du hook (`.pre-commit-config.yaml`) doit rester identique
+à celle des `pyproject.toml`, sinon le hook et la CI ne verront pas les mêmes
+erreurs.
+
+## Intégration continue
+
+Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request et à
+chaque merge dans `main` :
+
+| Job | Rôle |
+|---|---|
+| `lint` | `ruff check`, `ruff format --check`, `pytest` |
+| `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
+| `build` | Construit les images `back` et `ml`, les scanne avec Trivy |
+
+Un job en échec bloque la suite : `build` ne démarre que si `lint` et `scan`
+passent. Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour
+les images, seules celles qui ont un correctif disponible sont bloquantes.
+
+Depuis `main` uniquement, les images sont publiées sur GitHub Container
+Registry, étiquetées avec le SHA du commit et `latest` :
+
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/back
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml
+
+GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
+pull request dont la CI est rouge.**
 
 ## Configuration
 

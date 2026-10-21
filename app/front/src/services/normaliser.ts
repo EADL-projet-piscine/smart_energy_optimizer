@@ -1,7 +1,5 @@
-import { finaliserResume } from '../format'
-import type { Alerte, PointSerie, Recommandation, ResumeParc, Severite, Site } from '../modele'
-
-const DELAI_MS = 3000
+import { finaliserResume } from './format'
+import type { Alerte, PointSerie, Recommandation, ResumeParc, Severite, Site } from './modele'
 
 function estObjet(valeur: unknown): valeur is Record<string, unknown> {
   return typeof valeur === 'object' && valeur !== null && !Array.isArray(valeur)
@@ -326,27 +324,4 @@ export function normaliserResume(corps: unknown): ResumeParc | null {
     }
   }
   return null
-}
-
-export async function chargerResume(signal?: AbortSignal): Promise<ResumeParc> {
-  const controle = new AbortController()
-  const timer = window.setTimeout(() => controle.abort(), DELAI_MS)
-  const interrompre = () => controle.abort()
-  signal?.addEventListener('abort', interrompre)
-
-  try {
-    const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
-    const reponse = await fetch(`${base}/api/v1/stats/summary`, {
-      signal: controle.signal,
-      headers: { Accept: 'application/json' },
-    })
-    if (!reponse.ok) throw new Error(`Statut ${reponse.status}`)
-    const corps: unknown = await reponse.json()
-    const resume = normaliserResume(corps)
-    if (!resume) throw new Error('Forme de réponse non reconnue')
-    return resume
-  } finally {
-    window.clearTimeout(timer)
-    signal?.removeEventListener('abort', interrompre)
-  }
 }

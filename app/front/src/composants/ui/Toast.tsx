@@ -1,4 +1,4 @@
-import type { Severite } from '../../modele'
+import type { Severite } from '../../services/modele'
 import { IconeAttention, IconeFermer } from '../Icones'
 import { cn } from './cn'
 

@@ -1,5 +1,5 @@
-import { finaliserResume } from '../format'
-import type { PointSerie, ResumeParc, Site } from '../modele'
+import { finaliserResume } from '../services/format'
+import type { PointSerie, ResumeParc, Site } from '../services/modele'
 
 const MESURE_PARC = [1850, 1780, 1720, 1680, 1710, 1840, 2100, 2420, 2680, 2790, 2860, 2890, 2840, 2780, 2820, 2880, 2847]
 const PREVISION_PARC = [2847, 2890, 3050, 2920, 2600, 2280, 2020, 1880, 1780]

@@ -1,64 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
-import { chargerResume } from '../api/resume'
-import { resumeDemonstration } from '../donnees/demonstration'
-import { formaterCollecte, formaterNombre, libelleAlertes, libelleSites } from '../format'
-import type { ResumeParc } from '../modele'
+import { useEffect, useState } from 'react'
+import { GraphiqueConsommation } from '../composants/GraphiqueConsommation'
+import { IconeActualiser, IconeEclair, IconeLune, IconeSoleil } from '../composants/Icones'
+import { Anneau } from '../composants/ui/Anneau'
+import { Banniere } from '../composants/ui/Banniere'
+import { BoutonIcone } from '../composants/ui/BoutonIcone'
+import { Carte } from '../composants/ui/Carte'
+import { Indicateur } from '../composants/ui/Indicateur'
+import { Legende } from '../composants/ui/Legende'
+import { Libelle, TexteSites } from '../composants/ui/Texte'
+import { formaterCollecte, formaterNombre, libelleAlertes, libelleSites } from '../services/format'
+import { useResume } from '../services/useResume'
 import { DetailSite } from './DetailSite'
-import { GraphiqueConsommation } from './GraphiqueConsommation'
-import { IconeActualiser, IconeEclair, IconeLune, IconeSoleil } from './Icones'
-import { Anneau } from './ui/Anneau'
-import { Banniere } from './ui/Banniere'
-import { BoutonIcone } from './ui/BoutonIcone'
-import { Carte } from './ui/Carte'
-import { Indicateur } from './ui/Indicateur'
-import { Legende } from './ui/Legende'
-import { Libelle, TexteSites } from './ui/Texte'
-
-function siteInitial(resume: ResumeParc): string | null {
-  return (
-    resume.sites.find((site) => site.alertes.some((alerte) => alerte.severite === 'critique'))?.id ??
-    resume.sites[0]?.id ??
-    null
-  )
-}
 
 export function TableauDeBord() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
-  const [resume, setResume] = useState<ResumeParc | null>(null)
-  const [siteId, setSiteId] = useState<string | null>(null)
-  const [chargement, setChargement] = useState(true)
-
-  const appliquer = useCallback((recu: ResumeParc, conserverSite: string | null) => {
-    setResume(recu)
-    setSiteId(conserverSite && recu.sites.some((site) => site.id === conserverSite) ? conserverSite : siteInitial(recu))
-  }, [])
-
-  const actualiser = useCallback(
-    (conserverSite: string | null, annulation?: AbortSignal) => {
-      setChargement(true)
-      chargerResume(annulation)
-        .then((recu) => {
-          if (annulation?.aborted) return
-          appliquer(recu, conserverSite)
-        })
-        .catch(() => {
-          if (annulation?.aborted) return
-          setResume((actuel) => (actuel?.source === 'api' ? actuel : resumeDemonstration()))
-        })
-        .finally(() => {
-          if (!annulation?.aborted) setChargement(false)
-        })
-    },
-    [appliquer],
-  )
-
-  useEffect(() => {
-    const controle = new AbortController()
-    actualiser(null, controle.signal)
-    return () => controle.abort()
-  }, [actualiser])
+  const { resume, siteId, setSiteId, chargement, actualiser } = useResume()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme

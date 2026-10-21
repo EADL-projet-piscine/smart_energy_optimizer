@@ -7,7 +7,12 @@ from smart_energy_app.config import settings
 
 logger = logging.getLogger(__name__)
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+# Sans délai de connexion, une base injoignable bloque le démarrage et /health indéfiniment.
+engine = create_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 3},
+)
 
 
 def base_disponible() -> bool:

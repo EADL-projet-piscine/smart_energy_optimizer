@@ -34,6 +34,11 @@ ml/data
 .idea/
 .vscode/
 
+# --- Front ---
+node_modules/
+dist/
+.vite/
+
 # --- Système ---
 .DS_Store
 Thumbs.db
@@ -43,3 +48,12 @@ Thumbs.db
 *.db
 *.sqlite3
 *:Zone.Identifier
+# fichiers ignorés pour Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/*.tfvars.json
+infra/.terraform.tfstate.lock.info
+infra/.terraformrc
+infra/terraform.rc

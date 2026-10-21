@@ -105,7 +105,7 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
 
   return (
     <svg
-      className="graphique"
+      className="mt-1.5 block h-auto w-full"
       viewBox={`0 0 ${largeur} ${hauteur}`}
       role="img"
       aria-label="Courbe de consommation mesurée et prévue"
@@ -114,8 +114,8 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--ligne-mesure)" stopOpacity="0.26" />
-          <stop offset="100%" stopColor="var(--ligne-mesure)" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="var(--mesure)" stopOpacity="0.26" />
+          <stop offset="100%" stopColor="var(--mesure)" stopOpacity="0.02" />
         </linearGradient>
       </defs>
 
@@ -126,9 +126,9 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
             x2={largeur - marge.droite}
             y1={yDe(tick)}
             y2={yDe(tick)}
-            stroke="var(--grille)"
+            className="stroke-grille"
           />
-          <text x={marge.gauche - 10} y={yDe(tick)} className="axe" textAnchor="end" dominantBaseline="middle">
+          <text x={marge.gauche - 10} y={yDe(tick)} className="fill-discret text-xs" textAnchor="end" dominantBaseline="middle">
             {formaterNombre(tick)}
           </text>
         </g>
@@ -139,7 +139,7 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
           key={heure}
           x={xDe(heure)}
           y={hauteur - 8}
-          className={maintenant?.heure === heure ? 'axe heure-courante' : 'axe'}
+          className={maintenant?.heure === heure ? 'fill-ambre text-xs font-bold' : 'fill-discret text-xs'}
           textAnchor="middle"
         >
           {`${String(heure).padStart(2, '0')}h`}
@@ -153,35 +153,53 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
             x2={largeur - marge.droite}
             y1={yDe(seuilKw)}
             y2={yDe(seuilKw)}
-            className="seuil"
+            className="fill-none stroke-seuil [stroke-dasharray:6_6] [stroke-linecap:round] [stroke-width:1.6]"
           />
-          <text x={largeur - marge.droite - 4} y={yDe(seuilKw) - 8} className="etiquette-seuil" textAnchor="end">
+          <text x={largeur - marge.droite - 4} y={yDe(seuilKw) - 8} className="fill-seuil text-[13px] font-bold" textAnchor="end">
             {formaterNombre(seuilKw)} kW
           </text>
         </g>
       )}
 
       {cheminAire && <path d={cheminAire} fill={`url(#${gradientId})`} />}
-      {cheminMesure && <path d={cheminMesure} className="courbe-mesure" />}
-      {cheminPrevision && <path d={cheminPrevision} className="courbe-prevision" />}
+      {cheminMesure && (
+        <path d={cheminMesure} className="fill-none stroke-mesure [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:2.6]" />
+      )}
+      {cheminPrevision && (
+        <path
+          d={cheminPrevision}
+          className="fill-none stroke-prevision [stroke-dasharray:7_6] [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:2.4]"
+        />
+      )}
 
       {pointe && pointeAuDessus && (
-        <line x1={pointe.x} x2={pointe.x} y1={pointe.y} y2={base} className="guide-pointe" />
+        <line
+          x1={pointe.x}
+          x2={pointe.x}
+          y1={pointe.y}
+          y2={base}
+          className="fill-none stroke-seuil opacity-80 [stroke-dasharray:2_4] [stroke-linecap:round] [stroke-width:1.2]"
+        />
       )}
-      {maintenant && <circle cx={maintenant.x} cy={maintenant.y} r="5.5" className="point-mesure" />}
+      {maintenant && <circle cx={maintenant.x} cy={maintenant.y} r="5.5" className="fill-mesure stroke-carte stroke-2" />}
       {pointe && (
-        <circle cx={pointe.x} cy={pointe.y} r="5.5" className={pointeAuDessus ? 'point-pointe' : 'point-prevision'} />
+        <circle
+          cx={pointe.x}
+          cy={pointe.y}
+          r="5.5"
+          className={pointeAuDessus ? 'fill-seuil stroke-carte stroke-2' : 'fill-prevision stroke-carte stroke-2'}
+        />
       )}
       {afficherValeurPointe && pointe && (
-        <text x={pointe.x} y={pointe.y - 14} className="etiquette-pointe" textAnchor="middle">
+        <text x={pointe.x} y={pointe.y - 14} className="fill-seuil text-[13px] font-bold" textAnchor="middle">
           {formaterNombre(pointe.valeur)} kW
         </text>
       )}
 
       {pointSurvole && survol !== null && (
         <g>
-          <line x1={xDe(survol)} x2={xDe(survol)} y1={marge.haut} y2={base} className="guide-survol" />
-          <text x={xDe(survol)} y={marge.haut + 4} className="etiquette-survol" textAnchor="middle">
+          <line x1={xDe(survol)} x2={xDe(survol)} y1={marge.haut} y2={base} className="fill-none stroke-discret opacity-45 stroke-1" />
+          <text x={xDe(survol)} y={marge.haut + 4} className="fill-encre text-xs font-[650]" textAnchor="middle">
             {pointSurvole.mesureKw !== null
               ? `${formaterNombre(pointSurvole.mesureKw)} kW`
               : pointSurvole.previsionKw !== null

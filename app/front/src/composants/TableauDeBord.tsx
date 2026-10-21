@@ -5,20 +5,20 @@ import { formaterCollecte, formaterNombre, libelleAlertes, libelleSites } from '
 import type { ResumeParc } from '../modele'
 import { DetailSite } from './DetailSite'
 import { GraphiqueConsommation } from './GraphiqueConsommation'
-import { IconeActualiser, IconeAttention, IconeEclair, IconeLune, IconeSoleil } from './Icones'
+import { IconeActualiser, IconeEclair, IconeLune, IconeSoleil } from './Icones'
+import { Anneau } from './ui/Anneau'
+import { Banniere } from './ui/Banniere'
+import { BoutonIcone } from './ui/BoutonIcone'
+import { Carte } from './ui/Carte'
+import { Indicateur } from './ui/Indicateur'
+import { Legende } from './ui/Legende'
+import { Libelle, TexteSites } from './ui/Texte'
 
 function siteInitial(resume: ResumeParc): string | null {
   return (
     resume.sites.find((site) => site.alertes.some((alerte) => alerte.severite === 'critique'))?.id ??
     resume.sites[0]?.id ??
     null
-  )
-}
-
-function TexteSites({ texte }: { texte: string }) {
-  const morceaux = texte.split(/(SITE\d+)/g)
-  return morceaux.map((morceau, index) =>
-    /^SITE\d+$/.test(morceau) ? <strong key={`${morceau}-${index}`}>{morceau}</strong> : <span key={index}>{morceau}</span>,
   )
 }
 
@@ -71,24 +71,22 @@ export function TableauDeBord() {
       : null
 
   return (
-    <div className="page">
-      <header className="barre">
-        <div className="marque">
-          <span className="logo">
+    <div className="mx-auto w-[min(1180px,calc(100%-40px))] pt-[22px] pb-16 max-[680px]:w-[min(1180px,calc(100%-24px))]">
+      <header className="mb-7 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 text-lg font-[650] tracking-[-0.02em]">
+          <span className="grid size-7 place-items-center text-mesure [&_svg]:size-[22px]">
             <IconeEclair />
           </span>
           <span>EnerVision</span>
         </div>
-        <div className="actions-barre">
-          <button
-            type="button"
+        <div className="flex gap-1 rounded-[14px] border border-bordure bg-pilule p-1 shadow-[0_1px_0_rgba(255,255,255,0.03)]">
+          <BoutonIcone
             onClick={() => setTheme((actuel) => (actuel === 'dark' ? 'light' : 'dark'))}
             aria-label={theme === 'dark' ? 'Activer le mode clair' : 'Activer le mode sombre'}
           >
             {theme === 'dark' ? <IconeSoleil /> : <IconeLune />}
-          </button>
-          <button
-            type="button"
+          </BoutonIcone>
+          <BoutonIcone
             onClick={() => actualiser(siteId)}
             disabled={chargement}
             aria-label={
@@ -97,16 +95,22 @@ export function TableauDeBord() {
                 : 'Actualiser les données'
             }
           >
-            <IconeActualiser className={chargement ? 'tourne' : undefined} />
-            <span className={resume?.source === 'demonstration' ? 'pastille-source demo' : 'pastille-source api'} />
-          </button>
+            <IconeActualiser className={chargement ? 'animate-spin motion-reduce:animate-none' : undefined} />
+            <span
+              className={`absolute top-1.5 right-1.5 size-[7px] rounded-full shadow-[0_0_0_2px_var(--pilule)] ${
+                resume?.source === 'demonstration' ? 'bg-ambre' : 'bg-hausse'
+              }`}
+            />
+          </BoutonIcone>
         </div>
       </header>
 
       <main>
-        <div className="intro">
-          <h1>Vue d’ensemble du parc</h1>
-          <p>
+        <div>
+          <h1 className="m-0 text-[32px] font-[650] tracking-[-0.035em] max-[680px]:text-[26px]">
+            Vue d’ensemble du parc
+          </h1>
+          <p className="mt-1.5 text-sm text-discret">
             {resume
               ? `${libelleSites(resume.nombreSites)} · dernière collecte à ${formaterCollecte(resume.derniereCollecte) || '—'}`
               : 'Chargement des sites…'}
@@ -115,26 +119,30 @@ export function TableauDeBord() {
 
         {resume ? (
           <>
-            <section className="grille-kpi" aria-label="Indicateurs du parc">
-              <article className="carte kpi">
-                <p className="libelle">Consommation actuelle</p>
-                <p className="chiffre xl">
-                  <span>{resume.consommationKw === null ? '—' : formaterNombre(resume.consommationKw)}</span>
-                  {resume.consommationKw !== null && <small>kW</small>}
-                </p>
-                {resume.variationPct !== null && (
-                  <p className={resume.variationPct >= 0 ? 'variation hausse' : 'variation baisse'}>
-                    {resume.variationPct >= 0 ? '↑' : '↓'} {formaterNombre(Math.abs(resume.variationPct))} % sur une
-                    heure
-                  </p>
-                )}
-              </article>
+            <section
+              className="mt-[22px] grid grid-cols-1 gap-3.5 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4"
+              aria-label="Indicateurs du parc"
+            >
+              <Indicateur
+                libelle="Consommation actuelle"
+                valeur={resume.consommationKw === null ? '—' : formaterNombre(resume.consommationKw)}
+                unite={resume.consommationKw === null ? undefined : 'kW'}
+                taille="lg"
+                detail={
+                  resume.variationPct !== null && (
+                    <span className={resume.variationPct >= 0 ? 'text-hausse' : 'text-danger'}>
+                      {resume.variationPct >= 0 ? '↑' : '↓'} {formaterNombre(Math.abs(resume.variationPct))} % sur une
+                      heure
+                    </span>
+                  )
+                }
+              />
 
-              <article className="carte kpi couverture">
+              <article className="flex min-h-[124px] items-center gap-4 rounded-2xl border border-bordure bg-carte px-[18px] pt-[18px] pb-4 shadow-[0_1px_0_rgba(255,255,255,0.02)]">
                 <Anneau pourcentage={resume.couverturePct ?? 0} />
                 <div>
-                  <p className="libelle">Couverture</p>
-                  <p className="couverture-texte">
+                  <Libelle>Couverture</Libelle>
+                  <p className="mt-1.5 max-w-[12em] text-[15px] leading-snug text-encre">
                     {resume.sitesTransmettant > 1
                       ? `${formaterNombre(resume.sitesTransmettant)} sites sur ${formaterNombre(resume.nombreSites)} transmettent`
                       : `${formaterNombre(resume.sitesTransmettant)} site sur ${formaterNombre(resume.nombreSites)} transmet`}
@@ -142,90 +150,52 @@ export function TableauDeBord() {
                 </div>
               </article>
 
-              <article className="carte kpi">
-                <p className="libelle">Alertes en cours</p>
-                <p className="chiffre xl danger">
-                  <span>{formaterNombre(resume.alertesTotal)}</span>
-                </p>
-                <p className="sous-texte">{libelleAlertes(resume.alertesCritiques, resume.alertesMoyennes)}</p>
-              </article>
+              <Indicateur
+                libelle="Alertes en cours"
+                valeur={formaterNombre(resume.alertesTotal)}
+                ton="danger"
+                taille="lg"
+                detail={libelleAlertes(resume.alertesCritiques, resume.alertesMoyennes)}
+              />
 
-              <article className="carte kpi">
-                <p className="libelle">Coût du jour</p>
-                <p className="chiffre xl">
-                  <span>{resume.coutJourEur === null ? '—' : formaterNombre(resume.coutJourEur)}</span>
-                  {resume.coutJourEur !== null && <small>€</small>}
-                </p>
-                <p className="sous-texte">
-                  {resume.co2Tonnes === null ? '—' : `${formaterNombre(resume.co2Tonnes, 1)} t CO₂ équivalent`}
-                </p>
-              </article>
+              <Indicateur
+                libelle="Coût du jour"
+                valeur={resume.coutJourEur === null ? '—' : formaterNombre(resume.coutJourEur)}
+                unite={resume.coutJourEur === null ? undefined : '€'}
+                taille="lg"
+                detail={resume.co2Tonnes === null ? '—' : `${formaterNombre(resume.co2Tonnes, 1)} t CO₂ équivalent`}
+              />
             </section>
 
             {messageExclusion && (
-              <div className="banniere" role="status">
-                <IconeAttention />
-                <p>
-                  <TexteSites texte={messageExclusion} />
-                </p>
-              </div>
+              <Banniere>
+                <TexteSites texte={messageExclusion} />
+              </Banniere>
             )}
 
-            <section className="carte" aria-labelledby="titre-courbe">
-              <header className="carte-entete">
-                <h2 id="titre-courbe">Consommation et prévision</h2>
-                <ul className="legende">
-                  <li>
-                    <span className="trait mesure" /> Mesuré
-                  </li>
-                  <li>
-                    <span className="trait prevision" /> Prévision
-                  </li>
-                  <li>
-                    <span className="trait seuil" /> Seuil contractuel
-                  </li>
-                </ul>
+            <Carte aria-labelledby="titre-courbe">
+              <header className="flex items-start justify-between gap-4 max-[680px]:flex-col">
+                <h2 id="titre-courbe" className="m-0 text-base font-[650] tracking-[-0.02em]">
+                  Consommation et prévision
+                </h2>
+                <Legende
+                  entrees={[
+                    { libelle: 'Mesuré', style: 'mesure' },
+                    { libelle: 'Prévision', style: 'prevision' },
+                    { libelle: 'Seuil contractuel', style: 'seuil' },
+                  ]}
+                />
               </header>
-              <GraphiqueConsommation
-                serie={resume.serie}
-                seuilKw={resume.seuilKw}
-                afficherValeurPointe
-              />
-              {resume.commentaire && <p className="commentaire">{resume.commentaire}</p>}
-            </section>
+              <GraphiqueConsommation serie={resume.serie} seuilKw={resume.seuilKw} afficherValeurPointe />
+              {resume.commentaire && <p className="mt-1 text-[13px] leading-snug text-discret">{resume.commentaire}</p>}
+            </Carte>
 
             <DetailSite sites={resume.sites} siteId={siteId ?? ''} onChoisir={setSiteId} />
           </>
         ) : (
-          <p className="chargement">Lecture du résumé du parc…</p>
+          <p className="mt-1.5 text-sm text-discret">Lecture du résumé du parc…</p>
         )}
       </main>
-    </div>
-  )
-}
-
-function Anneau({ pourcentage }: { pourcentage: number }) {
-  const rayon = 26
-  const circonference = 2 * Math.PI * rayon
-  const borne = Math.min(100, Math.max(0, pourcentage))
-  const offset = circonference * (1 - borne / 100)
-  return (
-    <div className="anneau" aria-hidden="true">
-      <svg viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r={rayon} className="anneau-piste" />
-        <circle
-          cx="36"
-          cy="36"
-          r={rayon}
-          className="anneau-valeur"
-          strokeDasharray={circonference}
-          strokeDashoffset={offset}
-        />
-      </svg>
-      <p>
-        <strong>{formaterNombre(Math.round(borne))}</strong>
-        <span>%</span>
-      </p>
     </div>
   )
 }

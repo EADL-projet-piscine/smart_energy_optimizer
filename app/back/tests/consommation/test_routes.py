@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from smart_energy_app.consommation.service import state
 from smart_energy_app.main import app
 
-RESUME = {
+SUMMARY = {
     "timestamp": "2026-10-21T09:34:44.744410",
     "total_sites": 7,
     "total_consumption_kw": 3597.64,
@@ -24,7 +24,7 @@ RESUME = {
 
 
 @pytest.fixture(autouse=True)
-def etat_vierge():
+def clean_state():
     """Remet l'état à zéro avant et après chaque test."""
     state.data = None
     state.fetched_at = None
@@ -33,33 +33,33 @@ def etat_vierge():
     state.fetched_at = None
 
 
-def test_renvoie_503_tant_qu_aucune_mesure_n_a_ete_recuperee():
+def test_returns_503_without_data():
     with TestClient(app) as client:
-        reponse = client.get("/api/consommation/resume")
+        response = client.get("/api/consommation/resume")
 
-    assert reponse.status_code == 503
+    assert response.status_code == 503
 
 
-def test_relaie_la_reponse_sans_filtrer_de_champs():
-    state.data = RESUME
+def test_relays_full_response():
+    state.data = SUMMARY
     state.fetched_at = datetime.now(UTC)
 
     with TestClient(app) as client:
-        reponse = client.get("/api/consommation/resume")
+        response = client.get("/api/consommation/resume")
 
-    assert reponse.status_code == 200
-    corps = reponse.json()
-    assert corps["data"] == RESUME
-    assert corps["data"]["sites"][0]["data_quality"] == "partial"
-    assert corps["stale"] is False
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == SUMMARY
+    assert body["data"]["sites"][0]["data_quality"] == "partial"
+    assert body["stale"] is False
 
 
-def test_signale_une_mesure_perimee():
-    state.data = RESUME
+def test_flags_stale_data():
+    state.data = SUMMARY
     state.fetched_at = datetime.now(UTC) - timedelta(minutes=10)
 
     with TestClient(app) as client:
-        reponse = client.get("/api/consommation/resume")
+        response = client.get("/api/consommation/resume")
 
-    assert reponse.status_code == 200
-    assert reponse.json()["stale"] is True
+    assert response.status_code == 200
+    assert response.json()["stale"] is True

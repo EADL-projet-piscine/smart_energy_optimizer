@@ -9,90 +9,91 @@ from smart_energy_app.config import settings
 from smart_energy_app.consommation import planificateur
 from smart_energy_app.consommation.service import refresh, state
 
-RESUME = {
+SUMMARY = {
     "total_sites": 7,
     "sites": [{"site_id": "SITE001", "data_quality": "good"}],
 }
 
 
-class FauxServeur(BaseHTTPRequestHandler):
+class FakeServer(BaseHTTPRequestHandler):
     code = 200
 
     def log_message(self, *args):
         pass
 
     def do_GET(self):
-        self.send_response(FauxServeur.code)
-        corps = json.dumps(RESUME).encode()
+        self.send_response(FakeServer.code)
+        body = json.dumps(SUMMARY).encode()
         self.send_header("content-type", "application/json")
-        self.send_header("content-length", str(len(corps)))
+        self.send_header("content-length", str(len(body)))
         self.end_headers()
-        self.wfile.write(corps)
+        self.wfile.write(body)
 
 
 @pytest.fixture
-def api_simulee():
-    serveur = HTTPServer(("127.0.0.1", 0), FauxServeur)
-    threading.Thread(target=serveur.serve_forever, daemon=True).start()
+def fake_api():
+    """Lance un serveur local qui imite l'API source, le temps du test."""
+    server = HTTPServer(("127.0.0.1", 0), FakeServer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
 
-    url_origine = settings.enervision_api_url
-    settings.enervision_api_url = f"http://127.0.0.1:{serveur.server_port}"
-    FauxServeur.code = 200
+    original_url = settings.enervision_api_url
+    settings.enervision_api_url = f"http://127.0.0.1:{server.server_port}"
+    FakeServer.code = 200
     state.data = None
     state.fetched_at = None
 
-    yield FauxServeur
+    yield FakeServer
 
-    settings.enervision_api_url = url_origine
-    serveur.shutdown()
+    settings.enervision_api_url = original_url
+    server.shutdown()
     state.data = None
     state.fetched_at = None
 
 
-def test_enregistre_la_reponse_quand_l_appel_reussit(api_simulee):
+def test_stores_response(fake_api):
     assert asyncio.run(refresh()) is True
-    assert state.data == RESUME
+    assert state.data == SUMMARY
     assert state.is_stale() is False
 
 
-def test_conserve_la_derniere_valeur_quand_l_api_echoue(api_simulee):
+def test_keeps_last_value_on_error(fake_api):
     asyncio.run(refresh())
-    horodatage_initial = state.fetched_at
+    initial_timestamp = state.fetched_at
 
-    api_simulee.code = 500
+    fake_api.code = 500
     assert asyncio.run(refresh()) is False
 
-    assert state.data == RESUME
-    assert state.fetched_at == horodatage_initial
+    assert state.data == SUMMARY
+    assert state.fetched_at == initial_timestamp
 
 
-def test_journalise_le_code_d_erreur_sans_le_propager(api_simulee, caplog):
-    api_simulee.code = 503
+def test_logs_error_code(fake_api, caplog):
+    fake_api.code = 503
 
     with caplog.at_level("WARNING"):
-        resultat = asyncio.run(refresh())
+        result = asyncio.run(refresh())
 
-    assert resultat is False
+    assert result is False
     assert "503" in caplog.text
 
 
-def test_la_boucle_rafraichit_a_intervalle_regulier(monkeypatch):
+def test_loop_interval(monkeypatch):
     """La boucle doit appeler refresh() à la cadence configurée."""
     monkeypatch.setattr(settings, "consumption_refresh_s", 0.01)
 
-    appels = []
+    calls = []
 
-    async def faux_refresh():
-        appels.append(1)
+    async def fake_refresh():
+        calls.append(1)
         return True
 
-    monkeypatch.setattr(planificateur, "refresh", faux_refresh)
+    monkeypatch.setattr(planificateur, "refresh", fake_refresh)
 
     async def scenario():
-        tache = asyncio.create_task(planificateur.refresh_loop())
+        task = asyncio.create_task(planificateur.refresh_loop())
         await asyncio.sleep(0.06)
-        tache.cancel()
+        task.cancel()
 
     asyncio.run(scenario())
 
-    assert len(appels) >= 3
+    assert len(calls) >= 3

@@ -2,3 +2,4 @@
 
 Ce module ne stocke rien : il sert la consommation courante au dashboard.
 L'alimentation de la base est portée par Azure Data Factory.
+"""

@@ -21,6 +21,7 @@ ml/mlartifacts/
 ml/data/raw/
 ml/data/processed/
 ml/models/
+ml/data
 *.pkl
 *.joblib
 

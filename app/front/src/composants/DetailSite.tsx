@@ -1,20 +1,20 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { formaterKw, formaterNombre } from '../format'
 import type { Alerte, Site } from '../modele'
 import { GraphiqueConsommation } from './GraphiqueConsommation'
-import { IconeAttention, IconeFermer } from './Icones'
+import { Badge, tonBadge } from './ui/Badge'
+import { Carte } from './ui/Carte'
+import { Indicateur } from './ui/Indicateur'
+import { Ligne, Liste, Pastille } from './ui/Ligne'
+import { Onglets } from './ui/Onglets'
+import { Commentaire, SousTitre } from './ui/Texte'
+import { Toast } from './ui/Toast'
+import { cn } from './ui/cn'
 
 type Props = {
   sites: Site[]
   siteId: string
   onChoisir: (id: string) => void
-}
-
-function classeBadge(badge: string): string {
-  const texte = badge.toLowerCase()
-  if (texte.includes('interrompu')) return 'badge ambre'
-  if (texte.includes('stable') || texte.includes('nominal')) return 'badge ok'
-  return 'badge alerte'
 }
 
 function alertePrincipale(site: Site): Alerte | null {
@@ -33,10 +33,10 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
 
   if (!site) {
     return (
-      <section className="carte">
-        <h2>Détail par site</h2>
-        <p className="commentaire">Aucun site n’est disponible dans le résumé.</p>
-      </section>
+      <Carte>
+        <h2 className="m-0 text-base font-[650] tracking-[-0.02em]">Détail par site</h2>
+        <Commentaire>Aucun site n’est disponible dans le résumé.</Commentaire>
+      </Carte>
     )
   }
 
@@ -50,15 +50,7 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
     site.mesuresRecues >= site.mesuresAttendues
   const mesuresPartielles =
     site.mesuresRecues !== null && site.mesuresAttendues !== null && site.mesuresRecues < site.mesuresAttendues
-
-  function deplacerOnglet(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
-    const index = sites.findIndex((candidat) => candidat.id === site.id)
-    const delta = event.key === 'ArrowRight' ? 1 : -1
-    const suivant = sites[(index + delta + sites.length) % sites.length]
-    onChoisir(suivant.id)
-    document.getElementById(`onglet-${suivant.id}`)?.focus()
-  }
+  const tonMesures = mesuresCompletes ? 'ok' : mesuresPartielles ? 'ambre' : 'defaut'
 
   function voirDetail() {
     document.getElementById(`bloc-actions-${site.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -67,138 +59,117 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
   }
 
   return (
-    <section className="carte detail-site" aria-labelledby="titre-detail">
-      <h2 id="titre-detail">Détail par site</h2>
-      <div className="onglets" role="tablist" aria-label="Sites du parc" onKeyDown={deplacerOnglet}>
-        {sites.map((candidat) => {
-          const actif = candidat.id === site.id
-          return (
-            <button
-              key={candidat.id}
-              type="button"
-              role="tab"
-              id={`onglet-${candidat.id}`}
-              aria-selected={actif}
-              aria-controls="panneau-site"
-              className={actif ? 'onglet actif' : 'onglet'}
-              onClick={() => onChoisir(candidat.id)}
-            >
-              <span className="onglet-id">{candidat.id}</span>
-              <span className="onglet-type">{candidat.type}</span>
-            </button>
-          )
-        })}
-      </div>
+    <Carte aria-labelledby="titre-detail" className="pb-[18px]">
+      <h2 id="titre-detail" className="m-0 text-base font-[650] tracking-[-0.02em]">
+        Détail par site
+      </h2>
+      <Onglets
+        libelle="Sites du parc"
+        panneauId="panneau-site"
+        actif={site.id}
+        onChoisir={onChoisir}
+        entrees={sites.map((candidat) => ({ id: candidat.id, titre: candidat.id, detail: candidat.type }))}
+      />
 
-      <div role="tabpanel" id="panneau-site" aria-labelledby={`onglet-${site.id}`} className="panneau-site">
-        <header className="entete-site">
+      <div role="tabpanel" id="panneau-site" aria-labelledby={`onglet-${site.id}`}>
+        <header className="mt-[18px] flex items-center justify-between gap-4 max-[680px]:flex-col max-[680px]:items-start">
           <div>
-            <h3>{site.nom}</h3>
-            <p>
+            <h3 className="m-0 text-[22px] font-[650] tracking-[-0.03em]">{site.nom}</h3>
+            <p className="mt-1 text-[13px] text-discret">
               {site.type} · {site.releve}
             </p>
           </div>
-          {site.badge && <span className={classeBadge(site.badge)}>{site.badge}</span>}
+          {site.badge && <Badge ton={tonBadge(site.badge)}>{site.badge}</Badge>}
         </header>
 
-        <div className="grille-site">
-          <article className="kpi-site">
-            <p className="libelle">Actuel</p>
-            <p className="chiffre">
-              <span>{formaterKw(site.actuelKw)}</span>
-              {site.actuelKw !== null && <small>kW</small>}
-            </p>
-          </article>
-          <article className="kpi-site">
-            <p className="libelle">Prévu +2 h</p>
-            <p className={prevuDepasse ? 'chiffre danger' : 'chiffre'}>
-              <span>{formaterKw(site.prevu2hKw)}</span>
-              {site.prevu2hKw !== null && <small>kW</small>}
-            </p>
-          </article>
-          <article className="kpi-site">
-            <p className="libelle">Seuil contractuel</p>
-            <p className="chiffre">
-              <span>{formaterKw(site.seuilKw)}</span>
-              {site.seuilKw !== null && <small>kW</small>}
-            </p>
-          </article>
-          <article className="kpi-site">
-            <p className="libelle">Mesures reçues</p>
-            <p
-              className={
-                mesuresCompletes ? 'chiffre ok' : mesuresPartielles ? 'chiffre ambre' : 'chiffre'
-              }
-            >
-              <span>
-                {site.mesuresRecues === null || site.mesuresAttendues === null
-                  ? '—'
-                  : `${formaterNombre(site.mesuresRecues)}/${formaterNombre(site.mesuresAttendues)}`}
-              </span>
-            </p>
-          </article>
+        <div className="mt-4 grid grid-cols-1 gap-3 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4">
+          <Indicateur
+            variante="inset"
+            libelle="Actuel"
+            valeur={formaterKw(site.actuelKw)}
+            unite={site.actuelKw === null ? undefined : 'kW'}
+          />
+          <Indicateur
+            variante="inset"
+            libelle="Prévu +2 h"
+            valeur={formaterKw(site.prevu2hKw)}
+            unite={site.prevu2hKw === null ? undefined : 'kW'}
+            ton={prevuDepasse ? 'danger' : 'defaut'}
+          />
+          <Indicateur
+            variante="inset"
+            libelle="Seuil contractuel"
+            valeur={formaterKw(site.seuilKw)}
+            unite={site.seuilKw === null ? undefined : 'kW'}
+          />
+          <Indicateur
+            variante="inset"
+            libelle="Mesures reçues"
+            ton={tonMesures}
+            valeur={
+              site.mesuresRecues === null || site.mesuresAttendues === null
+                ? '—'
+                : `${formaterNombre(site.mesuresRecues)}/${formaterNombre(site.mesuresAttendues)}`
+            }
+          />
         </div>
 
-        <div className="graphique-cadre">
+        <div className="relative mt-2">
           <GraphiqueConsommation serie={site.serie} seuilKw={site.seuilKw} compact />
           {principale && !toastFerme && (
-            <aside className={`toast ${principale.severite}`} role="status">
-              <button type="button" className="fermer" onClick={() => setToastFerme(true)} aria-label="Fermer l’alerte">
-                <IconeFermer />
-              </button>
-              <div className="toast-icone">
-                <IconeAttention />
-              </div>
-              <div>
-                <p className="toast-titre">{principale.titre}</p>
-                <p className="toast-message">{principale.message}</p>
-                <button type="button" className="lien" onClick={voirDetail}>
-                  Voir le détail
-                </button>
-              </div>
-            </aside>
+            <Toast
+              severite={principale.severite}
+              titre={principale.titre}
+              message={principale.message}
+              onFermer={() => setToastFerme(true)}
+              onDetail={voirDetail}
+            />
           )}
         </div>
-        {site.commentaire && <p className="commentaire">{site.commentaire}</p>}
+        {site.commentaire && <Commentaire>{site.commentaire}</Commentaire>}
 
         <div
           id={`bloc-actions-${site.id}`}
-          className={misEnEvidence ? 'actions-site mis-en-evidence' : 'actions-site'}
+          className={cn('mt-2 grid gap-4 pt-2', misEnEvidence && 'rounded-xl shadow-[0_0_0_2px_rgba(91,157,255,0.45)]')}
         >
           {autres.length > 0 && (
             <div>
-              <h4>Alertes</h4>
-              <ul className="liste-alertes">
+              <SousTitre>Alertes</SousTitre>
+              <Liste>
                 {autres.map((alerte) => (
-                  <li key={alerte.id} className={alerte.severite}>
-                    <strong>{alerte.titre}</strong>
-                    <p>{alerte.message}</p>
-                  </li>
+                  <Ligne key={alerte.id} accent={alerte.severite === 'critique' ? 'danger' : 'ambre'}>
+                    <strong className="block text-sm">{alerte.titre}</strong>
+                    <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{alerte.message}</p>
+                  </Ligne>
                 ))}
-              </ul>
+              </Liste>
             </div>
           )}
           <div>
-            <h4>Recommandations</h4>
+            <SousTitre>Recommandations</SousTitre>
             {site.recommandations.length === 0 ? (
-              <p className="commentaire">Aucune recommandation pour ce site.</p>
+              <Commentaire>Aucune recommandation pour ce site.</Commentaire>
             ) : (
-              <ul className="recommandations">
+              <Liste>
                 {site.recommandations.map((recommandation, index) => (
-                  <li key={recommandation.id}>
-                    <span className="pastille">{index + 1}</span>
+                  <Ligne key={recommandation.id}>
+                    <Pastille>{index + 1}</Pastille>
                     <div>
-                      <strong>{recommandation.titre}</strong>
-                      <p>{recommandation.detail}</p>
+                      <strong className="block text-sm">{recommandation.titre}</strong>
+                      <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{recommandation.detail}</p>
                     </div>
-                    {recommandation.economie && <em>{recommandation.economie}</em>}
-                  </li>
+                    {recommandation.economie && (
+                      <em className="text-[13px] font-bold whitespace-nowrap text-hausse not-italic">
+                        {recommandation.economie}
+                      </em>
+                    )}
+                  </Ligne>
                 ))}
-              </ul>
+              </Liste>
             )}
           </div>
         </div>
       </div>
-    </section>
+    </Carte>
   )
 }

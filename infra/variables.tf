@@ -27,3 +27,13 @@ variable "ip" {
     type = string
     description = "L'adresse IP publique de votre poste, pour pouvoir accéder à la VM"
 }
+
+variable "api_username" {
+    type = string
+    description = "Le nom d'utilisateur pour se connecter à l'API Mock"
+}
+
+variable "api_password" {
+    type = string
+    description = "Le mot de passe pour se connecter à l'API Mock"
+}

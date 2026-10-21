@@ -1,0 +1,100 @@
+@import 'tailwindcss';
+
+@custom-variant light (&:where([data-theme='light'], [data-theme='light'] *));
+
+@theme inline {
+  --font-sans: 'Inter Variable', 'Segoe UI', sans-serif;
+  --color-fond: var(--fond);
+  --color-carte: var(--carte);
+  --color-inset: var(--inset);
+  --color-encre: var(--encre);
+  --color-secondaire: var(--secondaire);
+  --color-discret: var(--discret);
+  --color-bordure: var(--bordure);
+  --color-bordure-forte: var(--bordure-forte);
+  --color-hausse: var(--hausse);
+  --color-danger: var(--danger);
+  --color-ambre: var(--ambre);
+  --color-orange: var(--orange);
+  --color-mesure: var(--mesure);
+  --color-prevision: var(--prevision);
+  --color-seuil: var(--seuil);
+  --color-grille: var(--grille);
+  --color-piste: var(--piste);
+  --color-pilule: var(--pilule);
+  --color-onglet: var(--onglet);
+  --color-banniere: var(--banniere);
+  --color-banniere-bord: var(--banniere-bord);
+  --color-banniere-texte: var(--banniere-texte);
+  --color-toast: var(--toast);
+  --color-lien: var(--lien);
+  --shadow-eleve: var(--ombre);
+}
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --fond: #0b1020;
+  --carte: #141c30;
+  --inset: #10182a;
+  --encre: #f3f6fb;
+  --secondaire: #9aa6bb;
+  --discret: #7d8ba3;
+  --bordure: rgba(255, 255, 255, 0.07);
+  --bordure-forte: rgba(255, 255, 255, 0.12);
+  --hausse: #3ddc97;
+  --danger: #ff6d7d;
+  --ambre: #f5a524;
+  --orange: #ff7a1a;
+  --mesure: #d6ef4e;
+  --prevision: #6aabff;
+  --seuil: #ef5d5d;
+  --grille: rgba(255, 255, 255, 0.06);
+  --piste: rgba(255, 255, 255, 0.08);
+  --pilule: #1a2236;
+  --onglet: #1a2236;
+  --banniere: #3a2c14;
+  --banniere-bord: #6d5422;
+  --banniere-texte: #f1e0b8;
+  --toast: #1a2338;
+  --lien: #5b9dff;
+  --ombre: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --fond: #eef2f7;
+  --carte: #ffffff;
+  --inset: #f5f7fb;
+  --encre: #121826;
+  --secondaire: #4b5870;
+  --discret: #66758c;
+  --bordure: rgba(16, 24, 40, 0.08);
+  --bordure-forte: rgba(16, 24, 40, 0.14);
+  --grille: rgba(16, 24, 40, 0.08);
+  --piste: rgba(16, 24, 40, 0.08);
+  --pilule: #ffffff;
+  --onglet: #eef2f7;
+  --banniere: #fff6e4;
+  --banniere-bord: #f0d48a;
+  --banniere-texte: #6d5010;
+  --toast: #ffffff;
+  --ombre: 0 12px 32px rgba(16, 24, 40, 0.1);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 420px at 0% -10%, rgba(90, 140, 70, 0.08), transparent 55%),
+    var(--fond);
+  color: var(--encre);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  cursor: pointer;
+}

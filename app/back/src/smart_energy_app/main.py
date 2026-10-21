@@ -8,7 +8,10 @@ from smart_energy_app.consommation.planificateur import refresh_loop
 from smart_energy_app.consommation.routes import router as consommation_router
 from smart_energy_app.db import database_available
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 

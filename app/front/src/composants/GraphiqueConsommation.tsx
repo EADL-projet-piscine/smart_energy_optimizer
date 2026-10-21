@@ -1,6 +1,6 @@
 import { useId, useState, type MouseEvent } from 'react'
-import { formaterNombre } from '../format'
-import type { PointSerie } from '../modele'
+import { formaterNombre } from '../services/format'
+import type { PointSerie } from '../services/modele'
 
 type Props = {
   serie: PointSerie[]

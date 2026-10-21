@@ -1,4 +1,4 @@
-import { formaterNombre } from '../../format'
+import { formaterNombre } from '../../services/format'
 
 export function Anneau({ pourcentage }: { pourcentage: number }) {
   const rayon = 26

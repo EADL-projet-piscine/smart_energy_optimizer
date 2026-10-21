@@ -18,6 +18,7 @@ dev = [
     "pytest",
     "httpx",
     "ruff==0.17.1",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]

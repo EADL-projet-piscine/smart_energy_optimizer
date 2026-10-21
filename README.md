@@ -167,6 +167,63 @@ ruff format .         # mettre en forme
 
 Configuration : ligne à 100 caractères, cible Python 3.12.
 
+### Vérifications locales (pre-commit et pre-push)
+
+Deux hooks Git sont fournis, installés ensemble par une seule commande :
+
+| Moment | Contrôles | Effet |
+|---|---|---|
+| Avant chaque commit | `ruff check --fix`, `ruff format` | corrige et formate |
+| Avant chaque push | `ruff check`, `ruff format --check`, `pytest` | bloque le push en cas d'erreur, comme la CI |
+
+À installer une fois, depuis la racine du dépôt, dans un environnement
+virtuel **Python 3.12** activé avec les dépendances dev des deux services
+(`pre-commit` en fait partie) :
+
+```bash
+pre-commit install
+```
+
+Si le hook de commit a modifié des fichiers, le commit est interrompu :
+relisez les changements, ajoutez-les (`git add`) et relancez le commit.
+
+Le hook de push lance `pytest` avec l'environnement virtuel **activé** : si
+le push échoue avec `No module named pytest`, activez le `.venv` puis
+relancez. Pour tout vérifier sans pousser :
+
+```bash
+pre-commit run --all-files                         # contrôles du commit
+pre-commit run --hook-stage pre-push --all-files   # contrôles du push
+```
+
+La version de ruff du hook (`.pre-commit-config.yaml`) doit rester identique
+à celle des `pyproject.toml`, sinon le hook et la CI ne verront pas les mêmes
+erreurs.
+
+## Intégration continue
+
+Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request et à
+chaque merge dans `main` :
+
+| Job | Rôle |
+|---|---|
+| `lint` | `ruff check`, `ruff format --check`, `pytest` |
+| `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
+| `build` | Construit les images `back` et `ml`, les scanne avec Trivy |
+
+Un job en échec bloque la suite : `build` ne démarre que si `lint` et `scan`
+passent. Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour
+les images, seules celles qui ont un correctif disponible sont bloquantes.
+
+Depuis `main` uniquement, les images sont publiées sur GitHub Container
+Registry, étiquetées avec le SHA du commit et `latest` :
+
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/back
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml
+
+GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
+pull request dont la CI est rouge.**
+
 ## Configuration
 
 Les paramètres sont lus depuis les variables d'environnement, ou depuis le

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "git config core.hooksPath .githooks || exit 0"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

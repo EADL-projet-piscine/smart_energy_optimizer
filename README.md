@@ -147,58 +147,118 @@ uvicorn smart_energy_ml.api.main:app --reload --port 8001
 
 ## Tests
 
-Depuis `app/back` ou `ml/`, environnement virtuel activé :
+Depuis la racine du dépôt, environnement virtuel activé avec les dépendances
+dev des deux services :
 
 ```bash
-pytest
+pytest                 # tests du back et du service ML
+pytest --cov           # avec la couverture (seuil : 70 %)
 ```
 
 Rappel de l'activation : `source .venv/bin/activate` sous Linux, macOS et
 WSL, `.venv\Scripts\Activate.ps1` sous PowerShell. L'invite doit afficher
 `(.venv)`.
 
-## Qualité de code
+### Tests qui ont besoin de la base
+
+Les tests marqués `@pytest.mark.db` interrogent une vraie base PostgreSQL.
+Sans base joignable, ils sont **ignorés** (`SKIPPED`) : le reste de la suite
+tourne quand même. Pour les exécuter, lancez la base (`docker compose up -d
+db`) avant `pytest`.
+
+En CI, `REQUIRE_DB=1` est défini : une base absente fait alors **échouer**
+ces tests au lieu de les ignorer.
+
+### Couverture
+
+Le seuil minimal est fixé dans `pyproject.toml` (`[tool.coverage.report]`,
+`fail_under = 70`) : en dessous, `pytest --cov` échoue. Le rapport HTML est
+écrit dans `htmlcov/`.
+
+### Test de charge
+
+`tests/perf/health.js` est un scénario [k6](https://grafana.com/docs/k6/)
+sur `/health` du back et du service ML : 10 utilisateurs virtuels pendant
+30 secondes. Il échoue si :
+
+| Seuil | Valeur |
+|---|---|
+| Temps de réponse p95 | < 500 ms |
+| Requêtes en erreur | < 1 % |
+| Vérifications réussies | > 99 % |
+
+Pour le lancer en local, stack démarrée (`docker compose up -d --build`) :
 
 ```bash
-ruff check .          # signaler les problèmes
-ruff check . --fix    # corriger ce qui peut l'être
-ruff format .         # mettre en forme
+docker run --rm --network host -v "$PWD/tests/perf:/scripts:ro" grafana/k6:2.3.0 run /scripts/health.js
 ```
 
-Configuration : ligne à 100 caractères, cible Python 3.12.
+`--network host` ne fonctionne que sous Linux et WSL. Sous Docker Desktop
+(Windows, macOS), remplacez-le par
+`-e BACK_URL=http://host.docker.internal:8000 -e ML_URL=http://host.docker.internal:8001`.
 
-### Vérifications locales (pre-commit et pre-push)
+## Qualité de code
 
-Deux hooks Git sont fournis, installés ensemble par une seule commande :
+Configuration ruff : ligne à 100 caractères, cible Python 3.12 (sections
+`[tool.ruff]` des `pyproject.toml`).
+
+### Vérifications locales (hooks Git)
+
+Les hooks bloquent un commit ou un push qui ferait échouer le job `lint` de
+la CI. Ils lancent `scripts/check.sh`, **le même script que la CI** : ce qui
+passe en local passe sur la pull request.
+
+**Aucun Python n'est nécessaire.** Au premier lancement, le script télécharge
+ruff en binaire autonome, à la version épinglée dans `pyproject.toml`, vérifie
+son empreinte SHA-256 et le range dans `.tools/` (ignoré par Git).
 
 | Moment | Contrôles | Effet |
 |---|---|---|
-| Avant chaque commit | `ruff check --fix`, `ruff format` | corrige et formate |
-| Avant chaque push | `ruff check`, `ruff format --check`, `pytest` | bloque le push en cas d'erreur, comme la CI |
+| Avant chaque commit | sur les fichiers indexés : `ruff check`, formatage ruff, espaces en fin de ligne, lignes vides en fin de fichier, marqueurs de conflit, saut de ligne final, fichiers > 1 Mo | bloque le commit ; corrige automatiquement ce que ruff sait corriger |
+| Avant chaque push | les mêmes contrôles, sur chaque commit poussé | bloque le push (rattrape un `git commit --no-verify`) |
 
-À installer une fois, depuis la racine du dépôt, dans un environnement
-virtuel **Python 3.12** activé avec les dépendances dev des deux services
-(`pre-commit` en fait partie) :
+**Activation** : automatique dans la plupart des cas, sinon une commande.
 
-```bash
-pre-commit install
-```
-
-Si le hook de commit a modifié des fichiers, le commit est interrompu :
-relisez les changements, ajoutez-les (`git add`) et relancez le commit.
-
-Le hook de push lance `pytest` avec l'environnement virtuel **activé** : si
-le push échoue avec `No module named pytest`, activez le `.venv` puis
-relancez. Pour tout vérifier sans pousser :
+- **VS Code** : à la première ouverture du dossier, VS Code demande
+  d'autoriser les tâches automatiques ; acceptez, et les hooks sont activés
+  à chaque ouverture (`.vscode/tasks.json`).
+- **Front-end** : `npm install` dans `app/front` les active aussi (script
+  `prepare` de `package.json`).
+- **Sinon**, une fois par clone, depuis la racine du dépôt (Windows, Linux,
+  macOS, WSL) :
 
 ```bash
-pre-commit run --all-files                         # contrôles du commit
-pre-commit run --hook-stage pre-push --all-files   # contrôles du push
+git config core.hooksPath .githooks
 ```
 
-La version de ruff du hook (`.pre-commit-config.yaml`) doit rester identique
-à celle des `pyproject.toml`, sinon le hook et la CI ne verront pas les mêmes
-erreurs.
+Pour vérifier l'activation : `git config core.hooksPath` doit afficher
+`.githooks`. La commande n'écrit qu'une ligne dans le `.git/config` du clone ;
+`git config --unset core.hooksPath` la retire.
+
+Les hooks s'appliquent aussi aux commits lancés depuis VS Code ou tout autre
+outil Git. Prérequis : Git (sous Windows, Git for Windows fournit le shell qui
+exécute les hooks) et un accès à GitHub au premier lancement.
+
+**Commit refusé** : le message indique le fichier et la ligne en cause. Si
+ruff a corrigé le fichier, relisez la correction, ajoutez-la (`git add`) et
+relancez le commit.
+
+**Lancer les contrôles à la main** :
+
+```bash
+git hook run pre-commit    # fichiers indexés (fonctionne aussi sous PowerShell)
+sh scripts/check.sh        # dernier commit, comme la CI (Git Bash, Linux, macOS, WSL)
+```
+
+**Formater tout le projet** (après un premier lancement des hooks) :
+`.tools/ruff/ruff format .`, ou `.tools\ruff\ruff.exe format .` sous PowerShell.
+
+Pour changer de version de ruff, modifiez `ruff==` dans les trois
+`pyproject.toml` : le script, les hooks et la CI suivent.
+
+Les tests (`pytest`) ne font pas partie des hooks : ils demandent Python et
+une base PostgreSQL. La CI les exécute sur chaque pull request ; la section
+« Tests » explique comment les lancer en local.
 
 ## Intégration continue
 
@@ -207,16 +267,24 @@ chaque merge dans `main` :
 
 | Job | Rôle |
 |---|---|
-| `lint` | `ruff check`, `ruff format --check`, `pytest` |
+| `lint` | `sh scripts/check.sh` (mêmes contrôles que les hooks locaux), puis `pytest` avec couverture, contre un service PostgreSQL 16 |
 | `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
 | `build` | Construit les images `back` et `ml`, les scanne avec Trivy |
+| `perf` | Lance la stack avec ces images et exécute le test de charge k6 |
+| `publish` | Publie les images sur GHCR (depuis `main` uniquement) |
 
-Un job en échec bloque la suite : `build` ne démarre que si `lint` et `scan`
-passent. Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour
-les images, seules celles qui ont un correctif disponible sont bloquantes.
+Chaque étape attend la réussite de la précédente : `lint` + `scan` →
+`build` → `perf` → `publish`. Une image n'est donc publiée qu'après avoir
+passé les tests, le scan de sécurité et le test de charge.
 
-Depuis `main` uniquement, les images sont publiées sur GitHub Container
-Registry, étiquetées avec le SHA du commit et `latest` :
+Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour les
+images, seules celles qui ont un correctif disponible sont bloquantes.
+
+Rapports publiés en artefacts sur chaque run (onglet *Actions* → run →
+*Artifacts*) : `coverage` (HTML + XML) et `k6-results` (résumé JSON du test
+de charge).
+
+Les images publiées sont étiquetées avec le SHA du commit et `latest` :
 
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/back
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml

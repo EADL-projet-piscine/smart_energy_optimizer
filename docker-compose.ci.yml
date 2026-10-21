@@ -1,0 +1,9 @@
+# Surcharge utilisée par la CI : lance la stack avec les images construites et scannées
+# par le job `build`, au lieu de les reconstruire.
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
+services:
+  back:
+    image: ${BACK_IMAGE:?BACK_IMAGE non défini}
+
+  ml:
+    image: ${ML_IMAGE:?ML_IMAGE non défini}

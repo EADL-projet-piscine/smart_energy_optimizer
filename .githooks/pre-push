@@ -1,0 +1,13 @@
+#!/bin/sh
+# Rejoue les contrôles de la CI sur chaque commit poussé : rattrape un commit fait
+# avec --no-verify. Activation, une fois par clone : git config core.hooksPath .githooks
+racine=$(git rev-parse --show-toplevel)
+statut=0
+# Git fournit une ligne par référence poussée : <ref locale> <sha local> <ref distante> <sha distant>.
+while read -r _ sha_local _ _; do
+    case "$sha_local" in
+        *[!0]*) sh "$racine/scripts/check.sh" "$sha_local" </dev/null || statut=1 ;;
+        *) ;; # suppression d'une branche distante : rien à contrôler
+    esac
+done
+exit "$statut"

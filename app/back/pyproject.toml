@@ -20,7 +20,7 @@ dependencies = [
 dev = [
     "pytest",
     "ruff==0.17.1",
-    "pre-commit",
+    "pytest-cov",
 ]
 
 [tool.setuptools.packages.find]
@@ -28,6 +28,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["db: nécessite une base PostgreSQL joignable"]
 
 [tool.ruff]
 line-length = 100

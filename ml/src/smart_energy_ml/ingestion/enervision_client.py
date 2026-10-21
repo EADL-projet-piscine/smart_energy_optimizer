@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -14,18 +14,13 @@ class EnerVisionClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = (
-            base_url
-            or os.getenv("ENERVISION_API_URL", "https://api-mock.charlieandre.fr")
+            base_url or os.getenv("ENERVISION_API_URL", "https://api-mock.charlieandre.fr")
         ).rstrip("/")
 
         username = os.getenv("ENERVISION_API_USERNAME")
         password = os.getenv("ENERVISION_API_PASSWORD")
 
-        auth = (
-            httpx.BasicAuth(username, password)
-            if username and password
-            else None
-        )
+        auth = httpx.BasicAuth(username, password) if username and password else None
 
         self.client = httpx.Client(
             base_url=self.base_url,
@@ -70,7 +65,7 @@ class EnerVisionClient:
         data = response.json()
 
         if not isinstance(data, list):
-            raise ValueError("Réponse inattendue : une liste JSON était attendue")
+            raise TypeError("Réponse inattendue : une liste JSON était attendue")
 
         return data
 

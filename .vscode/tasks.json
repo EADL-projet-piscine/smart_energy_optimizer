@@ -1,0 +1,15 @@
+{
+  // Active les hooks Git du dépôt (.githooks) à l'ouverture du dossier dans VS Code.
+  // VS Code demande une seule fois l'autorisation d'exécuter les tâches automatiques.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Activer les hooks Git",
+      "type": "shell",
+      "command": "git config core.hooksPath .githooks",
+      "runOptions": { "runOn": "folderOpen" },
+      "presentation": { "reveal": "never", "close": true },
+      "problemMatcher": []
+    }
+  ]
+}

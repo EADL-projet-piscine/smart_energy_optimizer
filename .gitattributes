@@ -1,0 +1,4 @@
+# Scripts shell et hooks Git en fins de ligne LF, même dans un checkout Windows :
+# le sh de Git (et WSL) échoue sur les retours chariot.
+*.sh text eol=lf
+.githooks/* text eol=lf

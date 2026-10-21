@@ -1,0 +1,4 @@
+#!/bin/sh
+# Bloque le commit si les fichiers indexés feraient échouer le job lint de la CI.
+# Activation, une fois par clone : git config core.hooksPath .githooks
+exec sh "$(git rev-parse --show-toplevel)/scripts/check.sh" --staged

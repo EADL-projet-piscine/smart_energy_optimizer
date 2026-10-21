@@ -16,7 +16,7 @@ def creer_moteur(url: str) -> Engine:
 engine = creer_moteur(settings.database_url)
 
 
-def base_disponible() -> bool:
+def database_available() -> bool:
     try:
         with engine.connect() as connexion:
             connexion.execute(text("SELECT 1"))

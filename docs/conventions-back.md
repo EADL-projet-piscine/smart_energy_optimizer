@@ -27,6 +27,8 @@ Chaque module vit dans `src/smart_energy_app/<domaine>/` et contient :
 | `routes.py` | Les endpoints HTTP. Reçoit, appelle le service, répond. |
 | `service.py` | Les règles métier. C'est ici que se prennent les décisions. |
 | `repository.py` | Le seul endroit qui parle à la base de données. |
+| `client.py` | Les appels à une API extérieure, s'il y en a. |
+| `planificateur.py` | La tâche périodique du module, s'il en a une. |
 | `models.py` | Les tables SQLAlchemy. |
 | `schemas.py` | Les formats d'entrée et de sortie de l'API (Pydantic). |
 
@@ -49,10 +51,10 @@ Un module n'accède à un autre module **que par son `__init__.py`**.
 
 ```python
 # Autorisé
-from smart_energy_app.sites import obtenir_site
+from smart_energy_app.sites import get_site
 
 # Interdit
-from smart_energy_app.sites.repository import requete_site
+from smart_energy_app.sites.repository import select_site
 from smart_energy_app.sites.models import Site
 ```
 
@@ -64,9 +66,9 @@ Exemple d'interface :
 
 ```python
 # sites/__init__.py
-from .service import lister_sites, obtenir_site
+from .service import get_site, list_sites
 
-__all__ = ["lister_sites", "obtenir_site"]
+__all__ = ["get_site", "list_sites"]
 ```
 
 ## Ce qui vit hors des modules
@@ -76,10 +78,14 @@ __all__ = ["lister_sites", "obtenir_site"]
 | `main.py` | Assemble l'application et monte les routeurs. Pas de logique. |
 | `config.py` | Tous les paramètres, lus depuis l'environnement. |
 | `db.py` | Moteur SQLAlchemy et sessions. |
-| `commun/` | Ce qui sert à plusieurs modules : erreurs, pagination, conversion de fuseaux. |
+| `commun/` | Ce qui sert à plusieurs modules : adresses de l'API source (`enervision.py`), erreurs, pagination, conversion de fuseaux. |
 
 `commun/` est à utiliser avec parcimonie. Dès qu'on y met de la logique
 métier, il devient un fourre-tout dont tout le monde dépend.
+
+`commun/enervision.py` porte les chemins de l'API EnerVision sous forme de
+constantes. Aucun module ne réécrit une URL de la source à la main : il
+importe la constante correspondante.
 
 ## Ajouter un module
 
@@ -92,38 +98,70 @@ touch <domaine>/{__init__.py,routes.py,service.py,schemas.py}
 Puis monter le routeur dans `main.py` :
 
 ```python
-from smart_energy_app.<domaine>.routes import router as routeur_<domaine>
+from smart_energy_app.<domaine>.routes import router as <domaine>_router
 
-app.include_router(routeur_<domaine>, prefix="/api/<domaine>", tags=["<Domaine>"])
+app.include_router(<domaine>_router, prefix="/api/<domaine>", tags=["<Domaine>"])
 ```
 
 Un module se crée **quand son ticket est pris**, pas à l'avance. Des
 dossiers vides créés par anticipation envoient les autres sur de fausses
 pistes.
 
-## Modules prévus
+## Modules
 
 | Module | Rôle |
 |---|---|
-| `sites` | Référentiel des sites |
-| `mesures` | Historique de consommation |
-| `previsions` | Lecture des prévisions produites par le service ML |
-| `recommandations` | Actions proposées aux exploitants |
-| `alertes` | Alertes levées et leur état |
-| `temps_reel` | Relais vers l'API EnerVision pour l'affichage instantané |
+| `sites` | Référentiel des sites : nom, type, capacité, rattachement client |
+| `consommation` | Mesure courante et historique de consommation |
+| `previsions` | Prévisions du service ML et recommandations qui en découlent |
+| `alertes` | Alertes levées, leur sévérité et leur état |
+| `commun` | Adresses de l'API source, erreurs, pagination, conversion de fuseaux |
+
+`consommation` regroupe la mesure instantanée et l'historique : c'est la
+même grandeur, seule la source diffère — l'API EnerVision pour l'instant
+présent (`client.py`), la base pour le passé (`repository.py`).
+
+Les recommandations vivent dans `previsions` parce qu'elles en découlent
+directement. Elles en sortiront le jour où elles seront déclenchées par
+autre chose qu'une prévision.
+
+Les alertes gardent leur module : elles sont signalées depuis plusieurs
+domaines (un dépassement prévu, une coupure constatée, un capteur
+défaillant) et ont leur propre cycle de vie — levée, consultée, acquittée.
 
 La collecte et l'ingestion ne figurent pas dans cette liste : elles sont
 portées par Azure Data Factory, hors du back-end.
 
+## Endpoints exposés
+
+| Endpoint | Module | Source |
+|---|---|---|
+| `GET /health` | — | état du service et de la base |
+| `GET /api/consommation/resume` | `consommation` | `/api/v1/stats/summary` |
+
+Les noms des endpoints reprennent ceux de l'API source quand ils en
+dérivent (`resume` pour `summary`), pour qu'on sache immédiatement d'où
+vient une donnée quand on débogue.
+
 ## Nommage
 
-- Dossiers, fichiers, fonctions et variables en français, en minuscules,
-  avec des tirets bas : `obtenir_site`, `taux_completude`.
-- Les noms techniques imposés par les bibliothèques restent en anglais :
-  `router`, `app`, `session`.
-- Les noms de colonnes en base suivent les noms de l'API source quand ils
-  en proviennent (`consumption_kw`, `data_quality`), pour qu'on puisse
-  tracer une valeur de bout en bout sans table de correspondance.
+**Les identifiants sont en anglais** : variables, fonctions, classes,
+paramètres. `get_site`, `refresh`, `CurrentState`, `is_stale`.
+
+**Les dossiers restent en français**, parce qu'ils portent le vocabulaire
+métier du projet : `consommation`, `previsions`, `alertes`. Les imports
+sont donc mixtes, et c'est assumé :
+
+```python
+from smart_energy_app.consommation.client import fetch_summary
+```
+
+**Les docstrings, commentaires et documentation sont en français.** Ce qui
+compte est que l'équipe comprenne vite.
+
+**Les noms de colonnes en base** suivent ceux de l'API source quand ils en
+proviennent (`consumption_kw`, `data_quality`), pour qu'une valeur se trace
+de bout en bout sans table de correspondance.
 
 ## Tests
 
@@ -133,10 +171,32 @@ Les tests suivent la même organisation que le code :
 tests/
 ├── sites/
 │   └── test_service.py
-└── temps_reel/
-    └── test_routes.py
+└── consommation/
+    ├── test_routes.py
+    └── test_service.py
 ```
 
-Un test ne doit pas dépendre du lancement de Docker. Si une fonction a
-besoin de la base, le test remplace le repository plutôt que de se
-connecter réellement.
+Un test ne doit pas dépendre du lancement de Docker ni d'un appel réseau
+réel. Si une fonction a besoin de la base, le test remplace le repository ;
+si elle appelle une API extérieure, le test lance un serveur local qui
+imite les réponses attendues.
+
+## Avant de pousser
+
+```bash
+cd ~/smart_energy_optimizer
+ruff check .
+ruff format --check .
+pytest
+```
+
+Ce sont exactement les trois commandes que lance la CI. Les passer en local
+évite de découvrir l'échec après le push — et de bloquer les autres, la CI
+étant commune à toutes les branches.
+
+Les deux premières sont lancées automatiquement à chaque commit si vous avez
+installé `pre-commit` (voir le README). Les relancer à la main reste utile
+avant d'ouvrir une pull request : le hook ne vérifie que les fichiers que
+vous avez modifiés, alors que la CI passe sur tout le dépôt — y compris sur
+le travail des autres, qui peut faire échouer votre pipeline sans que vous
+y soyez pour quelque chose.

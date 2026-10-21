@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from smart_energy_app.db import base_disponible
+from smart_energy_app.db import database_available
 
 
 def pytest_collection_modifyitems(config, items):
@@ -14,7 +14,7 @@ def pytest_collection_modifyitems(config, items):
     if os.environ.get("REQUIRE_DB") == "1":
         return
     tests_db = [item for item in items if "db" in item.keywords]
-    if not tests_db or base_disponible():
+    if not tests_db or database_available():
         return
     raison = pytest.mark.skip(reason="base PostgreSQL injoignable (REQUIRE_DB=1 pour l'exiger)")
     for item in tests_db:

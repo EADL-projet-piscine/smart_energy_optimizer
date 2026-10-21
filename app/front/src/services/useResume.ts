@@ -3,6 +3,8 @@ import { resumeDemonstration } from '../donnees/demonstration'
 import type { ResumeParc } from './modele'
 import { chargerResume } from './resume'
 
+const INTERVALLE_MS = 10_000
+
 function siteInitial(resume: ResumeParc): string | null {
   return (
     resume.sites.find((site) => site.alertes.some((alerte) => alerte.severite === 'critique'))?.id ??
@@ -42,7 +44,13 @@ export function useResume() {
   useEffect(() => {
     const controle = new AbortController()
     actualiser(null, controle.signal)
-    return () => controle.abort()
+
+    const minuterie = window.setInterval(() => actualiser(null, controle.signal), INTERVALLE_MS)
+
+    return () => {
+      controle.abort()
+      window.clearInterval(minuterie)
+    }
   }, [actualiser])
 
   return { resume, siteId, setSiteId, chargement, actualiser }

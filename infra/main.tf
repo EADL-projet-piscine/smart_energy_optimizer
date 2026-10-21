@@ -20,6 +20,15 @@ resource "azurerm_storage_account" "sa" {
   }
 }
 
+# Crée des règles réseau pour le compte de stockage
+resource "azurerm_storage_account_network_rules" "nr" {
+  storage_account_id = azurerm_storage_account.sa.id
+
+  default_action             = "Deny"
+  virtual_network_subnet_ids = [azurerm_subnet.subnet.id]
+  bypass                     = ["Metrics", "AzureServices"]
+}
+
 # Crée une adresse IP publique pour la VM
 resource "azurerm_public_ip" "public_ip" {
   name                = "applicatif-pip-vm-tf"
@@ -81,7 +90,7 @@ resource "azurerm_linux_virtual_machine" "applicatif-vm" {
   }
 
   tags = {
-    user = "egrondin2023"
+    user = var.student_id
   }
 }
 
@@ -99,7 +108,7 @@ resource "azurerm_network_security_group" "nsg" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.ip
     destination_address_prefix = "*"
   }
 

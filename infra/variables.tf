@@ -22,3 +22,8 @@ variable "admin_username" {
     type = string
     description = "Le nom d'utilisateur du compte admin sur la VM applicatif"
 }
+
+variable "ip" {
+    type = string
+    description = "L'adresse IP publique de votre poste, pour pouvoir accéder à la VM"
+}

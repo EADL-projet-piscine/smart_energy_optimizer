@@ -47,4 +47,5 @@ resource "azurerm_subnet" "subnet" {
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.241.${var.address_index}.0/24"]
   enforce_private_link_endpoint_network_policies = true
+  service_endpoints = ["Microsoft.Storage"]
 }

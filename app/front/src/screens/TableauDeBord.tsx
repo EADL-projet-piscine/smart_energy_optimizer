@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { GraphiqueConsommation } from '../composants/GraphiqueConsommation'
-import { IconeActualiser, IconeEclair, IconeLune, IconeSoleil } from '../composants/Icones'
+import { IconeEclair, IconeLune, IconeSoleil } from '../composants/Icones'
 import { Anneau } from '../composants/ui/Anneau'
 import { Banniere } from '../composants/ui/Banniere'
 import { BoutonIcone } from '../composants/ui/BoutonIcone'
@@ -16,7 +16,7 @@ export function TableauDeBord() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
-  const { resume, siteId, setSiteId, chargement, actualiser } = useResume()
+  const { resume, siteId, setSiteId } = useResume()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -44,22 +44,6 @@ export function TableauDeBord() {
           >
             {theme === 'dark' ? <IconeSoleil /> : <IconeLune />}
           </BoutonIcone>
-          <BoutonIcone
-            onClick={() => actualiser(siteId, undefined, true)}
-            disabled={chargement}
-            aria-label={
-              resume?.source === 'demonstration'
-                ? 'Actualiser. L’API est indisponible, la maquette est affichée.'
-                : 'Actualiser les données'
-            }
-          >
-            <IconeActualiser className={chargement ? 'animate-spin motion-reduce:animate-none' : undefined} />
-            <span
-              className={`absolute top-1.5 right-1.5 size-[7px] rounded-full shadow-[0_0_0_2px_var(--pilule)] ${
-                resume?.source === 'demonstration' ? 'bg-ambre' : 'bg-hausse'
-              }`}
-            />
-          </BoutonIcone>
         </div>
       </header>
 
@@ -68,7 +52,13 @@ export function TableauDeBord() {
           <h1 className="m-0 text-[32px] font-[650] tracking-[-0.035em] max-[680px]:text-[26px]">
             Vue d’ensemble du parc
           </h1>
-          <p className="mt-1.5 text-sm text-discret">
+          <p className="mt-1.5 flex items-center gap-2 text-sm text-discret">
+            <span
+              className={`size-[7px] shrink-0 rounded-full ${
+                resume?.source === 'demonstration' ? 'bg-ambre' : 'bg-hausse'
+              }`}
+              aria-hidden="true"
+            />
             {resume
               ? `${libelleSites(resume.nombreSites)} · dernière collecte à ${formaterCollecte(resume.derniereCollecte) || '—'}`
               : 'Chargement des sites…'}

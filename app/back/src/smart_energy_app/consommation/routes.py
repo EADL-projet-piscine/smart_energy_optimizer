@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from smart_energy_app.config import settings
-from smart_energy_app.consommation.service import refresh, state
+from smart_energy_app.consommation.service import state
 
 router = APIRouter()
 
@@ -18,16 +17,3 @@ def consumption_summary() -> dict:
         "fetched_at": state.fetched_at.isoformat(),
         "stale": state.is_stale(),
     }
-
-
-@router.post("/resume/rafraichir", summary="Forcer un rafraîchissement de la mesure courante")
-async def force_refresh() -> dict:
-    """Interroge l'API source sans attendre le prochain cycle automatique.
-
-    Si la dernière mesure est très récente, elle est renvoyée telle quelle :
-    cela évite qu'une série de clics ne déclenche autant d'appels à la source.
-    """
-    age = state.age_seconds()
-    if age is None or age > settings.consumption_min_refresh_s:
-        await refresh()
-    return consumption_summary()

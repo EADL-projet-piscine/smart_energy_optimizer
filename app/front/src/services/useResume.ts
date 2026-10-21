@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { resumeDemonstration } from '../donnees/demonstration'
 import type { ResumeParc } from './modele'
-import { chargerResume, rafraichirResume } from './resume'
+import { chargerResume } from './resume'
 
 function siteInitial(resume: ResumeParc): string | null {
   return (
@@ -16,32 +16,28 @@ export function useResume() {
   const [siteId, setSiteId] = useState<string | null>(null)
   const [chargement, setChargement] = useState(true)
 
-  const actualiser = useCallback(
-    (conserverSite: string | null, annulation?: AbortSignal, forcer = false) => {
-      setChargement(true)
-      const requete = forcer ? rafraichirResume(annulation) : chargerResume(annulation)
-      requete
-        .then((recu) => {
-          if (annulation?.aborted) return
-          setResume(recu)
-          setSiteId((actuel) =>
-            conserverSite && recu.sites.some((site) => site.id === conserverSite)
-              ? conserverSite
-              : actuel && recu.sites.some((site) => site.id === actuel)
-                ? actuel
-                : siteInitial(recu),
-          )
-        })
-        .catch(() => {
-          if (annulation?.aborted) return
-          setResume((actuel) => (actuel?.source === 'api' ? actuel : resumeDemonstration()))
-        })
-        .finally(() => {
-          if (!annulation?.aborted) setChargement(false)
-        })
-    },
-    [],
-  )
+  const actualiser = useCallback((conserverSite: string | null, annulation?: AbortSignal) => {
+    setChargement(true)
+    chargerResume(annulation)
+      .then((recu) => {
+        if (annulation?.aborted) return
+        setResume(recu)
+        setSiteId((actuel) =>
+          conserverSite && recu.sites.some((site) => site.id === conserverSite)
+            ? conserverSite
+            : actuel && recu.sites.some((site) => site.id === actuel)
+              ? actuel
+              : siteInitial(recu),
+        )
+      })
+      .catch(() => {
+        if (annulation?.aborted) return
+        setResume((actuel) => (actuel?.source === 'api' ? actuel : resumeDemonstration()))
+      })
+      .finally(() => {
+        if (!annulation?.aborted) setChargement(false)
+      })
+  }, [])
 
   useEffect(() => {
     const controle = new AbortController()

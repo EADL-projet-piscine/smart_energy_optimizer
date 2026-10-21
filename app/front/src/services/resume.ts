@@ -8,18 +8,8 @@ function deballer(enveloppe: unknown): unknown {
     : enveloppe
 }
 
-function construire(enveloppe: unknown): ResumeParc {
-  const resume = normaliserResume(deballer(enveloppe))
+export async function chargerResume(signal?: AbortSignal): Promise<ResumeParc> {
+  const resume = normaliserResume(deballer(await obtenirJson('/api/consommation/resume', signal)))
   if (!resume) throw new Error('Forme de réponse non reconnue')
   return resume
-}
-
-export async function chargerResume(signal?: AbortSignal): Promise<ResumeParc> {
-  return construire(await obtenirJson('/api/consommation/resume', signal))
-}
-
-export async function rafraichirResume(signal?: AbortSignal): Promise<ResumeParc> {
-  return construire(
-    await obtenirJson('/api/consommation/resume/rafraichir', signal, 'POST'),
-  )
 }

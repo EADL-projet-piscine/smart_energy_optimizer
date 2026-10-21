@@ -8,7 +8,17 @@ variable "subscription_id" {
     description = "L'ID de l'abonnement"
 }
 
-variable "vnet_address_space" {
+variable "address_index" {
     type = string
-    description = "L'espace d'adressage du réseau virtuel"
+    description = "L'index de l'espace d'addressage, défini par ordre alphabétique"
+}
+
+variable "sa_name" {
+    type = string
+    description = "La nom du compte de stockage (storage account). Le nom doit contenir seulement des lettres minuscules et des chiffres."
+}
+
+variable "admin_username" {
+    type = string
+    description = "Le nom d'utilisateur du compte admin sur la VM applicatif"
 }

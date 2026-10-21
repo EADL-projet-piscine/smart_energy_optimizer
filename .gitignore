@@ -33,6 +33,11 @@ ml/models/
 .idea/
 .vscode/
 
+# --- Front ---
+node_modules/
+dist/
+.vite/
+
 # --- Système ---
 .DS_Store
 Thumbs.db

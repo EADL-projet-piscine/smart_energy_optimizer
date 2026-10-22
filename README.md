@@ -227,13 +227,16 @@ uvicorn smart_energy_ml.api.main:app --reload --port 8001
 
 ### Tests Python
 
-Depuis la racine du dépôt, environnement virtuel activé avec les dépendances
-dev des deux services :
+Les tests Python se lancent projet par projet, comme les jobs `tests-back` et
+`tests-ml` de la CI, environnement virtuel activé avec les dépendances dev :
 
 ```bash
-pytest                 # tests du back et du service ML
-pytest --cov           # avec la couverture (seuil : 70 %)
+cd app/back && pytest --cov    # back, seuil de couverture : 80 %
+cd ml && pytest --cov          # service ML, seuil de couverture : 80 %
 ```
+
+Depuis la racine, `pytest` lance les deux suites d'un coup (`pytest --cov` :
+même seuil de 80 %).
 
 Rappel de l'activation : `source .venv/bin/activate` sous Linux, macOS et
 WSL, `.venv\Scripts\Activate.ps1` sous PowerShell. L'invite doit afficher
@@ -251,15 +254,18 @@ ces tests au lieu de les ignorer.
 
 #### Couverture
 
-Le seuil minimal est fixé dans `pyproject.toml` (`[tool.coverage.report]`,
-`fail_under = 70`) : en dessous, `pytest --cov` échoue. Le rapport HTML est
-écrit dans `htmlcov/`.
+Chaque projet fixe son périmètre et son seuil dans son `pyproject.toml`
+(`[tool.coverage.*]`) : le paquet `smart_energy_app` pour le back,
+`smart_energy_ml` pour le service ML, 80 % minimum. En dessous, `pytest --cov`
+échoue, en local comme en CI. Le rapport HTML est écrit dans `htmlcov/`, et la
+CI affiche le tableau de couverture dans le résumé de chaque run.
 
 ### Tests du front
 
 Tests unitaires [Vitest](https://vitest.dev/), dans `app/front/src/tests/`,
 en miroir de l'arborescence du code. Aucun appel réseau réel : le module
-`api/client` est simulé.
+`api/client` est simulé. Node 22, la version utilisée par la CI, est fixée
+dans `app/front/.nvmrc` (`nvm use` la sélectionne).
 
 ```bash
 cd app/front
@@ -270,11 +276,14 @@ npm run test:coverage     # avec la couverture ; rapport HTML dans coverage/
 Les scripts fixent `TZ=Europe/Paris`. Ce n'est pas décoratif : les fonctions
 de formatage convertissent en heure locale, donc sans fuseau fixé les tests
 passeraient sur une machine française et échoueraient en CI, qui tourne en
-UTC.
+UTC. Le job `tests-front` fixe aussi `TZ` dans son environnement.
 
 Les seuils de couverture sont dans `app/front/vitest.config.ts`. Le
 périmètre couvre tout `src/`, fichiers non testés compris, à l'exception du
-point d'entrée, des types et des données de démonstration.
+point d'entrée, des types et des données de démonstration. Le job CI affiche
+le tableau dans le résumé du run et publie le rapport HTML (artefact
+`front-coverage`). `npm run build` vérifie aussi les types des fichiers de
+test.
 
 ### Test de charge
 
@@ -390,26 +399,32 @@ local.
 ## Intégration continue
 
 Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request et à
-chaque merge dans `main` :
+chaque merge dans `main`. `lint`, `scan` et les jobs `tests-*` tournent en
+parallèle ; un seul test en échec fait échouer son job, et chaque job de tests
+affiche sa couverture dans le résumé du run :
 
 | Job | Rôle |
 |---|---|
-| `lint` | `sh scripts/check.sh` (mêmes contrôles que les hooks locaux), puis `pytest` avec couverture, contre un service PostgreSQL 16 |
+| `lint` | `sh scripts/check.sh`, les mêmes contrôles que les hooks locaux |
 | `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
-| `build` | Construit les images `back` et `ml`, les scanne avec Trivy |
+| `tests-back` | `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`) |
+| `tests-ml` | `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
+| `tests-front` | Node 22 et `TZ=Europe/Paris` : `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
+| `build` | Une fois `lint`, `scan` et les trois jobs `tests-*` réussis : construit les images `back` et `ml`, les scanne avec Trivy |
 | `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
 | `publish` | Publie les images sur GHCR (depuis `main` uniquement) |
 
-Chaque étape attend la réussite de la précédente : `lint` + `scan` →
-`build` → `perf` → `publish`. Une image n'est donc publiée qu'après avoir
-passé les tests, le scan de sécurité et le test de charge.
+Chaque étape attend la réussite de la précédente : `lint`, `scan` et les
+trois jobs `tests-*` → `build` → `perf` → `publish`. Une image n'est donc
+publiée qu'après avoir passé les tests, le scan de sécurité et le test de
+charge.
 
 Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour les
 images, seules celles qui ont un correctif disponible sont bloquantes.
 
 Rapports publiés en artefacts sur chaque run (onglet *Actions* → run →
-*Artifacts*) : `coverage` (HTML + XML) et `k6-results` (résumé JSON du test
-de charge).
+*Artifacts*) : `back-coverage` et `ml-coverage` (HTML + XML),
+`front-coverage` (HTML) et `k6-results` (résumé JSON du test de charge).
 
 Les images publiées sont étiquetées avec le SHA du commit et `latest` :
 

@@ -16,8 +16,19 @@ permissions:
   contents: read
 
 jobs:
-  # Lint, formatting, functional tests against a real database, coverage.
+  # Lint and formatting: same script as the local pre-commit hook, so what passes locally
+  # passes here.
   lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Lint and formatting
+        run: sh scripts/check.sh
+
+  # Back-end tests against a real PostgreSQL database. Coverage scope and 80 % threshold:
+  # app/back/pyproject.toml.
+  tests-back:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -37,39 +48,79 @@ jobs:
       DATABASE_URL: postgresql+psycopg://enervision:enervision@localhost:5432/enervision
       # Tests marked `db` fail instead of being skipped when the database is missing.
       REQUIRE_DB: "1"
+    defaults:
+      run:
+        working-directory: app/back
     steps:
       - uses: actions/checkout@v5
 
-      # Same script as the local pre-commit hook: what passes locally passes here.
-      - name: Lint and formatting
-        run: sh scripts/check.sh
-
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version-file: app/back/pyproject.toml
           cache: pip
-          cache-dependency-path: |
-            app/back/pyproject.toml
-            ml/pyproject.toml
+          cache-dependency-path: app/back/pyproject.toml
 
-      - name: Install backend
-        run: python -m pip install -e "./app/back[dev]"
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
 
-      - name: Install ML
-        run: python -m pip install -e "./ml[dev]"
-
-      # The coverage threshold is set in pyproject.toml (tool.coverage.report).
       - name: Run tests with coverage
         run: pytest --cov --cov-report=term --cov-report=xml --cov-report=html
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Back-end coverage"
+            python -m coverage report --format=markdown --fail-under=0 || echo "No coverage data."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: coverage
+          name: back-coverage
           path: |
-            coverage.xml
-            htmlcov/
+            app/back/coverage.xml
+            app/back/htmlcov/
+          retention-days: 14
+
+  # ML service tests. Coverage scope and 80 % threshold: ml/pyproject.toml.
+  tests-ml:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ml/pyproject.toml
+          cache: pip
+          cache-dependency-path: ml/pyproject.toml
+
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: pytest --cov --cov-report=term --cov-report=xml --cov-report=html
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### ML coverage"
+            python -m coverage report --format=markdown --fail-under=0 || echo "No coverage data."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ml-coverage
+          path: |
+            ml/coverage.xml
+            ml/htmlcov/
           retention-days: 14
 
   # Repository scan: vulnerable dependencies, misconfigurations, committed secrets.
@@ -88,9 +139,13 @@ jobs:
           exit-code: "1"
           token-setup-trivy: ${{ secrets.GITHUB_TOKEN }}
 
-  # Front end: type-check, production build and unit tests with coverage.
-  front:
+  # Front end: type-check, production build and unit tests. Coverage scope and 80 %
+  # threshold on the TypeScript logic: app/front/vitest.config.ts.
+  tests-front:
     runs-on: ubuntu-latest
+    env:
+      # The dashboard shows Paris time, while GitHub runners use UTC.
+      TZ: Europe/Paris
     defaults:
       run:
         working-directory: app/front
@@ -99,7 +154,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: app/front/.nvmrc
           cache: npm
           cache-dependency-path: app/front/package-lock.json
 
@@ -110,7 +165,17 @@ jobs:
         run: npm run build
 
       - name: Run unit tests with coverage
-        run: npm test -- --coverage
+        run: npm run test:coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Front-end coverage"
+            echo '```'
+            cat coverage/coverage.txt || echo "No coverage data."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage report
         if: always()
@@ -122,7 +187,7 @@ jobs:
 
   # Builds and scans each image, then hands it over to the next jobs.
   build:
-    needs: [lint, scan, front]
+    needs: [lint, scan, tests-back, tests-ml, tests-front]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

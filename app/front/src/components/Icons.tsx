@@ -1,17 +1,14 @@
 type Props = { className?: string }
 
-export function IconeEclair({ className }: Props) {
+export function IconBolt({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M13.6 1.8 4.2 13.6h5.4l-1.2 8.6 10.2-13.1H13l.6-7.3z"
-      />
+      <path fill="currentColor" d="M13.6 1.8 4.2 13.6h5.4l-1.2 8.6 10.2-13.1H13l.6-7.3z" />
     </svg>
   )
 }
 
-export function IconeSoleil({ className }: Props) {
+export function IconSun({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -26,7 +23,7 @@ export function IconeSoleil({ className }: Props) {
   )
 }
 
-export function IconeLune({ className }: Props) {
+export function IconMoon({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
       <path
@@ -40,30 +37,7 @@ export function IconeLune({ className }: Props) {
   )
 }
 
-export function IconeActualiser({ className }: Props) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M19.5 12a7.5 7.5 0 1 1-2.1-5.2"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M19.5 4.2V8h-3.8"
-      />
-    </svg>
-  )
-}
-
-export function IconeAttention({ className }: Props) {
+export function IconWarning({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
       <path
@@ -74,16 +48,10 @@ export function IconeAttention({ className }: Props) {
   )
 }
 
-export function IconeFermer({ className }: Props) {
+export function IconClose({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        d="M7 7l10 10M17 7 7 17"
-      />
+      <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M7 7l10 10M17 7 7 17" />
     </svg>
   )
 }

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from './cn'
-import { Chiffre, Libelle, type Tone } from './Texte'
+import { Figure, Label, type Tone } from './Text'
 
 type Props = {
   label: string
@@ -13,7 +13,7 @@ type Props = {
   className?: string
 }
 
-export function Indicateur({
+export function Metric({
   label,
   value,
   unit,
@@ -32,8 +32,8 @@ export function Indicateur({
         className,
       )}
     >
-      <Libelle>{label}</Libelle>
-      <Chiffre value={value} unit={unit} tone={tone} size={variant === 'surface' ? size : 'md'} />
+      <Label>{label}</Label>
+      <Figure value={value} unit={unit} tone={tone} size={variant === 'surface' ? size : 'md'} />
       {detail && <div className="mt-2 text-[13px] text-secondaire">{detail}</div>}
     </article>
   )

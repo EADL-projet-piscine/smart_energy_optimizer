@@ -4,10 +4,10 @@ import '@fontsource-variable/inter'
 import App from './App'
 import './styles.css'
 
-const racine = document.getElementById('root')
-if (!racine) throw new Error('Élément racine introuvable')
+const root = document.getElementById('root')
+if (!root) throw new Error('Élément racine introuvable')
 
-createRoot(racine).render(
+createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,

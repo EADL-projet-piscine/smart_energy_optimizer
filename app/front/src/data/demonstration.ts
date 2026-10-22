@@ -1,69 +1,77 @@
 import { buildSummary } from '../services/format'
-import type { SeriePoint, ParkSummary, Site } from '../services/modele'
+import type { ParkSummary, SeriesPoint, Site } from '../services/model'
 
-const MESURE_PARC = [1850, 1780, 1720, 1680, 1710, 1840, 2100, 2420, 2680, 2790, 2860, 2890, 2840, 2780, 2820, 2880, 2847]
-const PREVISION_PARC = [2847, 2890, 3050, 2920, 2600, 2280, 2020, 1880, 1780]
-const MESURE_SITE2 = [520, 490, 460, 440, 450, 490, 560, 660, 740, 790, 820, 840, 810, 790, 800, 830, 812]
-const PREVISION_SITE2 = [812, 900, 1040, 980, 860, 740, 640, 580, 540]
+const PARK_MEASURED = [
+  1850, 1780, 1720, 1680, 1710, 1840, 2100, 2420, 2680, 2790, 2860, 2890, 2840, 2780, 2820, 2880, 2847,
+]
+const PARK_FORECAST = [2847, 2890, 3050, 2920, 2600, 2280, 2020, 1880, 1780]
+const SITE2_MEASURED = [520, 490, 460, 440, 450, 490, 560, 660, 740, 790, 820, 840, 810, 790, 800, 830, 812]
+const SITE2_FORECAST = [812, 900, 1040, 980, 860, 740, 640, 580, 540]
 
-const POIDS_SITES = [680, 545, 470, 340]
-const TOTAL_POIDS = 2035
+const SITE_WEIGHTS = [680, 545, 470, 340]
+const TOTAL_WEIGHT = 2035
 
-function series(mesures: Array<number | null>, previsions: Array<number | null>, heureDebutPrevision: number): SeriePoint[] {
+function buildSeries(
+  measured: Array<number | null>,
+  forecast: Array<number | null>,
+  forecastStartHour: number,
+): SeriesPoint[] {
   return Array.from({ length: 25 }, (_, hour) => ({
     hour,
-    measuredKw: mesures[hour] ?? null,
-    forecastKw: previsions[hour - heureDebutPrevision] ?? null,
+    measuredKw: measured[hour] ?? null,
+    forecastKw: forecast[hour - forecastStartHour] ?? null,
   }))
 }
 
-function repartir(reste: number): number[] {
-  const planchers = POIDS_SITES.map((poids) => Math.floor((reste * poids) / TOTAL_POIDS))
-  let manque = reste - planchers.reduce((somme, value) => somme + value, 0)
-  const fractions = POIDS_SITES.map((poids, index) => ({
+/** Répartit un total entre les sites au prorata de leur poids, sans perdre d'unité. */
+function distribute(total: number): number[] {
+  const floors = SITE_WEIGHTS.map((weight) => Math.floor((total * weight) / TOTAL_WEIGHT))
+  let remainder = total - floors.reduce((sum, value) => sum + value, 0)
+  const fractions = SITE_WEIGHTS.map((weight, index) => ({
     index,
-    fraction: (reste * poids) / TOTAL_POIDS - planchers[index],
+    fraction: (total * weight) / TOTAL_WEIGHT - floors[index],
   })).sort((a, b) => b.fraction - a.fraction)
 
   for (const fraction of fractions) {
-    if (manque <= 0) break
-    planchers[fraction.index] += 1
-    manque -= 1
+    if (remainder <= 0) break
+    floors[fraction.index] += 1
+    remainder -= 1
   }
-  return planchers
+  return floors
 }
 
-function seriesAutresSites(): SeriePoint[][] {
-  const colonnes: number[][] = [[], [], [], []]
-  const previsions: number[][] = [[], [], [], []]
+function otherSiteSeries(): SeriesPoint[][] {
+  const columns: number[][] = [[], [], [], []]
+  const forecasts: number[][] = [[], [], [], []]
 
-  MESURE_PARC.forEach((value, index) => {
-    repartir(value - MESURE_SITE2[index]).forEach((part, site) => colonnes[site].push(part))
+  PARK_MEASURED.forEach((value, index) => {
+    distribute(value - SITE2_MEASURED[index]).forEach((part, site) => columns[site].push(part))
   })
-  PREVISION_PARC.forEach((value, index) => {
-    repartir(value - PREVISION_SITE2[index]).forEach((part, site) => previsions[site].push(part))
+  PARK_FORECAST.forEach((value, index) => {
+    distribute(value - SITE2_FORECAST[index]).forEach((part, site) => forecasts[site].push(part))
   })
 
-  return colonnes.map((mesures, index) => {
-    const mesuresJour: Array<number | null> = Array.from({ length: 25 }, () => null)
-    mesures.forEach((value, hour) => {
-      mesuresJour[hour] = value
+  return columns.map((measured, index) => {
+    const dayMeasured: Array<number | null> = Array.from({ length: 25 }, () => null)
+    measured.forEach((value, hour) => {
+      dayMeasured[hour] = value
     })
-    return series(mesuresJour, previsions[index], MESURE_PARC.length - 1)
+    return buildSeries(dayMeasured, forecasts[index], PARK_MEASURED.length - 1)
   })
 }
 
-function serieInterrompue(values: number[]): SeriePoint[] {
-  const mesures: Array<number | null> = Array.from({ length: 25 }, () => null)
+/** Série qui s'arrête en cours de journée : site dont le relevé est coupé. */
+function interruptedSeries(values: number[]): SeriesPoint[] {
+  const measured: Array<number | null> = Array.from({ length: 25 }, () => null)
   values.forEach((value, hour) => {
-    mesures[hour] = value
+    measured[hour] = value
   })
-  return series(mesures, [], 0)
+  return buildSeries(measured, [], 0)
 }
 
 export function demoSummary(): ParkSummary {
-  const [serie3, serie5, serie7, serie1] = seriesAutresSites()
-  const heurePrevision = MESURE_PARC.length - 1
+  const [site3Series, site5Series, site7Series, site1Series] = otherSiteSeries()
+  const forecastStartHour = PARK_MEASURED.length - 1
 
   const sites: Site[] = [
     {
@@ -78,10 +86,10 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: true,
       badge: null,
-      series: series(
-        Array.from({ length: 25 }, (_, hour) => MESURE_SITE2[hour] ?? null),
-        PREVISION_SITE2,
-        heurePrevision,
+      series: buildSeries(
+        Array.from({ length: 25 }, (_, hour) => SITE2_MEASURED[hour] ?? null),
+        SITE2_FORECAST,
+        forecastStartHour,
       ),
       peakHour: null,
       comment: null,
@@ -90,8 +98,7 @@ export function demoSummary(): ParkSummary {
           id: 'alert-site002',
           severity: 'critique',
           title: 'Nouvelle alerte critique',
-          message:
-            'SITE002 — dépassement de seuil prévu dans deux heures, 1 040 kW pour un seuil à 930 kW.',
+          message: 'SITE002 — dépassement de seuil prévu dans deux heures, 1 040 kW pour un seuil à 930 kW.',
         },
       ],
       recommendations: [
@@ -121,7 +128,7 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: true,
       badge: null,
-      series: serie3,
+      series: site3Series,
       peakHour: null,
       comment: null,
       alerts: [],
@@ -146,7 +153,7 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: true,
       badge: null,
-      series: serie5,
+      series: site5Series,
       peakHour: null,
       comment: null,
       alerts: [],
@@ -171,7 +178,7 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: true,
       badge: null,
-      series: serie7,
+      series: site7Series,
       peakHour: null,
       comment: null,
       alerts: [],
@@ -196,7 +203,7 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: true,
       badge: null,
-      series: serie1,
+      series: site1Series,
       peakHour: null,
       comment: null,
       alerts: [],
@@ -221,7 +228,7 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: false,
       badge: null,
-      series: serieInterrompue([180, 170, 165, 160, 170, 190, 230, 280, 320, 340, 350, 330, 300, 260]),
+      series: interruptedSeries([180, 170, 165, 160, 170, 190, 230, 280, 320, 340, 350, 330, 300, 260]),
       peakHour: null,
       comment: null,
       alerts: [
@@ -253,7 +260,7 @@ export function demoSummary(): ParkSummary {
       expectedCount: 24,
       isTransmitting: false,
       badge: null,
-      series: serieInterrompue([70, 65, 60, 58, 62, 80, 110, 140, 160, 170, 165, 150, 130, 110]),
+      series: interruptedSeries([70, 65, 60, 58, 62, 80, 110, 140, 160, 170, 165, 150, 130, 110]),
       peakHour: null,
       comment: null,
       alerts: [
@@ -291,10 +298,10 @@ export function demoSummary(): ParkSummary {
     thresholdKw: 2900,
     peakKw: null,
     peakHour: null,
-    series: series(
-      Array.from({ length: 25 }, (_, hour) => MESURE_PARC[hour] ?? null),
-      PREVISION_PARC,
-      heurePrevision,
+    series: buildSeries(
+      Array.from({ length: 25 }, (_, hour) => PARK_MEASURED[hour] ?? null),
+      PARK_FORECAST,
+      forecastStartHour,
     ),
     comment: null,
     sites,

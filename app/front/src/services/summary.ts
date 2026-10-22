@@ -1,6 +1,6 @@
 import { fetchJson } from '../api/client'
-import type { ParkSummary } from './modele'
-import { normalizeSummary } from './normaliser'
+import type { ParkSummary } from './model'
+import { normalizeSummary } from './normalize'
 
 /** L'API métier renvoie `{ data, fetched_at, stale }` ; on ne garde que `data`. */
 function unwrap(envelope: unknown): unknown {

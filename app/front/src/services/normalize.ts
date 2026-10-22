@@ -1,5 +1,5 @@
 import { buildSummary } from './format'
-import type { Alert, ParkSummary, Recommendation, SeriePoint, Severity, Site } from './modele'
+import type { Alert, ParkSummary, Recommendation, SeriesPoint, Severity, Site } from './model'
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -80,7 +80,7 @@ function toBadge(value: unknown): string | null {
   return label
 }
 
-function parsePoint(value: unknown, index: number): SeriePoint | null {
+function parsePoint(value: unknown, index: number): SeriesPoint | null {
   if (typeof value === 'number') {
     return { hour: index, measuredKw: value, forecastKw: null }
   }
@@ -96,11 +96,11 @@ function parsePoint(value: unknown, index: number): SeriePoint | null {
   return { hour, measuredKw: measured, forecastKw: forecast }
 }
 
-function parseSeries(value: unknown): SeriePoint[] {
+function parseSeries(value: unknown): SeriesPoint[] {
   if (!Array.isArray(value)) return []
   return value
     .map((point, index) => parsePoint(point, index))
-    .filter((point): point is SeriePoint => point !== null)
+    .filter((point): point is SeriesPoint => point !== null)
     .sort((a, b) => a.hour - b.hour)
 }
 
@@ -240,7 +240,7 @@ function attachParkAlerts(sites: Site[], source: Record<string, unknown>): Site[
 }
 
 /** Série du parc reconstituée en sommant les sites qui transmettent. */
-function sumSeries(sites: Site[]): SeriePoint[] {
+function sumSeries(sites: Site[]): SeriesPoint[] {
   const hours = new Set<number>()
   sites.forEach((site) => site.series.forEach((point) => hours.add(point.hour)))
   return [...hours]

@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react'
-import { GraphiqueConsommation } from '../composants/GraphiqueConsommation'
-import { IconeEclair, IconeLune, IconeSoleil } from '../composants/Icones'
-import { Anneau } from '../composants/ui/Anneau'
-import { Banniere } from '../composants/ui/Banniere'
-import { BoutonIcone } from '../composants/ui/BoutonIcone'
-import { Carte } from '../composants/ui/Carte'
-import { Indicateur } from '../composants/ui/Indicateur'
-import { Legende } from '../composants/ui/Legende'
-import { Libelle, TexteSites } from '../composants/ui/Texte'
+import { ConsumptionChart } from '../components/ConsumptionChart'
+import { IconBolt, IconMoon, IconSun } from '../components/Icons'
+import { Banner } from '../components/ui/Banner'
+import { Card } from '../components/ui/Card'
+import { IconButton } from '../components/ui/IconButton'
+import { Legend } from '../components/ui/Legend'
+import { Metric } from '../components/ui/Metric'
+import { Ring } from '../components/ui/Ring'
+import { Label, SiteText } from '../components/ui/Text'
 import { alertsLabel, formatCollectedAt, formatNumber, sitesLabel } from '../services/format'
-import { useResume } from '../services/useResume'
-import { DetailSite } from './DetailSite'
+import { useSummary } from '../services/useSummary'
+import { SiteDetail } from './SiteDetail'
 
-export function TableauDeBord() {
+export function Dashboard() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
-  const { summary, siteId, setSiteId } = useResume()
+  const { summary, siteId, setSiteId } = useSummary()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -33,17 +33,17 @@ export function TableauDeBord() {
       <header className="mb-7 flex items-center justify-between">
         <div className="flex items-center gap-2.5 text-lg font-[650] tracking-[-0.02em]">
           <span className="grid size-7 place-items-center text-mesure [&_svg]:size-[22px]">
-            <IconeEclair />
+            <IconBolt />
           </span>
           <span>EnerVision</span>
         </div>
         <div className="flex gap-1 rounded-[14px] border border-bordure bg-pilule p-1 shadow-[0_1px_0_rgba(255,255,255,0.03)]">
-          <BoutonIcone
+          <IconButton
             onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
             aria-label={theme === 'dark' ? 'Activer le mode clair' : 'Activer le mode sombre'}
           >
-            {theme === 'dark' ? <IconeSoleil /> : <IconeLune />}
-          </BoutonIcone>
+            {theme === 'dark' ? <IconSun /> : <IconMoon />}
+          </IconButton>
         </div>
       </header>
 
@@ -71,7 +71,7 @@ export function TableauDeBord() {
               className="mt-[22px] grid grid-cols-1 gap-3.5 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4"
               aria-label="Indicateurs du parc"
             >
-              <Indicateur
+              <Metric
                 label="Consommation actuelle"
                 value={summary.consumptionKw === null ? '—' : formatNumber(summary.consumptionKw)}
                 unit={summary.consumptionKw === null ? undefined : 'kW'}
@@ -87,9 +87,9 @@ export function TableauDeBord() {
               />
 
               <article className="flex min-h-[124px] items-center gap-4 rounded-2xl border border-bordure bg-carte px-[18px] pt-[18px] pb-4 shadow-[0_1px_0_rgba(255,255,255,0.02)]">
-                <Anneau percentage={summary.coveragePct ?? 0} />
+                <Ring percentage={summary.coveragePct ?? 0} />
                 <div>
-                  <Libelle>Couverture</Libelle>
+                  <Label>Couverture</Label>
                   <p className="mt-1.5 max-w-[12em] text-[15px] leading-snug text-encre">
                     {summary.transmittingCount > 1
                       ? `${formatNumber(summary.transmittingCount)} sites sur ${formatNumber(summary.siteCount)} transmettent`
@@ -98,7 +98,7 @@ export function TableauDeBord() {
                 </div>
               </article>
 
-              <Indicateur
+              <Metric
                 label="Alertes en cours"
                 value={formatNumber(summary.totalAlerts)}
                 tone="danger"
@@ -106,7 +106,7 @@ export function TableauDeBord() {
                 detail={alertsLabel(summary.criticalAlerts, summary.mediumAlerts)}
               />
 
-              <Indicateur
+              <Metric
                 label="Coût du jour"
                 value={summary.dailyCostEur === null ? '—' : formatNumber(summary.dailyCostEur)}
                 unit={summary.dailyCostEur === null ? undefined : '€'}
@@ -116,17 +116,17 @@ export function TableauDeBord() {
             </section>
 
             {exclusionMessage && (
-              <Banniere>
-                <TexteSites text={exclusionMessage} />
-              </Banniere>
+              <Banner>
+                <SiteText text={exclusionMessage} />
+              </Banner>
             )}
 
-            <Carte aria-labelledby="chart-title">
+            <Card aria-labelledby="chart-title">
               <header className="flex items-start justify-between gap-4 max-[680px]:flex-col">
                 <h2 id="chart-title" className="m-0 text-base font-[650] tracking-[-0.02em]">
                   Consommation et prévision
                 </h2>
-                <Legende
+                <Legend
                   entries={[
                     { label: 'Mesuré', style: 'mesure' },
                     { label: 'Prévision', style: 'prevision' },
@@ -134,13 +134,13 @@ export function TableauDeBord() {
                   ]}
                 />
               </header>
-              <GraphiqueConsommation series={summary.series} thresholdKw={summary.thresholdKw} showPeakValue />
+              <ConsumptionChart series={summary.series} thresholdKw={summary.thresholdKw} showPeakValue />
               {summary.comment && (
                 <p className="mt-1 text-[13px] leading-snug text-discret">{summary.comment}</p>
               )}
-            </Carte>
+            </Card>
 
-            <DetailSite sites={summary.sites} siteId={siteId ?? ''} onSelect={setSiteId} />
+            <SiteDetail sites={summary.sites} siteId={siteId ?? ''} onSelect={setSiteId} />
           </>
         ) : (
           <p className="mt-1.5 text-sm text-discret">Lecture du résumé du parc…</p>

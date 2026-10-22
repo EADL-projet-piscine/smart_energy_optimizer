@@ -1,26 +1,26 @@
-const DELAI_MS = 3000
+const TIMEOUT_MS = 3000
 
 export async function fetchJson(
-  chemin: string,
+  path: string,
   signal?: AbortSignal,
-  methode: 'GET' | 'POST' = 'GET',
+  method: 'GET' | 'POST' = 'GET',
 ): Promise<unknown> {
-  const controle = new AbortController()
-  const timer = window.setTimeout(() => controle.abort(), DELAI_MS)
-  const interrompre = () => controle.abort()
-  signal?.addEventListener('abort', interrompre)
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const abort = () => controller.abort()
+  signal?.addEventListener('abort', abort)
 
   try {
     const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
-    const reponse = await fetch(`${base}${chemin}`, {
-      method: methode,
-      signal: controle.signal,
+    const response = await fetch(`${base}${path}`, {
+      method,
+      signal: controller.signal,
       headers: { Accept: 'application/json' },
     })
-    if (!reponse.ok) throw new Error(`Statut ${reponse.status}`)
-    return (await reponse.json()) as unknown
+    if (!response.ok) throw new Error(`Statut ${response.status}`)
+    return (await response.json()) as unknown
   } finally {
     window.clearTimeout(timer)
-    signal?.removeEventListener('abort', interrompre)
+    signal?.removeEventListener('abort', abort)
   }
 }

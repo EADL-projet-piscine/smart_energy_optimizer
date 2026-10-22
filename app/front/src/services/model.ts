@@ -1,6 +1,7 @@
+/** Gravité d'une alerte. Les valeurs restent en français : ce sont des données, pas des identifiants. */
 export type Severity = 'critique' | 'moyenne' | 'info'
 
-export type SeriePoint = {
+export type SeriesPoint = {
   hour: number
   measuredKw: number | null
   forecastKw: number | null
@@ -32,7 +33,7 @@ export type Site = {
   expectedCount: number | null
   isTransmitting: boolean
   badge: string | null
-  series: SeriePoint[]
+  series: SeriesPoint[]
   peakHour: number | null
   comment: string | null
   alerts: Alert[]
@@ -55,7 +56,7 @@ export type ParkSummary = {
   thresholdKw: number | null
   peakKw: number | null
   peakHour: number | null
-  series: SeriePoint[]
+  series: SeriesPoint[]
   comment: string | null
   sites: Site[]
   source: 'api' | 'demonstration'

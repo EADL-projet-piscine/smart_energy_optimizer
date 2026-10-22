@@ -1,4 +1,4 @@
-import type { ParkSummary, SeriePoint, Site } from './modele'
+import type { ParkSummary, SeriesPoint, Site } from './model'
 
 /** Libellés en toutes lettres pour les petits effectifs. */
 const SITE_COUNT_LABELS = [
@@ -45,7 +45,7 @@ export function alertsLabel(critical: number, medium: number): string {
 }
 
 /** Dernière heure pour laquelle une mesure réelle existe. */
-export function lastMeasuredHour(series: SeriePoint[]): number | null {
+export function lastMeasuredHour(series: SeriesPoint[]): number | null {
   for (let index = series.length - 1; index >= 0; index -= 1) {
     if (series[index].measuredKw !== null) return series[index].hour
   }
@@ -54,7 +54,7 @@ export function lastMeasuredHour(series: SeriePoint[]): number | null {
 
 /** Pointe prévue, éventuellement restreinte aux heures postérieures à `afterHour`. */
 export function forecastPeak(
-  series: SeriePoint[],
+  series: SeriesPoint[],
   afterHour?: number,
 ): { hour: number; value: number } | null {
   let best: { hour: number; value: number } | null = null
@@ -69,7 +69,7 @@ export function forecastPeak(
   return forecastPeak(series)
 }
 
-export function forecastAt(series: SeriePoint[], hour: number): number | null {
+export function forecastAt(series: SeriesPoint[], hour: number): number | null {
   return series.find((point) => point.hour === hour)?.forecastKw ?? null
 }
 

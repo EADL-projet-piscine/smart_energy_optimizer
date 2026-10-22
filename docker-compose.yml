@@ -19,8 +19,10 @@ services:
   back:
     build: ./app/back
     container_name: enervision-back
+    # Facultatif : surcharge locale (identifiants de l API...), absent en CI et sur un clone neuf.
     env_file:
-      - ./app/back/.env
+      - path: ./app/back/.env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://enervision:enervision@db:5432/enervision
       ENERVISION_API_URL: https://api-mock.charlieandre.fr

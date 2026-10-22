@@ -16,7 +16,7 @@ export function Dashboard() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
-  const { summary, siteId, setSiteId } = useSummary()
+  const { summary, error, siteId, setSiteId } = useSummary()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -54,16 +54,23 @@ export function Dashboard() {
           </h1>
           <p className="mt-1.5 flex items-center gap-2 text-sm text-discret">
             <span
-              className={`size-[7px] shrink-0 rounded-full ${
-                summary?.source === 'demonstration' ? 'bg-ambre' : 'bg-hausse'
-              }`}
+              className={`size-[7px] shrink-0 rounded-full ${error ? 'bg-danger' : 'bg-hausse'}`}
               aria-hidden="true"
             />
             {summary
               ? `${sitesLabel(summary.siteCount)} · dernière collecte à ${formatCollectedAt(summary.lastCollectedAt) || '—'}`
-              : 'Chargement des sites…'}
+              : error
+                ? 'API injoignable'
+                : 'Chargement des sites…'}
           </p>
         </div>
+
+        {summary && error && (
+          <Banner>
+            L’API métier ne répond plus. Les valeurs ci-dessous sont les dernières reçues et ne sont plus
+            rafraîchies.
+          </Banner>
+        )}
 
         {summary ? (
           <>
@@ -143,7 +150,13 @@ export function Dashboard() {
             <SiteDetail sites={summary.sites} siteId={siteId ?? ''} onSelect={setSiteId} />
           </>
         ) : (
-          <p className="mt-1.5 text-sm text-discret">Lecture du résumé du parc…</p>
+          <Card>
+            <p className="m-0 text-sm text-discret">
+              {error
+                ? `Aucune donnée disponible : l’API métier ne répond pas (${error}).`
+                : 'Lecture du résumé du parc…'}
+            </p>
+          </Card>
         )}
       </main>
     </div>

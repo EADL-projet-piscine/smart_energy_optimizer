@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { demoSummary } from '../data/demonstration'
 import type { ParkSummary } from './model'
 import { loadSummary } from './summary'
 
@@ -18,12 +17,14 @@ export function useSummary() {
   const [summary, setSummary] = useState<ParkSummary | null>(null)
   const [siteId, setSiteId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback((keepSiteId: string | null, signal?: AbortSignal) => {
     setLoading(true)
     loadSummary(signal)
       .then((received) => {
         if (signal?.aborted) return
+        setError(null)
         setSummary(received)
         setSiteId((current) =>
           keepSiteId && received.sites.some((site) => site.id === keepSiteId)
@@ -33,9 +34,11 @@ export function useSummary() {
               : initialSiteId(received),
         )
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (signal?.aborted) return
-        setSummary((current) => (current?.source === 'api' ? current : demoSummary()))
+        // Aucun repli sur des données inventées : le dernier résumé réellement
+        // reçu reste affiché, et `error` signale qu'il n'est plus rafraîchi.
+        setError(cause instanceof Error ? cause.message : 'API injoignable')
       })
       .finally(() => {
         if (!signal?.aborted) setLoading(false)
@@ -54,5 +57,5 @@ export function useSummary() {
     }
   }, [refresh])
 
-  return { summary, siteId, setSiteId, loading, refresh }
+  return { summary, error, loading, siteId, setSiteId, refresh }
 }

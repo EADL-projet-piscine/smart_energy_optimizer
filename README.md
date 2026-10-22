@@ -8,6 +8,7 @@ Projet EADL — promotion READL006, groupe G4 Rennes.
 ## Prérequis
 
 - Python 3.12
+- Node 22 (version fixée dans `app/front/.nvmrc` ; `nvm use` la sélectionne)
 - Docker et Docker Compose
 - Git
 
@@ -75,28 +76,72 @@ changez `ENERVISION_API_URL`.
 
 Ne jamais mettre ces identifiants dans `.env.example`, qui est versionné.
 
-### 4. Tout lancer d'un coup
+**Cette étape n'est pas optionnelle.** Sans identifiants, l'API métier
+démarre mais ne reçoit rien de la source : elle répond 503, et le dashboard
+affiche « API injoignable ».
+
+### 4. Lancer le back et la base d'un coup
 
 ```bash
 docker compose up -d --build
 ```
 
-L'API est disponible sur http://localhost:8000 — rien d'autre à installer.
+L'API métier est disponible sur http://localhost:8000 et le service ML sur
+http://localhost:8001 — rien d'autre à installer.
+
+- http://localhost:8000/health — état du service et de la base
+- http://localhost:8000/docs — documentation interactive de l'API métier
+- http://localhost:8001/health — état du service ML
+- http://localhost:8001/docs — documentation interactive de l'API ML
 
 Lancez cette commande depuis le dossier où se trouve le dépôt. Si le dépôt
 est dans WSL, lancez-la depuis WSL : un terminal Windows ne verra pas les
 mêmes chemins.
 
-Le microservice ML est également accessible sur http://localhost:8001.
+**Le dashboard n'est pas dans la stack Docker** : il se lance à part, en
+mode développement (étape suivante).
 
-- http://localhost:8001/health — état du service ML
-- http://localhost:8001/docs — documentation interactive de l'API ML
+### 5. Lancer le dashboard
 
+Le front a besoin de l'API métier en marche : vérifiez-le avant.
 
-Les étapes suivantes décrivent l'installation sans conteneur, utile pour
-développer avec le rechargement automatique.
+```bash
+curl -s localhost:8000/api/consommation/resume | head -c 200
+```
 
-### 5. Lancer la base de données seule
+Une réponse JSON commençant par `{"data":` signifie que tout est prêt. Un
+503 veut dire que l'API métier n'a pas encore de mesure — voyez la section
+« En cas de problème ».
+
+**Linux / macOS / WSL**
+
+```bash
+cd app/front
+nvm use          # Node 22, lu depuis .nvmrc
+npm install
+npm run dev
+```
+
+**Windows (PowerShell)**
+
+```powershell
+cd app\front
+npm install
+npm run dev
+```
+
+Le dashboard est disponible sur l'adresse affichée par Vite, en principe
+http://localhost:5173.
+
+Le front n'appelle jamais l'API source directement : il passe par l'API
+métier, à travers le proxy de développement de Vite (`VITE_API_PROXY_TARGET`
+dans `app/front/.env`, `http://localhost:8000` par défaut). Vite ne relit ce
+fichier qu'au démarrage : après l'avoir modifié, relancez `npm run dev`.
+
+Les étapes suivantes décrivent l'installation du back sans conteneur, utile
+pour développer avec le rechargement automatique.
+
+### 6. Lancer la base de données seule
 
 ```bash
 docker compose up -d db
@@ -108,7 +153,7 @@ Attendre que la colonne `STATUS` indique `healthy`.
 PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 éviter les conflits avec une instance déjà installée).
 
-### 4. Lancer l'application métier
+### 7. Lancer l'application métier
 
 **Linux / macOS / WSL**
 
@@ -143,9 +188,6 @@ perdent les retours à la ligne et les fusionnent.
 
 L'application est disponible sur http://127.0.0.1:8000
 
-- http://127.0.0.1:8000/health — état du service et de la base
-- http://127.0.0.1:8000/docs — documentation de l'API
-
 Réponse attendue sur `/health` :
 
 ```json
@@ -159,7 +201,7 @@ bien sur le port 5433.
 L'adresse de la base diffère selon le mode de lancement : `db:5432` depuis
 un conteneur, `localhost:5433` depuis la machine.
 
-### 5. Lancer le service de prédiction
+### 8. Lancer le service de prédiction
 
 **Linux / macOS / WSL**
 
@@ -183,6 +225,8 @@ uvicorn smart_energy_ml.api.main:app --reload --port 8001
 
 ## Tests
 
+### Tests Python
+
 Depuis la racine du dépôt, environnement virtuel activé avec les dépendances
 dev des deux services :
 
@@ -195,7 +239,7 @@ Rappel de l'activation : `source .venv/bin/activate` sous Linux, macOS et
 WSL, `.venv\Scripts\Activate.ps1` sous PowerShell. L'invite doit afficher
 `(.venv)`.
 
-### Tests qui ont besoin de la base
+#### Tests qui ont besoin de la base
 
 Les tests marqués `@pytest.mark.db` interrogent une vraie base PostgreSQL.
 Sans base joignable, ils sont **ignorés** (`SKIPPED`) : le reste de la suite
@@ -205,11 +249,32 @@ db`) avant `pytest`.
 En CI, `REQUIRE_DB=1` est défini : une base absente fait alors **échouer**
 ces tests au lieu de les ignorer.
 
-### Couverture
+#### Couverture
 
 Le seuil minimal est fixé dans `pyproject.toml` (`[tool.coverage.report]`,
 `fail_under = 70`) : en dessous, `pytest --cov` échoue. Le rapport HTML est
 écrit dans `htmlcov/`.
+
+### Tests du front
+
+Tests unitaires [Vitest](https://vitest.dev/), dans `app/front/src/tests/`,
+en miroir de l'arborescence du code. Aucun appel réseau réel : le module
+`api/client` est simulé.
+
+```bash
+cd app/front
+npm test                  # une exécution complète
+npm run test:coverage     # avec la couverture ; rapport HTML dans coverage/
+```
+
+Les scripts fixent `TZ=Europe/Paris`. Ce n'est pas décoratif : les fonctions
+de formatage convertissent en heure locale, donc sans fuseau fixé les tests
+passeraient sur une machine française et échoueraient en CI, qui tourne en
+UTC.
+
+Les seuils de couverture sont dans `app/front/vitest.config.ts`. Le
+périmètre couvre tout `src/`, fichiers non testés compris, à l'exception du
+point d'entrée, des types et des données de démonstration.
 
 ### Test de charge
 
@@ -237,6 +302,10 @@ docker run --rm --network host -v "$PWD/tests/perf:/scripts:ro" grafana/k6:2.3.0
 
 Configuration ruff : ligne à 100 caractères, cible Python 3.12 (sections
 `[tool.ruff]` des `pyproject.toml`).
+
+Côté front, `npx tsc --noEmit` vérifie les types. Il n'attrape **ni** les
+chaînes de caractères **ni** les accès hors bornes de tableau : les deux ont
+déjà causé des bugs. Voir `docs/conventions-front.md`.
 
 ### Vérifications locales (hooks Git)
 
@@ -292,9 +361,10 @@ sh scripts/check.sh        # dernier commit, comme la CI (Git Bash, Linux, macOS
 Pour changer de version de ruff, modifiez `ruff==` dans les trois
 `pyproject.toml` : le script, les hooks et la CI suivent.
 
-Les tests (`pytest`) ne font pas partie des hooks : ils demandent Python et
-une base PostgreSQL. La CI les exécute sur chaque pull request ; la section
-« Tests » explique comment les lancer en local.
+Les tests (`pytest`, Vitest) ne font pas partie des hooks : ils demandent
+Python, une base PostgreSQL ou les dépendances npm. La CI les exécute sur
+chaque pull request ; la section « Tests » explique comment les lancer en
+local.
 
 ## Intégration continue
 
@@ -334,6 +404,8 @@ Les paramètres sont lus depuis les variables d'environnement, ou depuis le
 fichier `.env` du service. Ne jamais versionner un `.env` : il est ignoré
 par Git. Le fichier `.env.example` sert de modèle.
 
+### API métier (`app/back/.env`)
+
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `ENERVISION_API_URL` | URL de l'API source | `https://api-mock.charlieandre.fr` |
@@ -343,6 +415,18 @@ par Git. Le fichier `.env.example` sert de modèle.
 | `DATABASE_URL` | Connexion PostgreSQL | `postgresql+psycopg://enervision:enervision@localhost:5433/enervision` |
 | `CONSUMPTION_REFRESH_S` | Intervalle de rafraîchissement de la mesure courante, en secondes | `60` |
 | `CONSUMPTION_STALENESS_S` | Âge à partir duquel une mesure est signalée périmée, en secondes | `120` |
+| `HISTORY_HOURS` | Profondeur de l'historique renvoyé, en heures | `24` |
+| `HISTORY_SITE_COUNT` | Nombre de sites du parc, qui fixe le pas d'échantillonnage | `7` |
+| `HISTORY_MARGIN_S` | Marge sur l'heure courante, pour l'écart d'horloge avec la source | `300` |
+
+### Dashboard (`app/front/.env`)
+
+| Variable | Rôle | Défaut |
+|---|---|---|
+| `VITE_API_PROXY_TARGET` | Adresse de l'API métier, pour le proxy de développement | `http://localhost:8000` |
+
+Vite ne lit ce fichier qu'au démarrage : relancez `npm run dev` après
+l'avoir modifié.
 
 ## Arrêter l'environnement
 
@@ -380,13 +464,41 @@ fichier n'est lu qu'au démarrage.
 récupérée. Regardez les logs de l'application : le rafraîchissement tourne
 toutes les minutes et journalise chaque tentative.
 
+**Le dashboard affiche « API injoignable »** — le front ne reçoit rien de
+l'API métier. Dans l'ordre :
+
+1. l'API métier répond-elle ? `curl -s localhost:8000/health`
+2. a-t-elle des mesures ? `curl -s localhost:8000/api/consommation/resume | head -c 200` — un 503 renvoie aux deux entrées précédentes, le plus souvent un `.env` absent ou sans identifiants
+3. le proxy pointe-t-il au bon endroit ? `VITE_API_PROXY_TARGET` dans
+   `app/front/.env`, puis relancer `npm run dev`
+
+Le dashboard n'affiche jamais de données inventées : s'il dit que l'API est
+injoignable, c'est qu'elle l'est.
+
+**Le dashboard fait deux appels réseau au lieu d'un** — c'est le mode strict
+de React, en développement uniquement. Pour le vérifier : `npm run build &&
+npm run preview`, un seul appel.
+
+**Les heures affichées ont deux heures de décalage** — l'API source date
+`/stats/summary` sans fuseau alors qu'il s'agit d'UTC. `toIsoUtc()` dans
+`services/format.ts` le corrige ; si vous ajoutez un champ horodaté, pensez
+à le faire passer par cette fonction.
+
 **`Temporary failure in name resolution` dans WSL** — le réseau de WSL est
 tombé. Depuis PowerShell : `wsl --shutdown`, puis rouvrir le terminal.
+
+**`npm run dev` échoue sur la version de Node** — `nvm use` depuis
+`app/front` sélectionne Node 22, la version fixée dans `.nvmrc` et utilisée
+par la CI.
 
 ## Conventions
 
 L'organisation du back-end est décrite dans `docs/conventions-back.md`, à
-lire avant d'écrire du code dans `app/back`.
+lire avant d'écrire du code dans `app/back`. Elle contient aussi une section
+sur les pièges de l'API source, établis par la mesure.
+
+Celle du front est dans `docs/conventions-front.md`, à lire avant d'écrire
+du code dans `app/front`.
 
 À compléter avec l'équipe : nommage des branches, format des messages de
 commit, processus de revue.

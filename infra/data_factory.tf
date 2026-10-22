@@ -3,6 +3,7 @@ resource "azurerm_data_factory" "adf" {
   name                = "adf-${var.student_id}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+  public_network_enabled = false
 
   identity {
     type = "SystemAssigned"
@@ -40,7 +41,7 @@ resource "azurerm_data_factory_linked_custom_service" "source_rest" {
 
 # Crée un Dataset pour la source REST
 resource "azurerm_data_factory_custom_dataset" "source_rest" {
-  name            = "ds-source-rest"
+  name            = "dsSourceRest"
   data_factory_id = azurerm_data_factory.adf.id
   type            = "RestResource"
 
@@ -48,8 +49,12 @@ resource "azurerm_data_factory_custom_dataset" "source_rest" {
     name = azurerm_data_factory_linked_custom_service.source_rest.name
   }
 
+  parameters = {
+    site_id = "SITE001"
+  }
+
   type_properties_json = jsonencode({
-    relativeUrl = "api/v1/readings"
+    relativeUrl = "@concat('api/v1/readings?site_id=', dataset().site_id, '&limit=1000')"
   })
 }
 
@@ -72,7 +77,7 @@ resource "azurerm_data_factory_linked_custom_service" "destination_blob" {
 
 # Crée un Dataset pour stocker les données brutes
 resource "azurerm_data_factory_custom_dataset" "destination_json" {
-  name            = "ds-destination-json"
+  name            = "dsDestinationJson"
   data_factory_id = azurerm_data_factory.adf.id
   type            = "Json"
 
@@ -80,12 +85,16 @@ resource "azurerm_data_factory_custom_dataset" "destination_json" {
     name = azurerm_data_factory_linked_custom_service.destination_blob.name
   }
 
+  parameters = {
+    site_id = "SITE001"
+  }
+
   type_properties_json = jsonencode({
     location = {
       type      = "AzureBlobStorageLocation"
       container = "landing"
       folderPath = "api"
-      fileName  = "readings.json"
+      fileName  = "@concat('readings', '_', dataset().site_id, '_', formatDateTime(utcNow(), 'yyyy-MM-dd_HH-mm-ss'), '.json')"
     }
     encodingName = "UTF-8"
   })
@@ -98,53 +107,98 @@ resource "azurerm_data_factory_pipeline" "copy_rest_to_blob" {
 
   activities_json = jsonencode([
     {
-      name      = "CopyReadings"
-      type      = "Copy"
+      name      = "ForEachSite"
+      type      = "ForEach"
       dependsOn = []
 
-      policy = {
-        timeout                = "0.12:00:00"
-        retry                  = 2
-        retryIntervalInSeconds = 30
-        secureInput            = true
-        secureOutput           = true
-      }
-
-      userProperties = []
-
-      inputs = [
-        {
-          referenceName = azurerm_data_factory_custom_dataset.source_rest.name
-          type          = "DatasetReference"
-        }
-      ]
-
-      outputs = [
-        {
-          referenceName = azurerm_data_factory_custom_dataset.destination_json.name
-          type          = "DatasetReference"
-        }
-      ]
-
       typeProperties = {
-        source = {
-          type                = "RestSource"
-          requestMethod       = "GET"
-          httpRequestTimeout  = "00:01:40"
+        isSequential = true
+
+        items = {
+          value = "@createArray('SITE001', 'SITE002', 'SITE003', 'SITE004', 'SITE005', 'SITE006', 'SITE007')"
+          type = "Expression"
         }
 
-        sink = {
-          type = "JsonSink"
+        activities = [
+          {
+            name = "CopySiteData"
+            type = "Copy"
+            dependsOn = []
 
-          storeSettings = {
-            type = "AzureBlobStorageWriteSettings"
-          }
+            policy = {
+              timeout = "0.12:00:00"
+              retry = 2
+              retryIntervalInSeconds = 30
+              secureInput = true
+              secureOutput = true
+            }
 
-          formatSettings = {
-            type = "JsonWriteSettings"
+            userProperties = []
+
+            inputs = [
+              {
+                referenceName = azurerm_data_factory_custom_dataset.source_rest.name
+                type          = "DatasetReference"
+
+                parameters = {
+                  site_id = {
+                    value = "@item()"
+                    type  = "Expression"
+                  }
+                }
+              }
+            ]
+
+            outputs = [
+              {
+                referenceName = azurerm_data_factory_custom_dataset.destination_json.name
+                type          = "DatasetReference"
+
+                parameters = {
+                  site_id = {
+                    value = "@item()"
+                    type  = "Expression"
+                  }
+                }
+              }
+            ]
+
+            typeProperties = {
+              source = {
+                type               = "RestSource"
+                requestMethod      = "GET"
+                httpRequestTimeout = "00:01:40"
+              }
+
+              sink = {
+                type = "JsonSink"
+
+                storeSettings = {
+                  type = "AzureBlobStorageWriteSettings"
+                }
+
+                formatSettings = {
+                  type = "JsonWriteSettings"
+                }
+              }
+            }
           }
-        }
+        ]
       }
     }
   ])
+}
+
+# Crée un déclencheur qui déclenche la pipeline tous les jours à 00:00.
+resource "azurerm_data_factory_trigger_schedule" "daily" {
+  name            = "tr-copy-rest-daily"
+  data_factory_id = azurerm_data_factory.adf.id
+  pipeline_name   = azurerm_data_factory_pipeline.copy_rest_to_blob.name
+
+  frequency = "Day"
+  interval  = 1
+
+  start_time = "2026-10-23T23:00:00Z"
+
+  activated = true
 }

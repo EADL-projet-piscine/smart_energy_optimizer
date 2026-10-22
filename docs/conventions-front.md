@@ -114,22 +114,88 @@ L'historique est au pas horaire : le rafraîchir plus souvent ne montrerait
 rien de neuf, et la source régénère ses valeurs à chaque appel — la courbe
 sauterait.
 
+## Qualité de code
+
+**Biome** lint et formate le front, comme ruff le fait pour le back : un
+seul outil par langage plutôt qu'un linter, un formateur et un trieur
+d'imports.
+
+```bash
+npm run lint        # vérifie
+npm run lint:fix    # corrige ce qui peut l'être
+```
+
+La configuration est dans `biome.json`. Elle suit le style déjà en place —
+deux espaces, pas de point-virgule, guillemets simples, 110 colonnes — et
+non les réglages par défaut de Biome, qui reformateraient tout le dossier
+sans rien apporter.
+
+### Les exemptions
+
+Une directive `biome-ignore` **doit porter une justification**. Sans raison
+écrite, c'est une règle désactivée au hasard ; avec, c'est une décision que
+le relecteur peut discuter. Il y en a deux aujourd'hui :
+
+**`SiteDetail.tsx` — `useExhaustiveDependencies`.** Biome signale `site?.id`
+comme dépendance superflue, puisque le corps du `useEffect` ne la lit pas :
+
+```tsx
+// biome-ignore lint/correctness/useExhaustiveDependencies: déclencheur, pas une valeur lue
+useEffect(() => {
+  setToastClosed(false)
+  setHighlighted(false)
+}, [site?.id])
+```
+
+Elle sert de déclencheur : changer de site doit rouvrir le toast. Appliquer
+la correction automatique laisserait un toast fermé sur SITE002 fermé sur
+SITE003.
+
+**`Text.tsx` — `noArrayIndexKey`.** La règle est juste en général : un index
+de tableau fait une mauvaise clé React quand la liste peut être réordonnée.
+Ici les fragments viennent d'un `split` sur une chaîne et ne bougent jamais.
+
+La directive doit tenir **sur une seule ligne**, immédiatement avant la
+ligne concernée. Sur deux lignes, Biome l'ignore sans le signaler.
+
+### Ce qu'aucun outil n'attrape
+
+`tsc --noEmit` vérifie les types, Biome le style et quelques pièges
+courants. Ni l'un ni l'autre ne voit :
+
+- le **contenu des chaînes de caractères** — un texte d'interface cassé par
+  un renommage reste valide pour le compilateur
+- les **accès hors bornes** — `series[index]` est typé `SeriesPoint`, jamais
+  `undefined`, et a déjà provoqué un écran blanc
+
+C'est ce qui rend le passage à l'écran non négociable.
+
 ## Tests
 
 Les tests vivent dans `src/tests/`, en miroir de l'arborescence du code :
 
 ```
 src/tests/
+├── components/ui/
+│   ├── Badge.test.ts
+│   ├── Tabs.test.tsx
+│   ├── Text.test.tsx
+│   └── Toast.test.tsx
+├── screens/
+│   ├── Dashboard.test.tsx
+│   └── SiteDetail.test.tsx
 └── services/
     ├── format.test.ts
     └── history.test.ts
 ```
 
 Ils tournent avec **Vitest** et ne font **aucun appel réseau réel** : le
-module `api/client` est simulé.
+module `api/client` est simulé. Les composants sont montés avec Testing
+Library dans un DOM jsdom.
 
 ```bash
-npm test
+npm test                  # une exécution complète
+npm run test:coverage     # avec la couverture ; rapport HTML dans coverage/
 ```
 
 Le script fixe `TZ=Europe/Paris`. Ce n'est pas décoratif : les fonctions de
@@ -137,18 +203,32 @@ formatage convertissent en heure locale, donc sans fuseau fixé les tests
 passeraient sur une machine française et échoueraient en CI, qui tourne en
 UTC.
 
+Un test gagne à garder une décision plutôt qu'à vérifier une évidence. Les
+plus utiles de cette suite vérifient qu'aucun chiffre ne s'affiche quand
+l'API ne répond pas, qu'un site muet ne compte pas pour zéro dans le total
+du parc, et qu'un horodatage sans fuseau est bien lu comme de l'UTC — trois
+erreurs qui ont réellement coûté du temps.
+
+### Couverture
+
+Les seuils sont dans `vitest.config.ts`. Le périmètre couvre **tout
+`src/`**, fichiers non testés compris, à l'exception du point d'entrée, des
+types et des données de démonstration : une couverture qui ne mesure que les
+fichiers déjà testés ne mesure rien.
+
+Seul ce qui est réellement couvert est verrouillé. `normalize.ts`,
+`summary.ts` et les hooks `use*` sont encore à zéro ; le seuil sera étendu
+quand leurs tests arriveront.
+
 ## Avant de pousser
 
 ```bash
 cd app/front
+npm run lint
 npx tsc --noEmit
 npm test
 npm run build
 ```
-
-`tsc` attrape les erreurs de type, mais **pas** les chaînes de caractères,
-ni les accès hors bornes de tableau (`series[index]` est typé `SeriesPoint`,
-jamais `undefined`). Les deux ont déjà causé des bugs.
 
 Le `build` vérifie en plus que le bundle de production se construit : une
 erreur qui ne gêne pas le serveur de développement peut le casser.

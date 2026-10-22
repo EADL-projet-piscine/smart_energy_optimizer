@@ -1,6 +1,7 @@
-import type { PointSerie, ResumeParc, Site } from './modele'
+import type { ParkSummary, SeriePoint, Site } from './modele'
 
-const NOMBRES = [
+/** Libellés en toutes lettres pour les petits effectifs. */
+const SITE_COUNT_LABELS = [
   'Aucun site',
   'Un site',
   'Deux sites',
@@ -14,148 +15,156 @@ const NOMBRES = [
   'Dix sites',
 ]
 
-export function formaterNombre(valeur: number, decimales = 0): string {
+export function formatNumber(value: number, decimals = 0): string {
   return new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: decimales,
-    maximumFractionDigits: decimales,
-  }).format(valeur)
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value)
 }
 
-export function formaterKw(valeur: number | null): string {
-  if (valeur === null) return '—'
-  return formaterNombre(valeur)
+export function formatKw(value: number | null): string {
+  if (value === null) return '—'
+  return formatNumber(value)
 }
 
-export function libelleSites(nombre: number): string {
-  return NOMBRES[nombre] ?? `${nombre} sites`
+export function sitesLabel(count: number): string {
+  return SITE_COUNT_LABELS[count] ?? `${count} sites`
 }
 
-export function formaterCollecte(valeur: string): string {
-  if (/^\d{1,2}:\d{2}$/.test(valeur)) return valeur
-  const date = new Date(valeur)
-  if (Number.isNaN(date.getTime())) return valeur
+export function formatCollectedAt(value: string): string {
+  if (/^\d{1,2}:\d{2}$/.test(value)) return value
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
   return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export function libelleAlertes(critiques: number, moyennes: number): string {
-  const critique = `${critiques} critique${critiques > 1 ? 's' : ''}`
-  const moyenne = `${moyennes} moyenne${moyennes > 1 ? 's' : ''}`
-  return `${critique} · ${moyenne}`
+export function alertsLabel(critical: number, medium: number): string {
+  const criticalPart = `${critical} critique${critical > 1 ? 's' : ''}`
+  const mediumPart = `${medium} moyenne${medium > 1 ? 's' : ''}`
+  return `${criticalPart} · ${mediumPart}`
 }
 
-export function derniereHeureMesuree(serie: PointSerie[]): number | null {
-  for (let index = serie.length - 1; index >= 0; index -= 1) {
-    if (serie[index].mesureKw !== null) return serie[index].heure
+/** Dernière heure pour laquelle une mesure réelle existe. */
+export function lastMeasuredHour(series: SeriePoint[]): number | null {
+  for (let index = series.length - 1; index >= 0; index -= 1) {
+    if (series[index].measuredKw !== null) return series[index].hour
   }
   return null
 }
 
-export function pointePrevue(
-  serie: PointSerie[],
-  apresHeure?: number,
-): { heure: number; valeur: number } | null {
-  let meilleure: { heure: number; valeur: number } | null = null
-  for (const point of serie) {
-    if (point.previsionKw === null) continue
-    if (apresHeure !== undefined && point.heure <= apresHeure) continue
-    if (!meilleure || point.previsionKw > meilleure.valeur) {
-      meilleure = { heure: point.heure, valeur: point.previsionKw }
+/** Pointe prévue, éventuellement restreinte aux heures postérieures à `afterHour`. */
+export function forecastPeak(
+  series: SeriePoint[],
+  afterHour?: number,
+): { hour: number; value: number } | null {
+  let best: { hour: number; value: number } | null = null
+  for (const point of series) {
+    if (point.forecastKw === null) continue
+    if (afterHour !== undefined && point.hour <= afterHour) continue
+    if (!best || point.forecastKw > best.value) {
+      best = { hour: point.hour, value: point.forecastKw }
     }
   }
-  if (meilleure || apresHeure === undefined) return meilleure
-  return pointePrevue(serie)
+  if (best || afterHour === undefined) return best
+  return forecastPeak(series)
 }
 
-export function previsionDans(serie: PointSerie[], heure: number): number | null {
-  return serie.find((point) => point.heure === heure)?.previsionKw ?? null
+export function forecastAt(series: SeriePoint[], hour: number): number | null {
+  return series.find((point) => point.hour === hour)?.forecastKw ?? null
 }
 
-function phrasePointe(seuil: number, pointe: number, heure: number, sujet: 'parc' | 'site'): string {
-  if (pointe > seuil && sujet === 'parc') {
-    return `Le seuil contractuel serait dépassé vers ${heure} h avec une pointe prévue à ${formaterNombre(pointe)} kW.`
+function peakSentence(threshold: number, peak: number, hour: number, scope: 'parc' | 'site'): string {
+  if (peak > threshold && scope === 'parc') {
+    return `Le seuil contractuel serait dépassé vers ${hour} h avec une pointe prévue à ${formatNumber(peak)} kW.`
   }
-  if (pointe > seuil) {
-    return `Le seuil contractuel de ${formaterNombre(seuil)} kW serait franchi vers ${heure} h, avec une pointe prévue à ${formaterNombre(pointe)} kW.`
+  if (peak > threshold) {
+    return `Le seuil contractuel de ${formatNumber(threshold)} kW serait franchi vers ${hour} h, avec une pointe prévue à ${formatNumber(peak)} kW.`
   }
-  if (sujet === 'parc') {
-    return `Le seuil contractuel de ${formaterNombre(seuil)} kW reste respecté. Pointe prévue à ${formaterNombre(pointe)} kW vers ${heure} h.`
+  if (scope === 'parc') {
+    return `Le seuil contractuel de ${formatNumber(threshold)} kW reste respecté. Pointe prévue à ${formatNumber(peak)} kW vers ${hour} h.`
   }
-  return `La consommation prévue reste sous le seuil de ${formaterNombre(seuil)} kW, avec une pointe à ${formaterNombre(pointe)} kW vers ${heure} h.`
+  return `La consommation prévue reste sous le seuil de ${formatNumber(threshold)} kW, avec une pointe à ${formatNumber(peak)} kW vers ${hour} h.`
 }
 
-export function completerSite(site: Site): Site {
-  const heureMesure = derniereHeureMesuree(site.serie)
-  const pointe = pointePrevue(site.serie, heureMesure ?? undefined)
-  const prevu2h =
-    site.prevu2hKw ?? (heureMesure === null ? null : previsionDans(site.serie, heureMesure + 2))
-  const heurePointe = site.heurePointe ?? pointe?.heure ?? null
-  const valeurPointe = pointe?.valeur ?? null
+/** Complète un site : prévision à +2 h, heure de pointe, badge et commentaire déduits. */
+export function completeSite(site: Site): Site {
+  const measuredHour = lastMeasuredHour(site.series)
+  const peak = forecastPeak(site.series, measuredHour ?? undefined)
+  const forecast2hKw =
+    site.forecast2hKw ?? (measuredHour === null ? null : forecastAt(site.series, measuredHour + 2))
+  const peakHour = site.peakHour ?? peak?.hour ?? null
+  const peakKw = peak?.value ?? null
 
   let badge = site.badge
   if (!badge) {
-    if (!site.transmet) badge = 'Relevé interrompu'
-    else if (site.seuilKw !== null && prevu2h !== null && prevu2h > site.seuilKw) badge = 'Dépassement prévu'
-    else if (site.alertes.some((alerte) => alerte.severite === 'critique')) badge = 'Alerte critique'
+    if (!site.isTransmitting) badge = 'Relevé interrompu'
+    else if (site.thresholdKw !== null && forecast2hKw !== null && forecast2hKw > site.thresholdKw) {
+      badge = 'Dépassement prévu'
+    } else if (site.alerts.some((alert) => alert.severity === 'critique')) badge = 'Alerte critique'
   }
 
-  let commentaire = site.commentaire
-  if (!commentaire) {
-    if (!site.transmet) {
-      commentaire = `Aucun relevé exploitable depuis plus de deux heures. ${site.id} est exclu du total du parc.`
-    } else if (site.seuilKw !== null && valeurPointe !== null && heurePointe !== null) {
-      commentaire = phrasePointe(site.seuilKw, valeurPointe, heurePointe, 'site')
+  let comment = site.comment
+  if (!comment) {
+    if (!site.isTransmitting) {
+      comment = `Aucun relevé exploitable depuis plus de deux heures. ${site.id} est exclu du total du parc.`
+    } else if (site.thresholdKw !== null && peakKw !== null && peakHour !== null) {
+      comment = peakSentence(site.thresholdKw, peakKw, peakHour, 'site')
     }
   }
 
   return {
     ...site,
-    prevu2hKw: prevu2h,
-    heurePointe,
+    forecast2hKw,
+    peakHour,
     badge: badge ?? null,
-    commentaire: commentaire ?? null,
+    comment: comment ?? null,
   }
 }
 
-export function finaliserResume(resume: ResumeParc): ResumeParc {
-  const sites = resume.sites.map(completerSite)
-  const alertes = sites.flatMap((site) => site.alertes)
-  const exclus =
-    resume.sitesExclus.length > 0 ? resume.sitesExclus : sites.filter((site) => !site.transmet).map((site) => site.id)
-  const transmettant = sites.length > 0 ? sites.filter((site) => site.transmet).length : resume.sitesTransmettant
-  const nombreSites = sites.length > 0 ? sites.length : resume.nombreSites
-  const pointe = pointePrevue(resume.serie, derniereHeureMesuree(resume.serie) ?? undefined)
-  const heurePointe = resume.heurePointe ?? pointe?.heure ?? null
-  const pointeKw = resume.pointeKw ?? pointe?.valeur ?? null
-  const couverture =
-    resume.couverturePct ?? (nombreSites > 0 ? Math.round((transmettant / nombreSites) * 100) : null)
+/** Complète le résumé du parc à partir des sites, en respectant les valeurs déjà fournies par l'API. */
+export function buildSummary(summary: ParkSummary): ParkSummary {
+  const sites = summary.sites.map(completeSite)
+  const alerts = sites.flatMap((site) => site.alerts)
+  const excluded =
+    summary.excludedSites.length > 0
+      ? summary.excludedSites
+      : sites.filter((site) => !site.isTransmitting).map((site) => site.id)
+  const transmitting =
+    sites.length > 0 ? sites.filter((site) => site.isTransmitting).length : summary.transmittingCount
+  const siteCount = sites.length > 0 ? sites.length : summary.siteCount
+  const peak = forecastPeak(summary.series, lastMeasuredHour(summary.series) ?? undefined)
+  const peakHour = summary.peakHour ?? peak?.hour ?? null
+  const peakKw = summary.peakKw ?? peak?.value ?? null
+  const coveragePct =
+    summary.coveragePct ?? (siteCount > 0 ? Math.round((transmitting / siteCount) * 100) : null)
 
-  const contributeur = sites.find((site) => site.alertes.some((alerte) => alerte.severite === 'critique'))
-  let commentaire = resume.commentaire
-  if (!commentaire && resume.seuilKw !== null && pointeKw !== null && heurePointe !== null) {
-    commentaire = phrasePointe(resume.seuilKw, pointeKw, heurePointe, 'parc')
-    if (pointeKw > resume.seuilKw && contributeur) {
-      commentaire += ` Une alerte a été levée sur ${contributeur.id}, principal contributeur.`
+  const contributor = sites.find((site) => site.alerts.some((alert) => alert.severity === 'critique'))
+  let comment = summary.comment
+  if (!comment && summary.thresholdKw !== null && peakKw !== null && peakHour !== null) {
+    comment = peakSentence(summary.thresholdKw, peakKw, peakHour, 'parc')
+    if (peakKw > summary.thresholdKw && contributor) {
+      comment += ` Une alerte a été levée sur ${contributor.id}, principal contributeur.`
     }
   }
 
   return {
-    ...resume,
+    ...summary,
     sites,
-    sitesExclus: exclus,
-    sitesTransmettant: transmettant,
-    nombreSites,
-    couverturePct: couverture,
-    heurePointe,
-    pointeKw,
-    commentaire,
-    alertesTotal: alertes.length > 0 ? alertes.length : resume.alertesTotal,
-    alertesCritiques:
-      alertes.length > 0
-        ? alertes.filter((alerte) => alerte.severite === 'critique').length
-        : resume.alertesCritiques,
-    alertesMoyennes:
-      alertes.length > 0
-        ? alertes.filter((alerte) => alerte.severite === 'moyenne').length
-        : resume.alertesMoyennes,
+    excludedSites: excluded,
+    transmittingCount: transmitting,
+    siteCount,
+    coveragePct,
+    peakHour,
+    peakKw,
+    comment,
+    totalAlerts: alerts.length > 0 ? alerts.length : summary.totalAlerts,
+    criticalAlerts:
+      alerts.length > 0
+        ? alerts.filter((alert) => alert.severity === 'critique').length
+        : summary.criticalAlerts,
+    mediumAlerts:
+      alerts.length > 0
+        ? alerts.filter((alert) => alert.severity === 'moyenne').length
+        : summary.mediumAlerts,
   }
 }

@@ -7,16 +7,16 @@ const traits = {
 } as const
 
 export function Legende({
-  entrees,
+  entries,
 }: {
-  entrees: Array<{ libelle: string; style: keyof typeof traits }>
+  entries: Array<{ label: string; style: keyof typeof traits }>
 }) {
   return (
     <ul className="m-0 flex list-none flex-wrap gap-3.5 p-0 text-[12.5px] text-secondaire">
-      {entrees.map((entree) => (
-        <li key={entree.libelle} className="flex items-center gap-[7px]">
+      {entries.map((entree) => (
+        <li key={entree.label} className="flex items-center gap-[7px]">
           <span className={cn('inline-block w-[18px]', traits[entree.style])} />
-          {entree.libelle}
+          {entree.label}
         </li>
       ))}
     </ul>

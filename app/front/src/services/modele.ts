@@ -1,62 +1,62 @@
-export type Severite = 'critique' | 'moyenne' | 'info'
+export type Severity = 'critique' | 'moyenne' | 'info'
 
-export type PointSerie = {
-  heure: number
-  mesureKw: number | null
-  previsionKw: number | null
+export type SeriePoint = {
+  hour: number
+  measuredKw: number | null
+  forecastKw: number | null
 }
 
-export type Alerte = {
+export type Alert = {
   id: string
-  severite: Severite
-  titre: string
+  severity: Severity
+  title: string
   message: string
 }
 
-export type Recommandation = {
+export type Recommendation = {
   id: string
-  titre: string
+  title: string
   detail: string
-  economie: string | null
+  saving: string | null
 }
 
 export type Site = {
   id: string
-  nom: string
+  name: string
   type: string
-  releve: string
-  actuelKw: number | null
-  prevu2hKw: number | null
-  seuilKw: number | null
-  mesuresRecues: number | null
-  mesuresAttendues: number | null
-  transmet: boolean
+  readingLabel: string
+  currentKw: number | null
+  forecast2hKw: number | null
+  thresholdKw: number | null
+  receivedCount: number | null
+  expectedCount: number | null
+  isTransmitting: boolean
   badge: string | null
-  serie: PointSerie[]
-  heurePointe: number | null
-  commentaire: string | null
-  alertes: Alerte[]
-  recommandations: Recommandation[]
+  series: SeriePoint[]
+  peakHour: number | null
+  comment: string | null
+  alerts: Alert[]
+  recommendations: Recommendation[]
 }
 
-export type ResumeParc = {
-  nombreSites: number
-  derniereCollecte: string
-  consommationKw: number | null
-  variationPct: number | null
-  couverturePct: number | null
-  sitesTransmettant: number
-  alertesTotal: number
-  alertesCritiques: number
-  alertesMoyennes: number
-  coutJourEur: number | null
-  co2Tonnes: number | null
-  sitesExclus: string[]
-  seuilKw: number | null
-  pointeKw: number | null
-  heurePointe: number | null
-  serie: PointSerie[]
-  commentaire: string | null
+export type ParkSummary = {
+  siteCount: number
+  lastCollectedAt: string
+  consumptionKw: number | null
+  changePct: number | null
+  coveragePct: number | null
+  transmittingCount: number
+  totalAlerts: number
+  criticalAlerts: number
+  mediumAlerts: number
+  dailyCostEur: number | null
+  co2Tons: number | null
+  excludedSites: string[]
+  thresholdKw: number | null
+  peakKw: number | null
+  peakHour: number | null
+  series: SeriePoint[]
+  comment: string | null
   sites: Site[]
   source: 'api' | 'demonstration'
 }

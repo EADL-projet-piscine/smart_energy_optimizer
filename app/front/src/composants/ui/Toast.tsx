@@ -1,4 +1,4 @@
-import type { Severite } from '../../services/modele'
+import type { Severity } from '../../services/modele'
 import { IconeAttention, IconeFermer } from '../Icones'
 import { cn } from './cn'
 
@@ -9,14 +9,14 @@ const icones = {
 } as const
 
 type Props = {
-  severite: Severite
-  titre: string
+  severity: Severity
+  title: string
   message: string
-  onFermer: () => void
+  onClose: () => void
   onDetail?: () => void
 }
 
-export function Toast({ severite, titre, message, onFermer, onDetail }: Props) {
+export function Toast({ severity, title, message, onClose, onDetail }: Props) {
   return (
     <aside
       role="status"
@@ -24,15 +24,15 @@ export function Toast({ severite, titre, message, onFermer, onDetail }: Props) {
     >
       <button
         type="button"
-        onClick={onFermer}
-        aria-label="Fermer l’alerte"
+        onClick={onClose}
+        aria-label="Fermer l’alert"
         className="absolute top-2 right-2 grid size-7 place-items-center rounded-lg border-0 bg-transparent text-discret hover:bg-onglet hover:text-encre focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lien [&_svg]:size-4"
       >
         <IconeFermer />
       </button>
-      <IconeAttention className={cn('size-[18px]', icones[severite])} />
+      <IconeAttention className={cn('size-[18px]', icones[severity])} />
       <div>
-        <p className="m-0 text-sm font-bold">{titre}</p>
+        <p className="m-0 text-sm font-bold">{title}</p>
         <p className="mt-1 mb-2 text-[13px] leading-snug text-secondaire">{message}</p>
         {onDetail && (
           <button

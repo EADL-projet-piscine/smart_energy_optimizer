@@ -1,9 +1,9 @@
-import { formaterNombre } from '../../services/format'
+import { formatNumber } from '../../services/format'
 
-export function Anneau({ pourcentage }: { pourcentage: number }) {
+export function Anneau({ percentage }: { percentage: number }) {
   const rayon = 26
   const circonference = 2 * Math.PI * rayon
-  const borne = Math.min(100, Math.max(0, pourcentage))
+  const borne = Math.min(100, Math.max(0, percentage))
   const offset = circonference * (1 - borne / 100)
 
   return (
@@ -20,7 +20,7 @@ export function Anneau({ pourcentage }: { pourcentage: number }) {
         />
       </svg>
       <p className="absolute inset-0 m-0 flex items-center justify-center gap-px font-bold tracking-[-0.04em]">
-        <strong>{formaterNombre(Math.round(borne))}</strong>
+        <strong>{formatNumber(Math.round(borne))}</strong>
         <span className="text-xs font-semibold text-secondaire">%</span>
       </p>
     </div>

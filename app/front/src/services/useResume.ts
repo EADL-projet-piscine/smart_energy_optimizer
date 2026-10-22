@@ -1,40 +1,40 @@
 import { useCallback, useEffect, useState } from 'react'
-import { resumeDemonstration } from '../donnees/demonstration'
-import type { ResumeParc } from './modele'
-import { chargerResume } from './resume'
+import { demoSummary } from '../donnees/demonstration'
+import type { ParkSummary } from './modele'
+import { loadSummary } from './summary'
 
 const INTERVALLE_MS = 10_000
 
-function siteInitial(resume: ResumeParc): string | null {
+function siteInitial(summary: ParkSummary): string | null {
   return (
-    resume.sites.find((site) => site.alertes.some((alerte) => alerte.severite === 'critique'))?.id ??
-    resume.sites[0]?.id ??
+    summary.sites.find((site) => site.alerts.some((alert) => alert.severity === 'critique'))?.id ??
+    summary.sites[0]?.id ??
     null
   )
 }
 
 export function useResume() {
-  const [resume, setResume] = useState<ResumeParc | null>(null)
+  const [summary, setResume] = useState<ParkSummary | null>(null)
   const [siteId, setSiteId] = useState<string | null>(null)
   const [chargement, setChargement] = useState(true)
 
   const actualiser = useCallback((conserverSite: string | null, annulation?: AbortSignal) => {
     setChargement(true)
-    chargerResume(annulation)
+    loadSummary(annulation)
       .then((recu) => {
         if (annulation?.aborted) return
         setResume(recu)
-        setSiteId((actuel) =>
+        setSiteId((current) =>
           conserverSite && recu.sites.some((site) => site.id === conserverSite)
             ? conserverSite
-            : actuel && recu.sites.some((site) => site.id === actuel)
-              ? actuel
+            : current && recu.sites.some((site) => site.id === current)
+              ? current
               : siteInitial(recu),
         )
       })
       .catch(() => {
         if (annulation?.aborted) return
-        setResume((actuel) => (actuel?.source === 'api' ? actuel : resumeDemonstration()))
+        setResume((current) => (current?.source === 'api' ? current : demoSummary()))
       })
       .finally(() => {
         if (!annulation?.aborted) setChargement(false)
@@ -53,5 +53,5 @@ export function useResume() {
     }
   }, [actualiser])
 
-  return { resume, siteId, setSiteId, chargement, actualiser }
+  return { summary, siteId, setSiteId, chargement, actualiser }
 }

@@ -12,29 +12,29 @@ const tons = {
   ambre: 'text-ambre',
 } as const
 
-export type Ton = keyof typeof tons
+export type Tone = keyof typeof tons
 
 export function Chiffre({
-  valeur,
-  unite,
-  ton = 'defaut',
-  taille = 'md',
+  value,
+  unit,
+  tone = 'defaut',
+  size = 'md',
 }: {
-  valeur: string
-  unite?: string
-  ton?: Ton
-  taille?: 'md' | 'lg'
+  value: string
+  unit?: string
+  tone?: Tone
+  size?: 'md' | 'lg'
 }) {
   return (
     <p
       className={cn(
         'mt-2.5 flex items-baseline gap-1.5 font-[650] tracking-[-0.04em] tabular-nums',
-        taille === 'lg' ? 'mt-3 text-[34px] max-[680px]:text-[30px]' : 'text-[26px]',
-        tons[ton],
+        size === 'lg' ? 'mt-3 text-[34px] max-[680px]:text-[30px]' : 'text-[26px]',
+        tons[tone],
       )}
     >
-      <span>{valeur}</span>
-      {unite && <small className="text-[0.46em] font-medium tracking-normal text-secondaire">{unite}</small>}
+      <span>{value}</span>
+      {unit && <small className="text-[0.46em] font-medium tracking-normal text-secondaire">{unit}</small>}
     </p>
   )
 }
@@ -47,8 +47,8 @@ export function SousTitre({ children }: { children: ReactNode }) {
   return <h4 className="mt-3 mb-2 text-[13px] font-[650] tracking-[0.04em] text-discret uppercase">{children}</h4>
 }
 
-export function TexteSites({ texte }: { texte: string }) {
-  const morceaux = texte.split(/(SITE\d+)/g)
+export function TexteSites({ text }: { text: string }) {
+  const morceaux = text.split(/(SITE\d+)/g)
   return morceaux.map((morceau, index) =>
     /^SITE\d+$/.test(morceau) ? (
       <strong key={`${morceau}-${index}`} className="font-bold text-encre">

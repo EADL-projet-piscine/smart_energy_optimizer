@@ -1,17 +1,17 @@
 import { useId, useState, type MouseEvent } from 'react'
-import { formaterNombre } from '../services/format'
-import type { PointSerie } from '../services/modele'
+import { formatNumber } from '../services/format'
+import type { SeriePoint } from '../services/modele'
 
 type Props = {
-  serie: PointSerie[]
-  seuilKw: number | null
-  afficherValeurPointe?: boolean
+  series: SeriePoint[]
+  thresholdKw: number | null
+  showPeakValue?: boolean
   compact?: boolean
 }
 
-type Coordonnee = { heure: number; x: number; y: number; valeur: number }
+type Coordonnee = { hour: number; x: number; y: number; value: number }
 
-function pasAgréable(maxValeur: number): { ticks: number[]; max: number } {
+function niceStep(maxValeur: number): { ticks: number[]; max: number } {
   const brut = Math.max(maxValeur, 1)
   const pasCible = brut / 3
   const puissance = 10 ** Math.floor(Math.log10(pasCible))
@@ -19,9 +19,9 @@ function pasAgréable(maxValeur: number): { ticks: number[]; max: number } {
   const nice = residu <= 1.2 ? 1 : residu <= 2.5 ? 2 : residu <= 5 ? 5 : 10
   const pas = nice * puissance
   const ticks: number[] = []
-  for (let valeur = 0; valeur <= brut + pas * 0.01; valeur += pas) {
-    if (valeur > brut * 1.02 && valeur !== 0) break
-    ticks.push(Math.round(valeur))
+  for (let value = 0; value <= brut + pas * 0.01; value += pas) {
+    if (value > brut * 1.02 && value !== 0) break
+    ticks.push(Math.round(value))
   }
   if (ticks.length === 0) ticks.push(0)
   const max = Math.max(brut * 1.16, ticks[ticks.length - 1] + pas * 0.2)
@@ -48,7 +48,7 @@ function courbe(points: Coordonnee[]): string {
   return chemin
 }
 
-export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = false, compact = false }: Props) {
+export function GraphiqueConsommation({ series, thresholdKw, showPeakValue = false, compact = false }: Props) {
   const [survol, setSurvol] = useState<number | null>(null)
   const gradientId = useId().replace(/:/g, '')
   const largeur = 1000
@@ -57,23 +57,23 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
   const plotL = largeur - marge.gauche - marge.droite
   const plotH = hauteur - marge.haut - marge.bas
 
-  const valeurs = serie.flatMap((point) => [point.mesureKw, point.previsionKw]).filter((valeur): valeur is number => valeur !== null)
-  const maximum = Math.max(seuilKw ?? 0, ...valeurs, 1)
-  const { ticks, max } = pasAgréable(maximum)
+  const values = series.flatMap((point) => [point.measuredKw, point.forecastKw]).filter((value): value is number => value !== null)
+  const maximum = Math.max(thresholdKw ?? 0, ...values, 1)
+  const { ticks, max } = niceStep(maximum)
 
-  const xDe = (heure: number) => marge.gauche + (heure / 24) * plotL
-  const yDe = (valeur: number) => marge.haut + (1 - valeur / max) * plotH
+  const xDe = (hour: number) => marge.gauche + (hour / 24) * plotL
+  const yDe = (value: number) => marge.haut + (1 - value / max) * plotH
 
-  const mesures: Coordonnee[] = serie
-    .filter((point): point is PointSerie & { mesureKw: number } => point.mesureKw !== null)
-    .map((point) => ({ heure: point.heure, x: xDe(point.heure), y: yDe(point.mesureKw), valeur: point.mesureKw }))
-  const previsions: Coordonnee[] = serie
-    .filter((point): point is PointSerie & { previsionKw: number } => point.previsionKw !== null)
+  const mesures: Coordonnee[] = series
+    .filter((point): point is SeriePoint & { measuredKw: number } => point.measuredKw !== null)
+    .map((point) => ({ hour: point.hour, x: xDe(point.hour), y: yDe(point.measuredKw), value: point.measuredKw }))
+  const previsions: Coordonnee[] = series
+    .filter((point): point is SeriePoint & { forecastKw: number } => point.forecastKw !== null)
     .map((point) => ({
-      heure: point.heure,
-      x: xDe(point.heure),
-      y: yDe(point.previsionKw),
-      valeur: point.previsionKw,
+      hour: point.hour,
+      x: xDe(point.hour),
+      y: yDe(point.forecastKw),
+      value: point.forecastKw,
     }))
 
   const cheminMesure = courbe(mesures)
@@ -85,22 +85,22 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
       : ''
 
   const pointe = previsions.reduce<Coordonnee | null>((meilleure, point) => {
-    if (!meilleure || point.valeur > meilleure.valeur) return point
+    if (!meilleure || point.value > meilleure.value) return point
     return meilleure
   }, null)
   const maintenant = mesures[mesures.length - 1]
-  const pointeAuDessus = pointe !== null && seuilKw !== null && pointe.valeur > seuilKw
-  const pointSurvole = survol === null ? null : serie.find((point) => point.heure === survol)
+  const pointeAuDessus = pointe !== null && thresholdKw !== null && pointe.value > thresholdKw
+  const pointSurvole = survol === null ? null : series.find((point) => point.hour === survol)
 
   function survoler(event: MouseEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect()
     const relatif = ((event.clientX - rect.left) / rect.width) * largeur
-    const heure = Math.round(((relatif - marge.gauche) / plotL) * 24)
-    if (heure < 0 || heure > 24) {
+    const hour = Math.round(((relatif - marge.gauche) / plotL) * 24)
+    if (hour < 0 || hour > 24) {
       setSurvol(null)
       return
     }
-    setSurvol(heure)
+    setSurvol(hour)
   }
 
   return (
@@ -129,34 +129,34 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
             className="stroke-grille"
           />
           <text x={marge.gauche - 10} y={yDe(tick)} className="fill-discret text-xs" textAnchor="end" dominantBaseline="middle">
-            {formaterNombre(tick)}
+            {formatNumber(tick)}
           </text>
         </g>
       ))}
 
-      {[0, 4, 8, 12, 16, 20, 24].map((heure) => (
+      {[0, 4, 8, 12, 16, 20, 24].map((hour) => (
         <text
-          key={heure}
-          x={xDe(heure)}
+          key={hour}
+          x={xDe(hour)}
           y={hauteur - 8}
-          className={maintenant?.heure === heure ? 'fill-ambre text-xs font-bold' : 'fill-discret text-xs'}
+          className={maintenant?.hour === hour ? 'fill-ambre text-xs font-bold' : 'fill-discret text-xs'}
           textAnchor="middle"
         >
-          {`${String(heure).padStart(2, '0')}h`}
+          {`${String(hour).padStart(2, '0')}h`}
         </text>
       ))}
 
-      {seuilKw !== null && (
+      {thresholdKw !== null && (
         <g>
           <line
             x1={marge.gauche}
             x2={largeur - marge.droite}
-            y1={yDe(seuilKw)}
-            y2={yDe(seuilKw)}
+            y1={yDe(thresholdKw)}
+            y2={yDe(thresholdKw)}
             className="fill-none stroke-seuil [stroke-dasharray:6_6] [stroke-linecap:round] [stroke-width:1.6]"
           />
-          <text x={largeur - marge.droite - 4} y={yDe(seuilKw) - 8} className="fill-seuil text-[13px] font-bold" textAnchor="end">
-            {formaterNombre(seuilKw)} kW
+          <text x={largeur - marge.droite - 4} y={yDe(thresholdKw) - 8} className="fill-seuil text-[13px] font-bold" textAnchor="end">
+            {formatNumber(thresholdKw)} kW
           </text>
         </g>
       )}
@@ -190,9 +190,9 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
           className={pointeAuDessus ? 'fill-seuil stroke-carte stroke-2' : 'fill-prevision stroke-carte stroke-2'}
         />
       )}
-      {afficherValeurPointe && pointe && (
+      {showPeakValue && pointe && (
         <text x={pointe.x} y={pointe.y - 14} className="fill-seuil text-[13px] font-bold" textAnchor="middle">
-          {formaterNombre(pointe.valeur)} kW
+          {formatNumber(pointe.value)} kW
         </text>
       )}
 
@@ -200,10 +200,10 @@ export function GraphiqueConsommation({ serie, seuilKw, afficherValeurPointe = f
         <g>
           <line x1={xDe(survol)} x2={xDe(survol)} y1={marge.haut} y2={base} className="fill-none stroke-discret opacity-45 stroke-1" />
           <text x={xDe(survol)} y={marge.haut + 4} className="fill-encre text-xs font-[650]" textAnchor="middle">
-            {pointSurvole.mesureKw !== null
-              ? `${formaterNombre(pointSurvole.mesureKw)} kW`
-              : pointSurvole.previsionKw !== null
-                ? `${formaterNombre(pointSurvole.previsionKw)} kW prévus`
+            {pointSurvole.measuredKw !== null
+              ? `${formatNumber(pointSurvole.measuredKw)} kW`
+              : pointSurvole.forecastKw !== null
+                ? `${formatNumber(pointSurvole.forecastKw)} kW prévus`
                 : '—'}
           </text>
         </g>

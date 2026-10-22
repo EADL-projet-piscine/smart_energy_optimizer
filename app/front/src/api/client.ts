@@ -1,6 +1,6 @@
 const DELAI_MS = 3000
 
-export async function obtenirJson(
+export async function fetchJson(
   chemin: string,
   signal?: AbortSignal,
   methode: 'GET' | 'POST' = 'GET',

@@ -8,21 +8,21 @@ import { Onglets } from '../composants/ui/Onglets'
 import { Commentaire, SousTitre } from '../composants/ui/Texte'
 import { Toast } from '../composants/ui/Toast'
 import { cn } from '../composants/ui/cn'
-import { formaterKw, formaterNombre } from '../services/format'
-import type { Alerte, Site } from '../services/modele'
+import { formatKw, formatNumber } from '../services/format'
+import type { Alert, Site } from '../services/modele'
 
 type Props = {
   sites: Site[]
   siteId: string
-  onChoisir: (id: string) => void
+  onSelect: (id: string) => void
 }
 
-function alertePrincipale(site: Site): Alerte | null {
-  return site.alertes.find((alerte) => alerte.severite === 'critique') ?? site.alertes[0] ?? null
+function alertePrincipale(site: Site): Alert | null {
+  return site.alerts.find((alert) => alert.severity === 'critique') ?? site.alerts[0] ?? null
 }
 
-export function DetailSite({ sites, siteId, onChoisir }: Props) {
-  const site = sites.find((candidat) => candidat.id === siteId) ?? sites[0]
+export function DetailSite({ sites, siteId, onSelect }: Props) {
+  const site = sites.find((candidate) => candidate.id === siteId) ?? sites[0]
   const [toastFerme, setToastFerme] = useState(false)
   const [misEnEvidence, setMisEnEvidence] = useState(false)
 
@@ -41,15 +41,15 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
   }
 
   const principale = alertePrincipale(site)
-  const autres = site.alertes.filter((alerte) => alerte !== principale || toastFerme)
-  const prevuDepasse = site.seuilKw !== null && site.prevu2hKw !== null && site.prevu2hKw > site.seuilKw
+  const autres = site.alerts.filter((alert) => alert !== principale || toastFerme)
+  const prevuDepasse = site.thresholdKw !== null && site.forecast2hKw !== null && site.forecast2hKw > site.thresholdKw
   const mesuresCompletes =
-    site.mesuresRecues !== null &&
-    site.mesuresAttendues !== null &&
-    site.mesuresAttendues > 0 &&
-    site.mesuresRecues >= site.mesuresAttendues
+    site.receivedCount !== null &&
+    site.expectedCount !== null &&
+    site.expectedCount > 0 &&
+    site.receivedCount >= site.expectedCount
   const mesuresPartielles =
-    site.mesuresRecues !== null && site.mesuresAttendues !== null && site.mesuresRecues < site.mesuresAttendues
+    site.receivedCount !== null && site.expectedCount !== null && site.receivedCount < site.expectedCount
   const tonMesures = mesuresCompletes ? 'ok' : mesuresPartielles ? 'ambre' : 'defaut'
 
   function voirDetail() {
@@ -59,74 +59,74 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
   }
 
   return (
-    <Carte aria-labelledby="titre-detail" className="pb-[18px]">
-      <h2 id="titre-detail" className="m-0 text-base font-[650] tracking-[-0.02em]">
+    <Carte aria-labelledby="title-detail" className="pb-[18px]">
+      <h2 id="title-detail" className="m-0 text-base font-[650] tracking-[-0.02em]">
         Détail par site
       </h2>
       <Onglets
-        libelle="Sites du parc"
-        panneauId="panneau-site"
-        actif={site.id}
-        onChoisir={onChoisir}
-        entrees={sites.map((candidat) => ({ id: candidat.id, titre: candidat.id, detail: candidat.type }))}
+        label="Sites du parc"
+        panelId="panneau-site"
+        active={site.id}
+        onSelect={onSelect}
+        entries={sites.map((candidate) => ({ id: candidate.id, title: candidate.id, detail: candidate.type }))}
       />
 
       <div role="tabpanel" id="panneau-site" aria-labelledby={`onglet-${site.id}`}>
         <header className="mt-[18px] flex items-center justify-between gap-4 max-[680px]:flex-col max-[680px]:items-start">
           <div>
-            <h3 className="m-0 text-[22px] font-[650] tracking-[-0.03em]">{site.nom}</h3>
+            <h3 className="m-0 text-[22px] font-[650] tracking-[-0.03em]">{site.name}</h3>
             <p className="mt-1 text-[13px] text-discret">
-              {site.type} · {site.releve}
+              {site.type} · {site.readingLabel}
             </p>
           </div>
-          {site.badge && <Badge ton={tonBadge(site.badge)}>{site.badge}</Badge>}
+          {site.badge && <Badge tone={tonBadge(site.badge)}>{site.badge}</Badge>}
         </header>
 
         <div className="mt-4 grid grid-cols-1 gap-3 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4">
           <Indicateur
-            variante="inset"
-            libelle="Actuel"
-            valeur={formaterKw(site.actuelKw)}
-            unite={site.actuelKw === null ? undefined : 'kW'}
+            variant="inset"
+            label="Actuel"
+            value={formatKw(site.currentKw)}
+            unit={site.currentKw === null ? undefined : 'kW'}
           />
           <Indicateur
-            variante="inset"
-            libelle="Prévu +2 h"
-            valeur={formaterKw(site.prevu2hKw)}
-            unite={site.prevu2hKw === null ? undefined : 'kW'}
-            ton={prevuDepasse ? 'danger' : 'defaut'}
+            variant="inset"
+            label="Prévu +2 h"
+            value={formatKw(site.forecast2hKw)}
+            unit={site.forecast2hKw === null ? undefined : 'kW'}
+            tone={prevuDepasse ? 'danger' : 'defaut'}
           />
           <Indicateur
-            variante="inset"
-            libelle="Seuil contractuel"
-            valeur={formaterKw(site.seuilKw)}
-            unite={site.seuilKw === null ? undefined : 'kW'}
+            variant="inset"
+            label="Seuil contractuel"
+            value={formatKw(site.thresholdKw)}
+            unit={site.thresholdKw === null ? undefined : 'kW'}
           />
           <Indicateur
-            variante="inset"
-            libelle="Mesures reçues"
-            ton={tonMesures}
-            valeur={
-              site.mesuresRecues === null || site.mesuresAttendues === null
+            variant="inset"
+            label="Mesures reçues"
+            tone={tonMesures}
+            value={
+              site.receivedCount === null || site.expectedCount === null
                 ? '—'
-                : `${formaterNombre(site.mesuresRecues)}/${formaterNombre(site.mesuresAttendues)}`
+                : `${formatNumber(site.receivedCount)}/${formatNumber(site.expectedCount)}`
             }
           />
         </div>
 
         <div className="relative mt-2">
-          <GraphiqueConsommation serie={site.serie} seuilKw={site.seuilKw} compact />
+          <GraphiqueConsommation series={site.series} thresholdKw={site.thresholdKw} compact />
           {principale && !toastFerme && (
             <Toast
-              severite={principale.severite}
-              titre={principale.titre}
+              severity={principale.severity}
+              title={principale.title}
               message={principale.message}
-              onFermer={() => setToastFerme(true)}
+              onClose={() => setToastFerme(true)}
               onDetail={voirDetail}
             />
           )}
         </div>
-        {site.commentaire && <Commentaire>{site.commentaire}</Commentaire>}
+        {site.comment && <Commentaire>{site.comment}</Commentaire>}
 
         <div
           id={`bloc-actions-${site.id}`}
@@ -136,10 +136,10 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
             <div>
               <SousTitre>Alertes</SousTitre>
               <Liste>
-                {autres.map((alerte) => (
-                  <Ligne key={alerte.id} accent={alerte.severite === 'critique' ? 'danger' : 'ambre'}>
-                    <strong className="block text-sm">{alerte.titre}</strong>
-                    <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{alerte.message}</p>
+                {autres.map((alert) => (
+                  <Ligne key={alert.id} accent={alert.severity === 'critique' ? 'danger' : 'ambre'}>
+                    <strong className="block text-sm">{alert.title}</strong>
+                    <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{alert.message}</p>
                   </Ligne>
                 ))}
               </Liste>
@@ -147,20 +147,20 @@ export function DetailSite({ sites, siteId, onChoisir }: Props) {
           )}
           <div>
             <SousTitre>Recommandations</SousTitre>
-            {site.recommandations.length === 0 ? (
+            {site.recommendations.length === 0 ? (
               <Commentaire>Aucune recommandation pour ce site.</Commentaire>
             ) : (
               <Liste>
-                {site.recommandations.map((recommandation, index) => (
-                  <Ligne key={recommandation.id}>
+                {site.recommendations.map((recommendation, index) => (
+                  <Ligne key={recommendation.id}>
                     <Pastille>{index + 1}</Pastille>
                     <div>
-                      <strong className="block text-sm">{recommandation.titre}</strong>
-                      <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{recommandation.detail}</p>
+                      <strong className="block text-sm">{recommendation.title}</strong>
+                      <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{recommendation.detail}</p>
                     </div>
-                    {recommandation.economie && (
+                    {recommendation.saving && (
                       <em className="text-[13px] font-bold whitespace-nowrap text-hausse not-italic">
-                        {recommandation.economie}
+                        {recommendation.saving}
                       </em>
                     )}
                   </Ligne>

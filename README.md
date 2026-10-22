@@ -278,25 +278,46 @@ point d'entrée, des types et des données de démonstration.
 
 ### Test de charge
 
-`tests/perf/health.js` est un scénario [k6](https://grafana.com/docs/k6/)
-sur `/health` du back et du service ML : 10 utilisateurs virtuels pendant
-30 secondes. Il échoue si :
+`tests/perf/load.js` est un scénario [k6](https://grafana.com/docs/k6/) :
+10 utilisateurs virtuels pendant 30 secondes appellent `/health` du back et
+du service ML, et la route métier `/api/consommation/resume` que le dashboard
+interroge toutes les 10 secondes. Il échoue si :
 
 | Seuil | Valeur |
 |---|---|
-| Temps de réponse p95 | < 500 ms |
+| Temps de réponse p95, toutes routes | < 500 ms |
+| Temps de réponse p95, route métier seule | < 500 ms |
 | Requêtes en erreur | < 1 % |
 | Vérifications réussies | > 99 % |
 
-Pour le lancer en local, stack démarrée (`docker compose up -d --build`) :
+La route métier a son propre seuil : des `/health` rapides ne peuvent pas
+masquer une route métier lente. Ses vérifications portent aussi sur le
+contenu : sites relayés et données à jour (`stale: false`).
+
+**Doublure de l'API EnerVision.** En CI, le back ne contacte pas l'API
+réelle : elle exige des identifiants et ne doit pas encaisser le trafic d'un
+test de charge. `docker-compose.ci.yml` ajoute un service `enervision-mock`
+(nginx) qui sert une réponse d'exemple de `/api/v1/stats/summary`
+(`tests/perf/enervision-mock/summary.json` : même format que l'API réelle,
+valeurs fictives). Le back démarre une fois la doublure prête, et le job
+attend que la route métier ait des données avant de lancer k6.
+
+**Rejouer le job `perf` en local**, avec la même stack que la CI (doublure
+comprise) et des images construites sur le poste. Arrêtez d'abord la stack de
+développement : les noms de conteneurs sont fixes. `-p enervision-ci` sépare
+la base de ce test de votre base de développement.
 
 ```bash
-docker run --rm --network host -v "$PWD/tests/perf:/scripts:ro" grafana/k6:2.3.0 run /scripts/health.js
+export BACK_IMAGE=enervision-back:local ML_IMAGE=enervision-ml:local
+docker compose -p enervision-ci -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+docker run --rm --network enervision-ci_default -e BACK_URL=http://back:8000 -e ML_URL=http://ml:8000 -v "$PWD/tests/perf:/scripts:ro" grafana/k6:2.3.0 run /scripts/load.js
+docker compose -p enervision-ci -f docker-compose.yml -f docker-compose.ci.yml down -v
 ```
 
-`--network host` ne fonctionne que sous Linux et WSL. Sous Docker Desktop
-(Windows, macOS), remplacez-le par
-`-e BACK_URL=http://host.docker.internal:8000 -e ML_URL=http://host.docker.internal:8001`.
+Sous PowerShell, remplacez la première ligne par
+`$env:BACK_IMAGE = "enervision-back:local"; $env:ML_IMAGE = "enervision-ml:local"`
+et `$PWD` par `${PWD}`. k6 rejoint le réseau de la stack : la commande
+fonctionne à l'identique sous Linux, macOS et Windows.
 
 ## Qualité de code
 
@@ -376,7 +397,7 @@ chaque merge dans `main` :
 | `lint` | `sh scripts/check.sh` (mêmes contrôles que les hooks locaux), puis `pytest` avec couverture, contre un service PostgreSQL 16 |
 | `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
 | `build` | Construit les images `back` et `ml`, les scanne avec Trivy |
-| `perf` | Lance la stack avec ces images et exécute le test de charge k6 |
+| `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
 | `publish` | Publie les images sur GHCR (depuis `main` uniquement) |
 
 Chaque étape attend la réussite de la précédente : `lint` + `scan` →

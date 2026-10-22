@@ -7,7 +7,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Un nouveau push annule le run précédent de la même branche.
+# A new push cancels the previous run of the same branch.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  # Lint, formatage, tests fonctionnels contre une vraie base, couverture.
+  # Lint, formatting, functional tests against a real database, coverage.
   lint:
     runs-on: ubuntu-latest
     services:
@@ -35,12 +35,12 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql+psycopg://enervision:enervision@localhost:5432/enervision
-      # Les tests marqués `db` échouent au lieu d'être ignorés si la base manque.
+      # Tests marked `db` fail instead of being skipped when the database is missing.
       REQUIRE_DB: "1"
     steps:
       - uses: actions/checkout@v5
 
-      # Même script que le hook pre-commit local : ce qui passe en local passe ici.
+      # Same script as the local pre-commit hook: what passes locally passes here.
       - name: Lint and formatting
         run: sh scripts/check.sh
 
@@ -58,8 +58,7 @@ jobs:
       - name: Install ML
         run: python -m pip install -e "./ml[dev]"
 
-
-      # Le seuil de couverture est défini dans pyproject.toml (tool.coverage.report).
+      # The coverage threshold is set in pyproject.toml (tool.coverage.report).
       - name: Run tests with coverage
         run: pytest --cov --cov-report=term --cov-report=xml --cov-report=html
 
@@ -73,6 +72,7 @@ jobs:
             htmlcov/
           retention-days: 14
 
+  # Repository scan: vulnerable dependencies, misconfigurations, committed secrets.
   scan:
     runs-on: ubuntu-latest
     steps:
@@ -88,7 +88,7 @@ jobs:
           exit-code: "1"
           token-setup-trivy: ${{ secrets.GITHUB_TOKEN }}
 
-  # Construit et scanne chaque image, puis la transmet aux jobs suivants.
+  # Builds and scans each image, then hands it over to the next jobs.
   build:
     needs: [lint, scan]
     runs-on: ubuntu-latest
@@ -136,7 +136,8 @@ jobs:
           path: /tmp/${{ matrix.service }}.tar
           retention-days: 1
 
-  # Test de charge sur la stack lancée avec les images construites.
+  # Load test against the stack started from the built images. The back reads its data
+  # from a local EnerVision stand-in (docker-compose.ci.yml), never from the real API.
   perf:
     needs: build
     runs-on: ubuntu-latest
@@ -164,13 +165,16 @@ jobs:
       - name: Wait for services
         run: |
           curl --fail --silent --retry 30 --retry-delay 2 --retry-all-errors http://localhost:8001/health
-          for i in $(seq 1 30); do
-            if curl --fail --silent http://localhost:8000/health | grep -q '"database":"ok"'; then
+          # The back answers /health before it reaches the database and before its first
+          # refresh: also wait for the database and for the consumption data.
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8000/health | grep -q '"database":"ok"' &&
+              curl --fail --silent --output /dev/null http://localhost:8000/api/consommation/resume; then
               exit 0
             fi
             sleep 2
           done
-          echo "Le back n'a pas atteint la base à temps" >&2
+          echo "The back did not reach the database or load consumption data in time" >&2
           exit 1
 
       - name: Run load test (k6)
@@ -180,7 +184,7 @@ jobs:
             -v "$PWD/tests/perf:/scripts:ro" \
             -v "$PWD/perf-results:/results" \
             --user "$(id -u)" \
-            grafana/k6:2.3.0 run /scripts/health.js --summary-export=/results/k6-summary.json
+            grafana/k6:2.3.0 run /scripts/load.js --summary-export=/results/k6-summary.json
 
       - name: Stack logs
         if: failure()
@@ -194,7 +198,7 @@ jobs:
           path: perf-results/
           retention-days: 14
 
-  # Publie sur GHCR, depuis main uniquement, les images qui ont passé tous les contrôles.
+  # Publishes to GHCR, from main only, the images that passed every check.
   publish:
     needs: perf
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

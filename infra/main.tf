@@ -20,13 +20,21 @@ resource "azurerm_storage_account" "sa" {
   }
 }
 
+# Crée un conteneur privé qui va contenir les données brutes
+resource "azurerm_storage_container" "landing" {
+  name = "landing"
+  storage_account_name = azurerm_storage_account.sa.name
+  container_access_type = "private"
+}
+
 # Crée des règles réseau pour le compte de stockage
 resource "azurerm_storage_account_network_rules" "nr" {
   storage_account_id = azurerm_storage_account.sa.id
 
-  default_action             = "Deny"
+  default_action = "Deny"
+  ip_rules = [var.ip]
   virtual_network_subnet_ids = [azurerm_subnet.subnet.id]
-  bypass                     = ["Metrics", "AzureServices"]
+  bypass = ["Metrics", "AzureServices"]
 }
 
 # Crée une adresse IP publique pour la VM

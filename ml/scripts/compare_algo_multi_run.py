@@ -15,7 +15,11 @@ absolues. À refaire sur les vraies données (/api/v1/readings).
 Installation (sans pandas) :
     python -m pip install xgboost
 
-Entrée  : data/SITE00X_metadata.json
+Prérequis : data/SITE00X_metadata.json
+
+Pour Exécuter depuis le dossier ml : 
+    python .\scripts\compare_algo_multi_run.py 
+
 Sorties : comparatif_multi_runs.csv, graphiques_multi_runs/*.png
 """
 

@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import { cn } from './cn'
 
-export function BoutonIcone({ className, children, ...props }: ComponentProps<'button'>) {
+export function IconButton({ className, children, ...props }: ComponentProps<'button'>) {
   return (
     <button
       type="button"

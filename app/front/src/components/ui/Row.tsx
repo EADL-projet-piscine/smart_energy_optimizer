@@ -1,17 +1,11 @@
 import type { ReactNode } from 'react'
 import { cn } from './cn'
 
-export function Liste({ children }: { children: ReactNode }) {
+export function List({ children }: { children: ReactNode }) {
   return <ul className="m-0 grid list-none gap-2 p-0">{children}</ul>
 }
 
-export function Ligne({
-  children,
-  accent,
-}: {
-  children: ReactNode
-  accent?: 'danger' | 'ambre'
-}) {
+export function Row({ children, accent }: { children: ReactNode; accent?: 'danger' | 'ambre' }) {
   return (
     <li
       className={cn(
@@ -26,7 +20,7 @@ export function Ligne({
   )
 }
 
-export function Pastille({ children }: { children: ReactNode }) {
+export function Bullet({ children }: { children: ReactNode }) {
   return (
     <span className="grid size-[26px] place-items-center rounded-lg bg-[rgba(255,122,26,0.16)] text-[13px] font-bold text-orange">
       {children}

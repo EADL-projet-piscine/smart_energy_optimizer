@@ -1,5 +1,5 @@
-import { TableauDeBord } from './screens/TableauDeBord'
+import { Dashboard } from './screens/Dashboard'
 
 export default function App() {
-  return <TableauDeBord />
+  return <Dashboard />
 }

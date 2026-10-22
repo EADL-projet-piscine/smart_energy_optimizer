@@ -63,3 +63,6 @@ infra/*.tfvars.json
 infra/.terraform.tfstate.lock.info
 infra/.terraformrc
 infra/terraform.rc
+
+# WSL : flux Windows sur les fichiers téléchargés
+*:Zone.Identifier

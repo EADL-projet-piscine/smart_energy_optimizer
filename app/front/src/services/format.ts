@@ -31,11 +31,40 @@ export function sitesLabel(count: number): string {
   return SITE_COUNT_LABELS[count] ?? `${count} sites`
 }
 
+/** L'API source date /stats/summary sans fuseau alors qu'il s'agit d'UTC, tandis que
+ * /readings met un Z. Sans ce correctif, JavaScript lit l'horodatage nu comme de
+ * l'heure locale et affiche deux heures de moins en France. */
+export function toIsoUtc(value: string): string {
+  return /(Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`
+}
+
 export function formatCollectedAt(value: string): string {
   if (/^\d{1,2}:\d{2}$/.test(value)) return value
-  const date = new Date(value)
+  const date = new Date(toIsoUtc(value))
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** Heure locale d'un horodatage ISO, pour les phrases et les graduations. */
+export function hourOf(at: string): number {
+  const date = new Date(toIsoUtc(at))
+  return Number.isNaN(date.getTime()) ? 0 : date.getHours()
+}
+
+/** Heure entamée : une mesure de 09h32 est « le relevé de 9h ». Arrondir au
+ * plus proche l'étiquetterait 10h00 et la ferait paraître plus récente
+ * qu'elle n'est. */
+export function formatHour(at: string): string {
+  const date = new Date(toIsoUtc(at))
+  if (Number.isNaN(date.getTime())) return at
+  return `${String(date.getHours()).padStart(2, '0')}h00`
+}
+
+/** Heure exacte, réservée à la mesure la plus récente : là, la minute compte. */
+export function formatTime(at: string): string {
+  const date = new Date(toIsoUtc(at))
+  if (Number.isNaN(date.getTime())) return at
+  return `${String(date.getHours()).padStart(2, '0')}h${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 export function alertsLabel(critical: number, medium: number): string {
@@ -44,33 +73,28 @@ export function alertsLabel(critical: number, medium: number): string {
   return `${criticalPart} · ${mediumPart}`
 }
 
-/** Dernière heure pour laquelle une mesure réelle existe. */
-export function lastMeasuredHour(series: SeriesPoint[]): number | null {
+/** Index du dernier point portant une mesure réelle, -1 si la série n'en a aucune. */
+export function lastMeasuredIndex(series: SeriesPoint[]): number {
   for (let index = series.length - 1; index >= 0; index -= 1) {
-    if (series[index].measuredKw !== null) return series[index].hour
+    if (series[index].measuredKw !== null) return index
   }
-  return null
+  return -1
 }
 
-/** Pointe prévue, éventuellement restreinte aux heures postérieures à `afterHour`. */
+/** Pointe prévue, éventuellement restreinte aux points postérieurs à `afterIndex`. */
 export function forecastPeak(
   series: SeriesPoint[],
-  afterHour?: number,
-): { hour: number; value: number } | null {
-  let best: { hour: number; value: number } | null = null
-  for (const point of series) {
-    if (point.forecastKw === null) continue
-    if (afterHour !== undefined && point.hour <= afterHour) continue
+  afterIndex = -1,
+): { at: string; value: number } | null {
+  let best: { at: string; value: number } | null = null
+  series.forEach((point, index) => {
+    if (point.forecastKw === null || index <= afterIndex) return
     if (!best || point.forecastKw > best.value) {
-      best = { hour: point.hour, value: point.forecastKw }
+      best = { at: point.at, value: point.forecastKw }
     }
-  }
-  if (best || afterHour === undefined) return best
+  })
+  if (best || afterIndex < 0) return best
   return forecastPeak(series)
-}
-
-export function forecastAt(series: SeriesPoint[], hour: number): number | null {
-  return series.find((point) => point.hour === hour)?.forecastKw ?? null
 }
 
 function peakSentence(threshold: number, peak: number, hour: number, scope: 'parc' | 'site'): string {
@@ -86,13 +110,12 @@ function peakSentence(threshold: number, peak: number, hour: number, scope: 'par
   return `La consommation prévue reste sous le seuil de ${formatNumber(threshold)} kW, avec une pointe à ${formatNumber(peak)} kW vers ${hour} h.`
 }
 
-/** Complète un site : prévision à +2 h, heure de pointe, badge et commentaire déduits. */
+/** Complète un site : prévision à +2 h, pointe, badge et commentaire déduits. */
 export function completeSite(site: Site): Site {
-  const measuredHour = lastMeasuredHour(site.series)
-  const peak = forecastPeak(site.series, measuredHour ?? undefined)
-  const forecast2hKw =
-    site.forecast2hKw ?? (measuredHour === null ? null : forecastAt(site.series, measuredHour + 2))
-  const peakHour = site.peakHour ?? peak?.hour ?? null
+  const measuredIndex = lastMeasuredIndex(site.series)
+  const peak = forecastPeak(site.series, measuredIndex)
+  const forecast2hKw = site.forecast2hKw ?? site.series[measuredIndex + 2]?.forecastKw ?? null
+  const peakAt = site.peakAt ?? peak?.at ?? null
   const peakKw = peak?.value ?? null
 
   let badge = site.badge
@@ -107,15 +130,15 @@ export function completeSite(site: Site): Site {
   if (!comment) {
     if (!site.isTransmitting) {
       comment = `Aucun relevé exploitable depuis plus de deux heures. ${site.id} est exclu du total du parc.`
-    } else if (site.thresholdKw !== null && peakKw !== null && peakHour !== null) {
-      comment = peakSentence(site.thresholdKw, peakKw, peakHour, 'site')
+    } else if (site.thresholdKw !== null && peakKw !== null && peakAt !== null) {
+      comment = peakSentence(site.thresholdKw, peakKw, hourOf(peakAt), 'site')
     }
   }
 
   return {
     ...site,
     forecast2hKw,
-    peakHour,
+    peakAt,
     badge: badge ?? null,
     comment: comment ?? null,
   }
@@ -132,16 +155,16 @@ export function buildSummary(summary: ParkSummary): ParkSummary {
   const transmitting =
     sites.length > 0 ? sites.filter((site) => site.isTransmitting).length : summary.transmittingCount
   const siteCount = sites.length > 0 ? sites.length : summary.siteCount
-  const peak = forecastPeak(summary.series, lastMeasuredHour(summary.series) ?? undefined)
-  const peakHour = summary.peakHour ?? peak?.hour ?? null
+  const peak = forecastPeak(summary.series, lastMeasuredIndex(summary.series))
+  const peakAt = summary.peakAt ?? peak?.at ?? null
   const peakKw = summary.peakKw ?? peak?.value ?? null
   const coveragePct =
     summary.coveragePct ?? (siteCount > 0 ? Math.round((transmitting / siteCount) * 100) : null)
 
   const contributor = sites.find((site) => site.alerts.some((alert) => alert.severity === 'critique'))
   let comment = summary.comment
-  if (!comment && summary.thresholdKw !== null && peakKw !== null && peakHour !== null) {
-    comment = peakSentence(summary.thresholdKw, peakKw, peakHour, 'parc')
+  if (!comment && summary.thresholdKw !== null && peakKw !== null && peakAt !== null) {
+    comment = peakSentence(summary.thresholdKw, peakKw, hourOf(peakAt), 'parc')
     if (peakKw > summary.thresholdKw && contributor) {
       comment += ` Une alerte a été levée sur ${contributor.id}, principal contributeur.`
     }
@@ -154,7 +177,7 @@ export function buildSummary(summary: ParkSummary): ParkSummary {
     transmittingCount: transmitting,
     siteCount,
     coveragePct,
-    peakHour,
+    peakAt,
     peakKw,
     comment,
     totalAlerts: alerts.length > 0 ? alerts.length : summary.totalAlerts,

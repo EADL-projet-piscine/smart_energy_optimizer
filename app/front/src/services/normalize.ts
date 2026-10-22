@@ -43,20 +43,6 @@ function toText(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function toHour(value: unknown): number | null {
-  if (typeof value === 'number' && value >= 0 && value <= 24) return Math.round(value)
-  if (typeof value === 'string') {
-    const label = value.match(/^(\d{1,2})\s*h?$/)
-    if (label) {
-      const hour = Number(label[1])
-      if (hour >= 0 && hour <= 24) return hour
-    }
-    const date = new Date(value)
-    if (!Number.isNaN(date.getTime())) return date.getHours()
-  }
-  return null
-}
-
 function toSeverity(value: unknown): Severity {
   const raw = String(value ?? '').toLowerCase()
   if (['critique', 'critical', 'high', 'haute', 'error', 'urgent', 'bloquant'].includes(raw)) {
@@ -80,28 +66,25 @@ function toBadge(value: unknown): string | null {
   return label
 }
 
-function parsePoint(value: unknown, index: number): SeriesPoint | null {
-  if (typeof value === 'number') {
-    return { hour: index, measuredKw: value, forecastKw: null }
-  }
+function parsePoint(value: unknown): SeriesPoint | null {
   if (!isObject(value)) return null
-  const hour = toHour(pick(value, ['heure', 'hour', 'h', 'timestamp', 'time', 'datetime'])) ?? index
+  const at = toText(pick(value, ['timestamp', 'at', 'time', 'datetime', 'horodatage']))
+  if (!at || Number.isNaN(new Date(at).getTime())) return null
   const measured = toNumber(
     pick(value, ['measured_kw', 'mesure_kw', 'consumption_kw', 'measured', 'mesure', 'value', 'kw']),
   )
   const forecast = toNumber(
     pick(value, ['forecast_kw', 'prevision_kw', 'predicted_kw', 'forecast', 'prevision', 'prediction_kw']),
   )
-  if (measured === null && forecast === null) return null
-  return { hour, measuredKw: measured, forecastKw: forecast }
+  return { at, measuredKw: measured, forecastKw: forecast }
 }
 
 function parseSeries(value: unknown): SeriesPoint[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((point, index) => parsePoint(point, index))
+    .map((point) => parsePoint(point))
     .filter((point): point is SeriesPoint => point !== null)
-    .sort((a, b) => a.hour - b.hour)
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 }
 
 function parseAlert(value: unknown, index: number): Alert | null {
@@ -187,7 +170,7 @@ function parseSite(value: unknown, index: number): Site | null {
       transmittingFlag ?? (currentKw !== null || series.some((point) => point.measuredKw !== null)),
     badge: toBadge(pick(value, ['badge', 'status', 'etat', 'state'])),
     series,
-    peakHour: toHour(pick(value, ['peak_hour', 'heure_pointe', 'forecast_peak_hour'])),
+    peakAt: toText(pick(value, ['peak_at', 'forecast_peak_at', 'horodatage_pointe'])),
     comment: toText(pick(value, ['commentaire', 'comment', 'caption', 'summary'])),
     alerts,
     recommendations,
@@ -237,26 +220,6 @@ function attachParkAlerts(sites: Site[], source: Record<string, unknown>): Site[
     site.alerts.push(alert)
   })
   return enriched
-}
-
-/** Série du parc reconstituée en sommant les sites qui transmettent. */
-function sumSeries(sites: Site[]): SeriesPoint[] {
-  const hours = new Set<number>()
-  sites.forEach((site) => site.series.forEach((point) => hours.add(point.hour)))
-  return [...hours]
-    .sort((a, b) => a - b)
-    .map((hour) => {
-      let measured: number | null = null
-      let forecast: number | null = null
-      for (const site of sites) {
-        if (!site.isTransmitting) continue
-        const point = site.series.find((candidate) => candidate.hour === hour)
-        if (!point) continue
-        if (point.measuredKw !== null) measured = (measured ?? 0) + point.measuredKw
-        if (point.forecastKw !== null) forecast = (forecast ?? 0) + point.forecastKw
-      }
-      return { hour, measuredKw: measured, forecastKw: forecast }
-    })
 }
 
 function parseSummaryObject(source: Record<string, unknown>): ParkSummary | null {
@@ -316,8 +279,8 @@ function parseSummaryObject(source: Record<string, unknown>): ParkSummary | null
       pick(source, ['threshold_kw', 'contractual_threshold_kw', 'seuil_kw', 'seuil_contractuel_kw']),
     ),
     peakKw: toNumber(pick(source, ['forecast_peak_kw', 'peak_kw', 'pointe_prevue_kw', 'pointe_kw'])),
-    peakHour: toHour(pick(source, ['forecast_peak_hour', 'peak_hour', 'heure_pointe'])),
-    series: series.length > 0 ? series : sumSeries(sites),
+    peakAt: toText(pick(source, ['forecast_peak_at', 'peak_at', 'horodatage_pointe'])),
+    series,
     comment: toText(pick(source, ['commentaire', 'comment', 'caption', 'insight'])),
     sites,
     source: 'api',

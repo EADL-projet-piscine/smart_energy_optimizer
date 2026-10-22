@@ -1,8 +1,9 @@
 /** Gravité d'une alerte. Les valeurs restent en français : ce sont des données, pas des identifiants. */
 export type Severity = 'critique' | 'moyenne' | 'info'
 
+/** Un point de mesure, daté. L'horodatage est une chaîne ISO avec son fuseau. */
 export type SeriesPoint = {
-  hour: number
+  at: string
   measuredKw: number | null
   forecastKw: number | null
 }
@@ -34,7 +35,7 @@ export type Site = {
   isTransmitting: boolean
   badge: string | null
   series: SeriesPoint[]
-  peakHour: number | null
+  peakAt: string | null
   comment: string | null
   alerts: Alert[]
   recommendations: Recommendation[]
@@ -55,9 +56,15 @@ export type ParkSummary = {
   excludedSites: string[]
   thresholdKw: number | null
   peakKw: number | null
-  peakHour: number | null
+  peakAt: string | null
   series: SeriesPoint[]
   comment: string | null
   sites: Site[]
   source: 'api' | 'demonstration'
+}
+
+/** Historique des dernières 24 heures : la somme du parc, et le détail par site. */
+export type History = {
+  park: SeriesPoint[]
+  bySite: Record<string, SeriesPoint[]>
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
 import { IconBolt, IconMoon, IconSun } from '../components/Icons'
 import { Banner } from '../components/ui/Banner'
@@ -9,6 +9,9 @@ import { Metric } from '../components/ui/Metric'
 import { Ring } from '../components/ui/Ring'
 import { Label, SiteText } from '../components/ui/Text'
 import { alertsLabel, formatCollectedAt, formatNumber, sitesLabel } from '../services/format'
+import { appendCurrent } from '../services/history'
+import type { SeriesPoint } from '../services/model'
+import { useHistory } from '../services/useHistory'
 import { useSummary } from '../services/useSummary'
 import { SiteDetail } from './SiteDetail'
 
@@ -17,11 +20,31 @@ export function Dashboard() {
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
   const { summary, error, siteId, setSiteId } = useSummary()
+  const { history, error: historyError } = useHistory()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('enervision-theme', theme)
   }, [theme])
+
+  // L'historique s'arrête à l'heure précédente ; la mesure temps réel le prolonge
+  // jusqu'à maintenant, pour que la courbe rejoigne le chiffre affiché au-dessus.
+  const parkSeries = useMemo(
+    () => appendCurrent(history?.park ?? [], summary?.consumptionKw ?? null, summary?.lastCollectedAt),
+    [history, summary],
+  )
+
+  const seriesBySite = useMemo(() => {
+    const result: Record<string, SeriesPoint[]> = {}
+    for (const site of summary?.sites ?? []) {
+      result[site.id] = appendCurrent(
+        history?.bySite[site.id] ?? [],
+        site.currentKw,
+        summary?.lastCollectedAt,
+      )
+    }
+    return result
+  }, [history, summary])
 
   const exclusionMessage =
     summary && summary.excludedSites.length > 0
@@ -131,23 +154,31 @@ export function Dashboard() {
             <Card aria-labelledby="chart-title">
               <header className="flex items-start justify-between gap-4 max-[680px]:flex-col">
                 <h2 id="chart-title" className="m-0 text-base font-[650] tracking-[-0.02em]">
-                  Consommation et prévision
+                  Consommation des dernières 24 heures
                 </h2>
                 <Legend
                   entries={[
                     { label: 'Mesuré', style: 'mesure' },
-                    { label: 'Prévision', style: 'prevision' },
                     { label: 'Seuil contractuel', style: 'seuil' },
                   ]}
                 />
               </header>
-              <ConsumptionChart series={summary.series} thresholdKw={summary.thresholdKw} showPeakValue />
+              {historyError ? (
+                <p className="mt-1.5 text-[13px] text-discret">Historique indisponible : {historyError}</p>
+              ) : (
+                <ConsumptionChart series={parkSeries} thresholdKw={summary.thresholdKw} />
+              )}
               {summary.comment && (
                 <p className="mt-1 text-[13px] leading-snug text-discret">{summary.comment}</p>
               )}
             </Card>
 
-            <SiteDetail sites={summary.sites} siteId={siteId ?? ''} onSelect={setSiteId} />
+            <SiteDetail
+              sites={summary.sites}
+              siteId={siteId ?? ''}
+              onSelect={setSiteId}
+              seriesBySite={seriesBySite}
+            />
           </>
         ) : (
           <Card>

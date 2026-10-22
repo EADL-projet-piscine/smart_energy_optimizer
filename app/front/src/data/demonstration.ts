@@ -11,15 +11,23 @@ const SITE2_FORECAST = [812, 900, 1040, 980, 860, 740, 640, 580, 540]
 const SITE_WEIGHTS = [680, 545, 470, 340]
 const TOTAL_WEIGHT = 2035
 
+const HOUR_MS = 3_600_000
+const SERIES_START = Date.now() - 24 * HOUR_MS
+
+/** Horodatage du point n, au pas horaire depuis il y a 24 heures. */
+function atIndex(index: number): string {
+  return new Date(SERIES_START + index * HOUR_MS).toISOString()
+}
+
 function buildSeries(
   measured: Array<number | null>,
   forecast: Array<number | null>,
-  forecastStartHour: number,
+  forecastStartIndex: number,
 ): SeriesPoint[] {
-  return Array.from({ length: 25 }, (_, hour) => ({
-    hour,
-    measuredKw: measured[hour] ?? null,
-    forecastKw: forecast[hour - forecastStartHour] ?? null,
+  return Array.from({ length: 25 }, (_, index) => ({
+    at: atIndex(index),
+    measuredKw: measured[index] ?? null,
+    forecastKw: forecast[index - forecastStartIndex] ?? null,
   }))
 }
 
@@ -71,7 +79,7 @@ function interruptedSeries(values: number[]): SeriesPoint[] {
 
 export function demoSummary(): ParkSummary {
   const [site3Series, site5Series, site7Series, site1Series] = otherSiteSeries()
-  const forecastStartHour = PARK_MEASURED.length - 1
+  const forecastStartIndex = PARK_MEASURED.length - 1
 
   const sites: Site[] = [
     {
@@ -89,9 +97,9 @@ export function demoSummary(): ParkSummary {
       series: buildSeries(
         Array.from({ length: 25 }, (_, hour) => SITE2_MEASURED[hour] ?? null),
         SITE2_FORECAST,
-        forecastStartHour,
+        forecastStartIndex,
       ),
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [
         {
@@ -129,7 +137,7 @@ export function demoSummary(): ParkSummary {
       isTransmitting: true,
       badge: null,
       series: site3Series,
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [],
       recommendations: [
@@ -154,7 +162,7 @@ export function demoSummary(): ParkSummary {
       isTransmitting: true,
       badge: null,
       series: site5Series,
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [],
       recommendations: [
@@ -179,7 +187,7 @@ export function demoSummary(): ParkSummary {
       isTransmitting: true,
       badge: null,
       series: site7Series,
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [],
       recommendations: [
@@ -204,7 +212,7 @@ export function demoSummary(): ParkSummary {
       isTransmitting: true,
       badge: null,
       series: site1Series,
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [],
       recommendations: [
@@ -229,7 +237,7 @@ export function demoSummary(): ParkSummary {
       isTransmitting: false,
       badge: null,
       series: interruptedSeries([180, 170, 165, 160, 170, 190, 230, 280, 320, 340, 350, 330, 300, 260]),
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [
         {
@@ -261,7 +269,7 @@ export function demoSummary(): ParkSummary {
       isTransmitting: false,
       badge: null,
       series: interruptedSeries([70, 65, 60, 58, 62, 80, 110, 140, 160, 170, 165, 150, 130, 110]),
-      peakHour: null,
+      peakAt: null,
       comment: null,
       alerts: [
         {
@@ -297,11 +305,11 @@ export function demoSummary(): ParkSummary {
     excludedSites: ['SITE004', 'SITE006'],
     thresholdKw: 2900,
     peakKw: null,
-    peakHour: null,
+    peakAt: null,
     series: buildSeries(
       Array.from({ length: 25 }, (_, hour) => PARK_MEASURED[hour] ?? null),
       PARK_FORECAST,
-      forecastStartHour,
+      forecastStartIndex,
     ),
     comment: null,
     sites,

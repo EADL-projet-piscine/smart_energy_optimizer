@@ -1,12 +1,12 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from smart_energy_ml.ingestion.enervision_client import EnerVisionClient
 
 
 def main():
-    collected_at = datetime.now(timezone.utc)
+    collected_at = datetime.now(UTC)
 
     # Marge de sécurité pour éviter un décalage avec l'horloge du serveur
     end = collected_at - timedelta(minutes=5)
@@ -34,9 +34,7 @@ def main():
                 "readings": readings,
             }
 
-            filename = (
-                f"{site_id}_{collected_at.strftime('%Y%m%d_%H%M%S')}.json"
-            )
+            filename = f"{site_id}_{collected_at.strftime('%Y%m%d_%H%M%S')}.json"
 
             path = output_dir / filename
 

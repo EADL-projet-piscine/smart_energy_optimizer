@@ -1,1 +1,5 @@
+# Fins de ligne LF pour tous les fichiers texte, sur tous les postes.
 * text=auto eol=lf
+# Scripts shell et hooks Git : LF obligatoire (le sh de Git et WSL échouent sur les retours chariot).
+*.sh text eol=lf
+.githooks/* text eol=lf

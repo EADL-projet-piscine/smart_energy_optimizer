@@ -8,6 +8,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+coverage.xml
+
+# --- Outils téléchargés par scripts/check.sh ---
+.tools/
 htmlcov/
 
 # --- Environnements virtuels ---
@@ -32,7 +36,9 @@ ml/data
 
 # --- IDE ---
 .idea/
-.vscode/
+# Seule la tâche qui active les hooks Git est partagée.
+.vscode/*
+!.vscode/tasks.json
 
 # --- Front ---
 node_modules/

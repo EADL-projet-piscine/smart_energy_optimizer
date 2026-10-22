@@ -21,13 +21,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "ruff",
     "jupyterlab",
     "ipykernel",
     "matplotlib",
     "httpx",
     "ruff==0.17.1",
-    "pre-commit",
+    "pytest-cov",
 ]
 
 [tool.setuptools.packages.find]

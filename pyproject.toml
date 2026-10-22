@@ -18,7 +18,7 @@ dev = [
     "pytest",
     "httpx",
     "ruff==0.17.1",
-    "pre-commit",
+    "pytest-cov",
 ]
 
 [tool.setuptools.packages.find]
@@ -39,3 +39,17 @@ pythonpath = [
     "app/back/src",
     "ml/src",
 ]
+markers = [
+    "db: nécessite une base PostgreSQL joignable",
+]
+
+[tool.coverage.run]
+source = ["smart_energy_app", "smart_energy_ml"]
+
+[tool.coverage.report]
+# Seuil provisoire, à valider en équipe (ticket #24).
+fail_under = 70
+show_missing = true
+
+[tool.coverage.html]
+directory = "htmlcov"

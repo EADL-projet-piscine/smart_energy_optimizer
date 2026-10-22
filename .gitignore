@@ -66,3 +66,18 @@ infra/terraform.rc
 
 # WSL : flux Windows sur les fichiers téléchargés
 *:Zone.Identifier
+
+# Rapports de couverture
+coverage/
+htmlcov/
+.coverage
+
+# Rapports de couverture
+coverage/
+htmlcov/
+.coverage
+
+# Rapports de couverture
+coverage/
+htmlcov/
+.coverage

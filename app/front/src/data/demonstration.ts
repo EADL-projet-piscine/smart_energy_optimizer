@@ -53,10 +53,14 @@ function otherSiteSeries(): SeriesPoint[][] {
   const forecasts: number[][] = [[], [], [], []]
 
   PARK_MEASURED.forEach((value, index) => {
-    distribute(value - SITE2_MEASURED[index]).forEach((part, site) => columns[site].push(part))
+    distribute(value - SITE2_MEASURED[index]).forEach((part, site) => {
+      columns[site].push(part)
+    })
   })
   PARK_FORECAST.forEach((value, index) => {
-    distribute(value - SITE2_FORECAST[index]).forEach((part, site) => forecasts[site].push(part))
+    distribute(value - SITE2_FORECAST[index]).forEach((part, site) => {
+      forecasts[site].push(part)
+    })
   })
 
   return columns.map((measured, index) => {

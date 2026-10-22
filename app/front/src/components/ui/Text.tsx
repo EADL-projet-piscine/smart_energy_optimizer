@@ -52,11 +52,13 @@ export function SiteText({ text }: { text: string }) {
   const parts = text.split(/(SITE\d+)/g)
   return parts.map((part, index) =>
     /^SITE\d+$/.test(part) ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: fragments d'un split, jamais réordonnés
       <strong key={`${part}-${index}`} className="font-bold text-encre">
         {part}
       </strong>
     ) : (
-      <span key={index}>{part}</span>
+      // biome-ignore lint/suspicious/noArrayIndexKey: fragments d'un split, jamais réordonnés
+      <span key={`${part}-${index}`}>{part}</span>
     ),
   )
 }

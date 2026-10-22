@@ -28,6 +28,7 @@ export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
   const [toastClosed, setToastClosed] = useState(false)
   const [highlighted, setHighlighted] = useState(false)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclencheur, pas une valeur lue
   useEffect(() => {
     setToastClosed(false)
     setHighlighted(false)

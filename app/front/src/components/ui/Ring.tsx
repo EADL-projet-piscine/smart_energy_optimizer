@@ -8,7 +8,7 @@ export function Ring({ percentage }: { percentage: number }) {
 
   return (
     <div className="relative size-[74px] shrink-0" aria-hidden="true">
-      <svg viewBox="0 0 72 72" className="size-[74px] -rotate-90">
+      <svg viewBox="0 0 72 72" className="size-[74px] -rotate-90" aria-hidden="true">
         <circle cx="36" cy="36" r={radius} className="fill-none stroke-piste stroke-[7]" />
         <circle
           cx="36"

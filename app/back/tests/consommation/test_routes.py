@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from smart_energy_app.config import settings
 from smart_energy_app.consommation.service import state
 from smart_energy_app.main import app
 
@@ -63,3 +64,16 @@ def test_flags_stale_data():
 
     assert response.status_code == 200
     assert response.json()["stale"] is True
+
+
+def test_announces_next_measurement(monkeypatch):
+    """next_at doit refléter la cadence réelle : c'est dessus que le client se cale."""
+    monkeypatch.setattr(settings, "consumption_refresh_s", 30)
+    state.data = SUMMARY
+    state.fetched_at = datetime.now(UTC)
+
+    with TestClient(app) as client:
+        body = client.get("/api/consommation/resume").json()
+
+    ecart = datetime.fromisoformat(body["next_at"]) - datetime.fromisoformat(body["fetched_at"])
+    assert ecart == timedelta(seconds=30)

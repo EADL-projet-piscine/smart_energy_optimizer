@@ -1,8 +1,10 @@
 import logging
+from datetime import timedelta
 
 import httpx
 from fastapi import APIRouter, HTTPException
 
+from smart_energy_app.config import settings
 from smart_energy_app.consommation.historique import load_history
 from smart_energy_app.consommation.service import state
 
@@ -18,9 +20,13 @@ def consumption_summary() -> dict:
             status_code=503,
             detail="Aucune mesure disponible : l'API source n'a pas encore répondu.",
         )
+    # next_at annonce quand la prochaine mesure sera disponible : le client peut
+    # se caler dessus au lieu de sonder à l'aveugle.
+    next_at = state.fetched_at + timedelta(seconds=settings.consumption_refresh_s)
     return {
         "data": state.data,
         "fetched_at": state.fetched_at.isoformat(),
+        "next_at": next_at.isoformat(),
         "stale": state.is_stale(),
     }
 

@@ -265,18 +265,14 @@ describe('completeSite — commentaire', () => {
   })
 
   it('annonce le franchissement du seuil avec son heure', () => {
-    const resultat = completeSite(
-      site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 900)] }),
-    )
+    const resultat = completeSite(site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 900)] }))
 
     expect(resultat.comment).toContain('franchi')
     expect(resultat.comment).toContain('900')
   })
 
   it('rassure quand la pointe reste sous le seuil', () => {
-    const resultat = completeSite(
-      site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 300)] }),
-    )
+    const resultat = completeSite(site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 300)] }))
 
     expect(resultat.comment).toContain('reste sous le seuil')
   })

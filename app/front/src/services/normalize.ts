@@ -114,16 +114,14 @@ function parseRecommendation(value: unknown, index: number): Recommendation | nu
     title: title ?? 'Recommandation',
     detail: detail ?? '',
     saving:
-      savingLabel ??
-      (savingEur === null ? null : `−${new Intl.NumberFormat('fr-FR').format(savingEur)} €`),
+      savingLabel ?? (savingEur === null ? null : `−${new Intl.NumberFormat('fr-FR').format(savingEur)} €`),
   }
 }
 
 function parseSite(value: unknown, index: number): Site | null {
   if (!isObject(value)) return null
   const id =
-    toText(pick(value, ['id', 'site_id', 'code', 'site_code'])) ??
-    `SITE${String(index + 1).padStart(3, '0')}`
+    toText(pick(value, ['id', 'site_id', 'code', 'site_code'])) ?? `SITE${String(index + 1).padStart(3, '0')}`
   const series = parseSeries(
     pick(value, ['serie', 'series', 'hourly', 'points', 'timeline', 'history', 'mesures', 'measurements']),
   )
@@ -158,7 +156,13 @@ function parseSite(value: unknown, index: number): Site | null {
       pick(value, ['forecast_2h_kw', 'forecast_plus_2h_kw', 'prevu_2h_kw', 'prevision_2h_kw', 'forecast_kw']),
     ),
     thresholdKw: toNumber(
-      pick(value, ['threshold_kw', 'contractual_threshold_kw', 'seuil_kw', 'seuil_contractuel_kw', 'threshold']),
+      pick(value, [
+        'threshold_kw',
+        'contractual_threshold_kw',
+        'seuil_kw',
+        'seuil_contractuel_kw',
+        'threshold',
+      ]),
     ),
     receivedCount: toNumber(
       pick(value, ['measures_received', 'mesures_recues', 'received', 'points_received']),

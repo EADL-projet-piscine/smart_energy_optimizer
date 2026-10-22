@@ -4,9 +4,7 @@ import { Toast } from '../../../components/ui/Toast'
 
 describe('Toast', () => {
   it('affiche le titre et le message', () => {
-    render(
-      <Toast severity="critique" title="Dépassement prévu" message="1 040 kW" onClose={vi.fn()} />,
-    )
+    render(<Toast severity="critique" title="Dépassement prévu" message="1 040 kW" onClose={vi.fn()} />)
 
     expect(screen.getByText('Dépassement prévu')).toBeInTheDocument()
     expect(screen.getByText('1 040 kW')).toBeInTheDocument()

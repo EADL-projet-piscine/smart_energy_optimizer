@@ -35,10 +35,7 @@ describe('loadHistory', () => {
   it('trie chaque site dans le temps', async () => {
     const { bySite } = await loadHistory()
 
-    expect(bySite.SITE001.map((point) => point.at)).toEqual([
-      '2026-10-21T10:00:00Z',
-      '2026-10-21T11:00:00Z',
-    ])
+    expect(bySite.SITE001.map((point) => point.at)).toEqual(['2026-10-21T10:00:00Z', '2026-10-21T11:00:00Z'])
   })
 
   it('garde les mesures absentes à null', async () => {

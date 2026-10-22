@@ -82,10 +82,7 @@ export function lastMeasuredIndex(series: SeriesPoint[]): number {
 }
 
 /** Pointe prévue, éventuellement restreinte aux points postérieurs à `afterIndex`. */
-export function forecastPeak(
-  series: SeriesPoint[],
-  afterIndex = -1,
-): { at: string; value: number } | null {
+export function forecastPeak(series: SeriesPoint[], afterIndex = -1): { at: string; value: number } | null {
   let best: { at: string; value: number } | null = null
   series.forEach((point, index) => {
     if (point.forecastKw === null || index <= afterIndex) return

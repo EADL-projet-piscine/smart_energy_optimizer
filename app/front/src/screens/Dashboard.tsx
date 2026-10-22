@@ -141,7 +141,9 @@ export function Dashboard() {
                 value={summary.dailyCostEur === null ? '—' : formatNumber(summary.dailyCostEur)}
                 unit={summary.dailyCostEur === null ? undefined : '€'}
                 size="lg"
-                detail={summary.co2Tons === null ? '—' : `${formatNumber(summary.co2Tons, 1)} t CO₂ équivalent`}
+                detail={
+                  summary.co2Tons === null ? '—' : `${formatNumber(summary.co2Tons, 1)} t CO₂ équivalent`
+                }
               />
             </section>
 

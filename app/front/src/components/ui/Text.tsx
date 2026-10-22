@@ -44,7 +44,9 @@ export function Caption({ children }: { children: ReactNode }) {
 }
 
 export function Subtitle({ children }: { children: ReactNode }) {
-  return <h4 className="mt-3 mb-2 text-[13px] font-[650] tracking-[0.04em] text-discret uppercase">{children}</h4>
+  return (
+    <h4 className="mt-3 mb-2 text-[13px] font-[650] tracking-[0.04em] text-discret uppercase">{children}</h4>
+  )
 }
 
 /** Met en gras les identifiants de site (SITE001…) trouvés dans un texte. */

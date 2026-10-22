@@ -287,7 +287,8 @@ export function demoSummary(): ParkSummary {
         {
           id: 'reco-site006',
           title: 'Contrôler l’alimentation du compteur',
-          detail: 'Le relevé est interrompu. Le site reste exclu du total tant que la chaîne de mesure est coupée.',
+          detail:
+            'Le relevé est interrompu. Le site reste exclu du total tant que la chaîne de mesure est coupée.',
           saving: null,
         },
       ],

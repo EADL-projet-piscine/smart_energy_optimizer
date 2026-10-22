@@ -87,7 +87,9 @@ export function ConsumptionChart({ series, thresholdKw, showPeakValue = false, c
             scale="time"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(time: number) =>
-              time === lastTime ? formatTime(new Date(time).toISOString()) : formatHour(new Date(time).toISOString())
+              time === lastTime
+                ? formatTime(new Date(time).toISOString())
+                : formatHour(new Date(time).toISOString())
             }
             tickLine={false}
             axisLine={false}

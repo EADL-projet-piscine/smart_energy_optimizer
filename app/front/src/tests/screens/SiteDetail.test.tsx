@@ -128,9 +128,7 @@ describe('SiteDetail — recommandations', () => {
   it('affiche les recommandations numérotées avec leur gain', () => {
     afficher([
       site({
-        recommendations: [
-          { id: 'r1', title: 'Décaler le four', detail: 'Après 21 h', saving: '−180 €' },
-        ],
+        recommendations: [{ id: 'r1', title: 'Décaler le four', detail: 'Après 21 h', saving: '−180 €' }],
       }),
     ])
 

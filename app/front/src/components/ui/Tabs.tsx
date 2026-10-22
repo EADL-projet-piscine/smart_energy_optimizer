@@ -27,7 +27,12 @@ export function Tabs({ entries, active, panelId, label, onSelect }: Props) {
   }
 
   return (
-    <div role="tablist" aria-label={label} onKeyDown={handleKeyDown} className="mt-4 flex gap-2 overflow-x-auto pb-0.5">
+    <div
+      role="tablist"
+      aria-label={label}
+      onKeyDown={handleKeyDown}
+      className="mt-4 flex gap-2 overflow-x-auto pb-0.5"
+    >
       {entries.map((entry) => {
         const selected = entry.id === active
         return (

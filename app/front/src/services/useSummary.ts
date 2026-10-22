@@ -51,9 +51,7 @@ export function useSummary() {
           setError(null)
           setSummary(received)
           setSiteId((current) =>
-            current && received.sites.some((site) => site.id === current)
-              ? current
-              : initialSiteId(received),
+            current && received.sites.some((site) => site.id === current) ? current : initialSiteId(received),
           )
           schedule(nextAt)
         })

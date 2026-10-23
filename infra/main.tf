@@ -15,6 +15,11 @@ resource "azurerm_storage_account" "sa" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
 
+  # Identité managée : le compte accède aux autres services Azure sans clé ni mot de passe.
+  identity {
+    type = "SystemAssigned"
+  }
+
   tags = {
     user = var.student_id
   }
@@ -61,7 +66,9 @@ resource "azurerm_network_interface" "nic" {
     subnet_id                     = azurerm_subnet.subnet.id
     private_ip_address_allocation = "Static"
     private_ip_address            = "10.241.${var.address_index}.4"
-    public_ip_address_id          = azurerm_public_ip.public_ip.id
+    # IP publique voulue : c'est par elle que l'on accède à la VM en SSH depuis son poste.
+    # Le groupe de sécurité ci-dessous limite le port 22 à la seule adresse var.ip.
+    public_ip_address_id = azurerm_public_ip.public_ip.id
   }
 
   tags = {
@@ -79,6 +86,11 @@ resource "azurerm_linux_virtual_machine" "applicatif-vm" {
   network_interface_ids = [
     azurerm_network_interface.nic.id,
   ]
+
+  # Identité managée : la VM accède aux autres services Azure sans clé ni mot de passe.
+  identity {
+    type = "SystemAssigned"
+  }
 
   admin_ssh_key {
     username   = var.admin_username

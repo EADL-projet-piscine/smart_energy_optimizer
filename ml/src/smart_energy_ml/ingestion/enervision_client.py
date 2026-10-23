@@ -55,7 +55,15 @@ class EnerVisionClient:
             "/api/v1/readings",
             params=params,
         )
+        return self._as_list(response)
 
+    def get_sites(self) -> list[dict[str, Any]]:
+        """Récupère les métadonnées des sites."""
+        response = self.client.get("/api/v1/sites")
+        return self._as_list(response)
+
+    def _as_list(self, response: httpx.Response) -> list[dict[str, Any]]:
+        """Contrôle la réponse HTTP et exige une liste JSON."""
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError:

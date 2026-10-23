@@ -46,7 +46,7 @@ function sumPark(bySite: Record<string, SeriesPoint[]>): SeriesPoint[] {
 }
 
 export async function loadHistory(signal?: AbortSignal): Promise<History> {
-  const body = await fetchJson('/api/consommation/historique', signal)
+  const body = await fetchJson('/api/consommations/historique', signal)
   const sites = (body as { sites?: unknown })?.sites
   if (typeof sites !== 'object' || sites === null) {
     throw new Error('Forme de réponse non reconnue')

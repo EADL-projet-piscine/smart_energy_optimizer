@@ -106,7 +106,7 @@ mode développement (étape suivante).
 Le front a besoin de l'API métier en marche : vérifiez-le avant.
 
 ```bash
-curl -s localhost:8000/api/consommation/resume | head -c 200
+curl -s localhost:8000/api/consommations | head -c 200
 ```
 
 Une réponse JSON commençant par `{"data":` signifie que tout est prêt. Un
@@ -460,7 +460,7 @@ source manquent ou sont faux. Vérifiez `ENERVISION_USER` et
 `ENERVISION_PASSWORD` dans `app/back/.env`, et relancez l'application : le
 fichier n'est lu qu'au démarrage.
 
-**`/api/consommation/resume` répond 503** — aucune mesure n'a encore été
+**`/api/consommations` répond 503** — aucune mesure n'a encore été
 récupérée. Regardez les logs de l'application : le rafraîchissement tourne
 toutes les minutes et journalise chaque tentative.
 
@@ -468,7 +468,7 @@ toutes les minutes et journalise chaque tentative.
 l'API métier. Dans l'ordre :
 
 1. l'API métier répond-elle ? `curl -s localhost:8000/health`
-2. a-t-elle des mesures ? `curl -s localhost:8000/api/consommation/resume | head -c 200` — un 503 renvoie aux deux entrées précédentes, le plus souvent un `.env` absent ou sans identifiants
+2. a-t-elle des mesures ? `curl -s localhost:8000/api/consommations | head -c 200` — un 503 renvoie aux deux entrées précédentes, le plus souvent un `.env` absent ou sans identifiants
 3. le proxy pointe-t-il au bon endroit ? `VITE_API_PROXY_TARGET` dans
    `app/front/.env`, puis relancer `npm run dev`
 

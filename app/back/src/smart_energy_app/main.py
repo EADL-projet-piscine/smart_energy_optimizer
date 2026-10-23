@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
@@ -23,8 +23,15 @@ async def lifespan(app: FastAPI):
         logger.warning("Démarrage sans base de données : vérifier DATABASE_URL")
 
     task = asyncio.create_task(refresh_loop())
-    yield
-    task.cancel()
+    try:
+        yield
+    finally:
+        # Annuler ne suffit pas : sans attendre la tâche, asyncio signale au
+        # mieux « Task was destroyed but it is pending » à l'arrêt, au pire
+        # interrompt un appel HTTP en cours.
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(
@@ -34,7 +41,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(consommation_router, prefix="/api/consommation", tags=["Consommation"])
+app.include_router(consommation_router, prefix="/api/consommations", tags=["Consommations"])
 
 
 @app.get("/health")

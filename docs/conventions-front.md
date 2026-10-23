@@ -21,6 +21,14 @@ Un composant n'appelle jamais `fetch` directement : il consomme un hook
 (`useSummary`, `useHistory`) qui s'en charge. Cela permet de tester toute
 la logique de données sans monter de composant.
 
+La frontière entre un service et un hook est celle du **quoi** et du
+**quand**. `history.ts` sait aller chercher l'historique et le transformer
+en série affichable : il ignore React, prend un signal d'annulation et rend
+une promesse. `useHistory.ts` décide du moment : premier appel au montage,
+rafraîchissement périodique, annulation au démontage, et exposition de
+l'état au composant. Mettre la transformation dans le hook obligerait à
+monter un composant pour tester une addition.
+
 ## Structure
 
 ```
@@ -85,6 +93,22 @@ chaîne ISO. Un entier d'heure ne distingue pas 9h hier de 9h aujourd'hui :
 sur une fenêtre glissante, trier par heure relie deux points séparés de
 vingt-trois heures.
 
+## Endpoints consommés
+
+| Service | Endpoint |
+|---|---|
+| `summary.ts` | `GET /api/consommations` |
+| `history.ts` | `GET /api/consommations/historique` |
+
+Les chemins sont écrits dans les services, jamais dans un composant. Ce sont
+des **chaînes de caractères** : ni TypeScript ni Biome ne les vérifie, et une
+faute de frappe produit un 404 que rien ne signale à la compilation. Après
+toute modification d'un chemin, ouvrir `/docs` côté back pour comparer les
+URL complètes, puis regarder l'onglet réseau du navigateur.
+
+La convention de nommage des endpoints est décrite dans
+`conventions-back.md` : collection au pluriel, vue calculée au singulier.
+
 ## Graphiques
 
 Les graphiques utilisent **Recharts**. Les couleurs passent par les
@@ -105,7 +129,7 @@ mesures.
 | Résumé temps réel | Calée sur `next_at` annoncé par le serveur | `useSummary.ts` |
 | Historique 24 h | 5 minutes | `useHistory.ts` |
 
-Le serveur annonce dans `/resume` l'heure de sa prochaine mesure
+Le serveur annonce dans `/api/consommations` l'heure de sa prochaine mesure
 (`next_at`). Le client planifie son appel juste après, au lieu de sonder à
 l'aveugle : une mesure arrive à l'écran deux à trois secondes après avoir
 été collectée, pour un seul appel par cycle.
@@ -164,7 +188,8 @@ ligne concernée. Sur deux lignes, Biome l'ignore sans le signaler.
 courants. Ni l'un ni l'autre ne voit :
 
 - le **contenu des chaînes de caractères** — un texte d'interface cassé par
-  un renommage reste valide pour le compilateur
+  un renommage, ou une URL d'endpoint erronée, reste valide pour le
+  compilateur
 - les **accès hors bornes** — `series[index]` est typé `SeriesPoint`, jamais
   `undefined`, et a déjà provoqué un écran blanc
 
@@ -208,6 +233,11 @@ plus utiles de cette suite vérifient qu'aucun chiffre ne s'affiche quand
 l'API ne répond pas, qu'un site muet ne compte pas pour zéro dans le total
 du parc, et qu'un horodatage sans fuseau est bien lu comme de l'UTC — trois
 erreurs qui ont réellement coûté du temps.
+
+Comme le client HTTP est simulé, **aucun test ne vérifie l'URL réellement
+appelée**. C'est le trou connu de cette suite, et c'est exactement par là
+qu'est passé le bug du dashboard affichant des données de démonstration.
+Seul un test de bout en bout le fermerait.
 
 ### Couverture
 

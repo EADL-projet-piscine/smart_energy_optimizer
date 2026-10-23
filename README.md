@@ -438,6 +438,7 @@ affiche sa couverture dans le résumé du run :
 | `tests-back` | `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`) |
 | `tests-ml` | `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
 | `tests-front` | Node 22 et `TZ=Europe/Paris` : `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
+| `sonar` | Analyse SonarQube des trois projets, avec la couverture des jobs `tests-*` ; échoue si le *quality gate* est rouge. Ignoré tant que Sonar n'est pas configuré (voir ci-dessous) |
 | `build` | Une fois `lint`, `scan` et les trois jobs `tests-*` réussis : construit les images `back` et `ml`, les scanne avec Trivy |
 | `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
 | `publish` | Publie les images sur GHCR (depuis `main` uniquement) |
@@ -466,6 +467,41 @@ pull request dont la CI est rouge.**
 tests avant de pousser : une résolution de conflit peut ramener du code qui
 contredit vos modifications, sans qu'aucun marqueur n'apparaisse dans le
 fichier.
+
+### SonarQube
+
+Le job `sonar` analyse le back, le service ML, le front et `infra/` (périmètre
+et exclusions : `sonar-project.properties`). Il ne bloque pas `build` : une
+panne de Sonar n'empêche pas de construire les images.
+
+**Activation, une seule fois** (par un administrateur du dépôt) :
+
+1. Sur [SonarQube Cloud](https://sonarcloud.io), importer le dépôt GitHub : cela
+   crée le projet et donne sa clé et celle de l'organisation. Pour un
+   SonarQube Server auto-hébergé, créer le projet à la main.
+2. Dans *Settings → Secrets and variables → Actions* du dépôt GitHub :
+   - secret `SONAR_TOKEN` : jeton généré dans Sonar (*My Account → Security*) ;
+   - variable `SONAR_PROJECT_KEY` : clé du projet ;
+   - variable `SONAR_ORGANIZATION` : clé de l'organisation (Cloud seulement) ;
+   - variable `SONAR_HOST_URL` : seulement pour un Server (Cloud par défaut).
+3. Dans Sonar, désactiver l'« analyse automatique » du projet : elle ferait
+   double emploi avec la CI et n'a pas la couverture.
+
+Tant que le secret et la clé de projet manquent, les étapes sont ignorées et
+le job reste vert (message *notice* dans le run). Il l'est aussi sur les pull
+requests venues d'un fork, qui n'ont accès à aucun secret.
+
+**Couverture.** Sonar lit `coverage.xml` (back, ML) et `lcov.info` (front), produits
+par les jobs `tests-*`. Leurs chemins sont relatifs au projet, alors que Sonar
+les résout depuis la racine du dépôt : le job les préfixe, puis échoue si l'un
+d'eux ne correspond à aucun fichier. Sans ce contrôle, Sonar afficherait 0 % de
+couverture sans le moindre message.
+
+**Quality gate.** Le job attend le verdict de Sonar (`sonar.qualitygate.wait`) et
+échoue s'il est rouge. Le *quality gate* par défaut (« Sonar way », réglable
+dans Sonar) porte sur le **nouveau code** : couverture, duplication et nouveaux
+bugs ou failles. Pour ne pas bloquer, retirer cet argument dans `ci.yml` :
+l'analyse reste publiée et commentée sur la pull request.
 
 ## Configuration
 

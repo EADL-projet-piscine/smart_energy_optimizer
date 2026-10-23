@@ -45,6 +45,9 @@ node_modules/
 dist/
 .vite/
 
+# --- Analyse SonarQube (dossier de travail du scanner) ---
+.scannerwork/
+
 # --- Système ---
 .DS_Store
 Thumbs.db

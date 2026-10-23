@@ -227,13 +227,16 @@ uvicorn smart_energy_ml.api.main:app --reload --port 8001
 
 ### Tests Python
 
-Depuis la racine du dépôt, environnement virtuel activé avec les dépendances
-dev des deux services :
+Les tests Python se lancent projet par projet, comme les jobs `tests-back` et
+`tests-ml` de la CI, environnement virtuel activé avec les dépendances dev :
 
 ```bash
-pytest                 # tests du back et du service ML
-pytest --cov           # avec la couverture (seuil : 70 %)
+cd app/back && pytest --cov    # back, seuil de couverture : 80 %
+cd ml && pytest --cov          # service ML, seuil de couverture : 80 %
 ```
+
+Depuis la racine, `pytest` lance les deux suites d'un coup (`pytest --cov` :
+même seuil de 80 %).
 
 Rappel de l'activation : `source .venv/bin/activate` sous Linux, macOS et
 WSL, `.venv\Scripts\Activate.ps1` sous PowerShell. L'invite doit afficher
@@ -251,15 +254,18 @@ ces tests au lieu de les ignorer.
 
 #### Couverture
 
-Le seuil minimal est fixé dans `pyproject.toml` (`[tool.coverage.report]`,
-`fail_under = 70`) : en dessous, `pytest --cov` échoue. Le rapport HTML est
-écrit dans `htmlcov/`.
+Chaque projet fixe son périmètre et son seuil dans son `pyproject.toml`
+(`[tool.coverage.*]`) : le paquet `smart_energy_app` pour le back,
+`smart_energy_ml` pour le service ML, 80 % minimum. En dessous, `pytest --cov`
+échoue, en local comme en CI. Le rapport HTML est écrit dans `htmlcov/`, et la
+CI affiche le tableau de couverture dans le résumé de chaque run.
 
 ### Tests du front
 
 Tests unitaires [Vitest](https://vitest.dev/), dans `app/front/src/tests/`,
 en miroir de l'arborescence du code. Aucun appel réseau réel : le module
-`api/client` est simulé.
+`api/client` est simulé. Node 22, la version utilisée par la CI, est fixée
+dans `app/front/.nvmrc` (`nvm use` la sélectionne).
 
 ```bash
 cd app/front
@@ -270,33 +276,57 @@ npm run test:coverage     # avec la couverture ; rapport HTML dans coverage/
 Les scripts fixent `TZ=Europe/Paris`. Ce n'est pas décoratif : les fonctions
 de formatage convertissent en heure locale, donc sans fuseau fixé les tests
 passeraient sur une machine française et échoueraient en CI, qui tourne en
-UTC.
+UTC. Le job `tests-front` fixe aussi `TZ` dans son environnement.
 
 Les seuils de couverture sont dans `app/front/vitest.config.ts`. Le
 périmètre couvre tout `src/`, fichiers non testés compris, à l'exception du
-point d'entrée, des types et des données de démonstration.
+point d'entrée, des types et des données de démonstration. Le job CI affiche
+le tableau dans le résumé du run et publie le rapport HTML (artefact
+`front-coverage`). `npm run build` vérifie aussi les types des fichiers de
+test.
 
 ### Test de charge
 
-`tests/perf/health.js` est un scénario [k6](https://grafana.com/docs/k6/)
-sur `/health` du back et du service ML : 10 utilisateurs virtuels pendant
-30 secondes. Il échoue si :
+`tests/perf/load.js` est un scénario [k6](https://grafana.com/docs/k6/) :
+10 utilisateurs virtuels pendant 30 secondes appellent `/health` du back et
+du service ML, et la route métier `/api/consommation/resume` que le dashboard
+interroge toutes les 10 secondes. Il échoue si :
 
 | Seuil | Valeur |
 |---|---|
-| Temps de réponse p95 | < 500 ms |
+| Temps de réponse p95, toutes routes | < 500 ms |
+| Temps de réponse p95, route métier seule | < 500 ms |
 | Requêtes en erreur | < 1 % |
 | Vérifications réussies | > 99 % |
 
-Pour le lancer en local, stack démarrée (`docker compose up -d --build`) :
+La route métier a son propre seuil : des `/health` rapides ne peuvent pas
+masquer une route métier lente. Ses vérifications portent aussi sur le
+contenu : sites relayés et données à jour (`stale: false`).
+
+**Doublure de l'API EnerVision.** En CI, le back ne contacte pas l'API
+réelle : elle exige des identifiants et ne doit pas encaisser le trafic d'un
+test de charge. `docker-compose.ci.yml` ajoute un service `enervision-mock`
+(nginx) qui sert une réponse d'exemple de `/api/v1/stats/summary`
+(`tests/perf/enervision-mock/summary.json` : même format que l'API réelle,
+valeurs fictives). Le back démarre une fois la doublure prête, et le job
+attend que la route métier ait des données avant de lancer k6.
+
+**Rejouer le job `perf` en local**, avec la même stack que la CI (doublure
+comprise) et des images construites sur le poste. Arrêtez d'abord la stack de
+développement : les noms de conteneurs sont fixes. `-p enervision-ci` sépare
+la base de ce test de votre base de développement.
 
 ```bash
-docker run --rm --network host -v "$PWD/tests/perf:/scripts:ro" grafana/k6:2.3.0 run /scripts/health.js
+export BACK_IMAGE=enervision-back:local ML_IMAGE=enervision-ml:local
+docker compose -p enervision-ci -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+docker run --rm --network enervision-ci_default -e BACK_URL=http://back:8000 -e ML_URL=http://ml:8000 -v "$PWD/tests/perf:/scripts:ro" grafana/k6:2.3.0 run /scripts/load.js
+docker compose -p enervision-ci -f docker-compose.yml -f docker-compose.ci.yml down -v
 ```
 
-`--network host` ne fonctionne que sous Linux et WSL. Sous Docker Desktop
-(Windows, macOS), remplacez-le par
-`-e BACK_URL=http://host.docker.internal:8000 -e ML_URL=http://host.docker.internal:8001`.
+Sous PowerShell, remplacez la première ligne par
+`$env:BACK_IMAGE = "enervision-back:local"; $env:ML_IMAGE = "enervision-ml:local"`
+et `$PWD` par `${PWD}`. k6 rejoint le réseau de la stack : la commande
+fonctionne à l'identique sous Linux, macOS et Windows.
 
 ## Qualité de code
 
@@ -369,26 +399,32 @@ local.
 ## Intégration continue
 
 Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request et à
-chaque merge dans `main` :
+chaque merge dans `main`. `lint`, `scan` et les jobs `tests-*` tournent en
+parallèle ; un seul test en échec fait échouer son job, et chaque job de tests
+affiche sa couverture dans le résumé du run :
 
 | Job | Rôle |
 |---|---|
-| `lint` | `sh scripts/check.sh` (mêmes contrôles que les hooks locaux), puis `pytest` avec couverture, contre un service PostgreSQL 16 |
+| `lint` | `sh scripts/check.sh`, les mêmes contrôles que les hooks locaux |
 | `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
-| `build` | Construit les images `back` et `ml`, les scanne avec Trivy |
-| `perf` | Lance la stack avec ces images et exécute le test de charge k6 |
+| `tests-back` | `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`) |
+| `tests-ml` | `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
+| `tests-front` | Node 22 et `TZ=Europe/Paris` : `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
+| `build` | Une fois `lint`, `scan` et les trois jobs `tests-*` réussis : construit les images `back` et `ml`, les scanne avec Trivy |
+| `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
 | `publish` | Publie les images sur GHCR (depuis `main` uniquement) |
 
-Chaque étape attend la réussite de la précédente : `lint` + `scan` →
-`build` → `perf` → `publish`. Une image n'est donc publiée qu'après avoir
-passé les tests, le scan de sécurité et le test de charge.
+Chaque étape attend la réussite de la précédente : `lint`, `scan` et les
+trois jobs `tests-*` → `build` → `perf` → `publish`. Une image n'est donc
+publiée qu'après avoir passé les tests, le scan de sécurité et le test de
+charge.
 
 Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour les
 images, seules celles qui ont un correctif disponible sont bloquantes.
 
 Rapports publiés en artefacts sur chaque run (onglet *Actions* → run →
-*Artifacts*) : `coverage` (HTML + XML) et `k6-results` (résumé JSON du test
-de charge).
+*Artifacts*) : `back-coverage` et `ml-coverage` (HTML + XML),
+`front-coverage` (HTML) et `k6-results` (résumé JSON du test de charge).
 
 Les images publiées sont étiquetées avec le SHA du commit et `latest` :
 

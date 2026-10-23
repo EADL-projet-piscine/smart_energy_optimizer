@@ -176,6 +176,10 @@ Les tests vivent dans `src/tests/`, en miroir de l'arborescence du code :
 
 ```
 src/tests/
+├── api/
+│   └── client.test.ts
+├── components/
+│   └── ConsumptionChart.test.tsx
 ├── components/ui/
 │   ├── Badge.test.ts
 │   ├── Tabs.test.tsx
@@ -186,7 +190,9 @@ src/tests/
 │   └── SiteDetail.test.tsx
 └── services/
     ├── format.test.ts
-    └── history.test.ts
+    ├── history.test.ts
+    ├── normalize.test.ts
+    └── summary.test.ts
 ```
 
 Ils tournent avec **Vitest** et ne font **aucun appel réseau réel** : le
@@ -216,9 +222,11 @@ Les seuils sont dans `vitest.config.ts`. Le périmètre couvre **tout
 types et des données de démonstration : une couverture qui ne mesure que les
 fichiers déjà testés ne mesure rien.
 
-Seul ce qui est réellement couvert est verrouillé. `normalize.ts`,
-`summary.ts` et les hooks `use*` sont encore à zéro ; le seuil sera étendu
-quand leurs tests arriveront.
+Seul ce qui est réellement couvert est verrouillé. Les hooks `use*` sont
+encore à zéro ; le seuil sera étendu quand leurs tests arriveront.
+
+La CI (job `tests-front`) lance `npm run test:coverage` : un seuil non tenu
+fait échouer la pull request.
 
 ## Avant de pousser
 

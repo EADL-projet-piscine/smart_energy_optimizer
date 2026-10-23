@@ -47,8 +47,9 @@ markers = [
 source = ["smart_energy_app", "smart_energy_ml"]
 
 [tool.coverage.report]
-# Seuil provisoire, à valider en équipe (ticket #24).
-fail_under = 70
+# Combined run from the repository root. The CI checks each project on its own, with the
+# same threshold (app/back and ml pyproject.toml).
+fail_under = 80
 show_missing = true
 
 [tool.coverage.html]

@@ -1,9 +1,27 @@
-# Surcharge utilisée par la CI : lance la stack avec les images construites et scannées
-# par le job `build`, au lieu de les reconstruire.
+# CI override: starts the stack from the images built and scanned by the `build` job
+# instead of rebuilding them, with a local stand-in for the EnerVision API.
 #   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
 services:
   back:
-    image: ${BACK_IMAGE:?BACK_IMAGE non défini}
+    image: ${BACK_IMAGE:?BACK_IMAGE is not set}
+    environment:
+      # The real API needs credentials and must not receive load-test traffic.
+      ENERVISION_API_URL: http://enervision-mock
+    depends_on:
+      enervision-mock:
+        condition: service_healthy
 
   ml:
-    image: ${ML_IMAGE:?ML_IMAGE non défini}
+    image: ${ML_IMAGE:?ML_IMAGE is not set}
+
+  # Serves a sample /api/v1/stats/summary response (tests/perf/enervision-mock).
+  enervision-mock:
+    image: nginx:1.30.6-alpine
+    volumes:
+      - ./tests/perf/enervision-mock/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./tests/perf/enervision-mock/summary.json:/srv/enervision/summary.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/v1/stats/summary"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

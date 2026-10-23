@@ -26,13 +26,16 @@ export default defineConfig({
         'src/tests/**',
       ],
       // Tout est mesuré et affiché ; seul ce qui est réellement couvert est
-      // verrouillé. normalize.ts, summary.ts et les hooks use* sont encore à
-      // zéro : la PR #42 apporte leurs tests, le seuil sera étendu ensuite.
+      // verrouillé. Les hooks use* sont encore à zéro : le seuil sera étendu
+      // quand leurs tests arriveront.
       thresholds: {
         'src/components/**': { statements: 85, branches: 80, functions: 85, lines: 85 },
         'src/screens/**': { statements: 80, branches: 75, functions: 75, lines: 80 },
         'src/services/format.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
         'src/services/history.ts': { statements: 85, branches: 80, functions: 90, lines: 90 },
+        'src/services/normalize.ts': { statements: 90, branches: 85, functions: 90, lines: 90 },
+        'src/services/summary.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
+        'src/api/client.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
       },
     },
   },

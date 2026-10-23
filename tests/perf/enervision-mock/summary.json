@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-10-21T09:34:44.744410",
+  "total_sites": 7,
+  "total_consumption_kw": 3597.64,
+  "sites": [
+    {
+      "site_id": "SITE001",
+      "site_name": "Sample office 1",
+      "current_consumption_kw": 412.5,
+      "capacity_kw": 600,
+      "load_percent": 68.8,
+      "data_quality": "good"
+    },
+    {
+      "site_id": "SITE002",
+      "site_name": "Sample factory 1",
+      "current_consumption_kw": 655.2,
+      "capacity_kw": 900,
+      "load_percent": 72.8,
+      "data_quality": "good"
+    },
+    {
+      "site_id": "SITE003",
+      "site_name": "Sample data center",
+      "current_consumption_kw": 766.34,
+      "capacity_kw": 800,
+      "load_percent": 95.8,
+      "data_quality": "partial"
+    },
+    {
+      "site_id": "SITE004",
+      "site_name": "Sample retail store",
+      "current_consumption_kw": 233.9,
+      "capacity_kw": 400,
+      "load_percent": 58.5,
+      "data_quality": "good"
+    },
+    {
+      "site_id": "SITE005",
+      "site_name": "Sample hospital",
+      "current_consumption_kw": 541.7,
+      "capacity_kw": 700,
+      "load_percent": 77.4,
+      "data_quality": "degraded"
+    },
+    {
+      "site_id": "SITE006",
+      "site_name": "Sample office 2",
+      "current_consumption_kw": 298.4,
+      "capacity_kw": 500,
+      "load_percent": 59.7,
+      "data_quality": "good"
+    },
+    {
+      "site_id": "SITE007",
+      "site_name": "Sample factory 2",
+      "current_consumption_kw": 689.6,
+      "capacity_kw": 900,
+      "load_percent": 76.6,
+      "data_quality": "partial"
+    }
+  ]
+}

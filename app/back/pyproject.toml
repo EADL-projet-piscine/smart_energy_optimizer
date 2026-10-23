@@ -30,6 +30,17 @@ where = ["src"]
 testpaths = ["tests"]
 markers = ["db: nécessite une base PostgreSQL joignable"]
 
+# Read by `pytest --cov` run from app/back, as the tests-back CI job does.
+[tool.coverage.run]
+source = ["smart_energy_app"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+[tool.coverage.html]
+directory = "htmlcov"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

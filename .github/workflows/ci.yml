@@ -273,26 +273,6 @@ jobs:
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.qualitygate.wait=true
 
-      # TEMPORARY: prints what makes the quality gate of main fail, with file and line. It
-      # cannot fail the job, and is removed once the alerts are fixed.
-      - name: Sonar diagnostics
-        if: always() && steps.config.outputs.enabled == 'true'
-        continue-on-error: true
-        env:
-          PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
-          HOST: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
-        run: |
-          api() { curl --fail --silent --show-error --user "$SONAR_TOKEN:" "$HOST/api/$1"; }
-          echo "== Failing quality gate conditions (main)"
-          api "qualitygates/project_status?projectKey=$PROJECT_KEY&branch=main" |
-            jq -r '.projectStatus.conditions[] | select(.status != "OK") | "\(.metricKey): \(.actualValue) (threshold \(.errorThreshold))"'
-          echo "== Open vulnerabilities (main)"
-          api "issues/search?componentKeys=$PROJECT_KEY&branch=main&resolved=false&types=VULNERABILITY&ps=200" |
-            jq -r '.issues[] | "\(.severity) \(.rule) \(.component | sub("^[^:]*:"; "")):\(.line // 0) \(.message)"'
-          echo "== Security hotspots to review (main)"
-          api "hotspots/search?projectKey=$PROJECT_KEY&branch=main&status=TO_REVIEW&ps=200" |
-            jq -r '.hotspots[] | "\(.vulnerabilityProbability) \(.ruleKey) \(.component | sub("^[^:]*:"; "")):\(.line // 0) \(.message)"'
-
   # Builds and scans each image, then hands it over to the next jobs.
   build:
     needs: [lint, scan, tests-back, tests-ml, tests-front]

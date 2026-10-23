@@ -35,6 +35,13 @@ Chaque module vit dans `src/smart_energy_app/<domaine>/` et contient :
 Tous ne sont pas obligatoires. Un module qui ne lit rien en base n'a pas de
 `repository.py` ni de `models.py`.
 
+Un domaine peut porter **plusieurs services** quand il couvre des usages
+distincts. `consommation` a ainsi `service.py` pour la mesure courante et
+`historique.py` pour les dernières 24 heures : deux sources, deux cadences,
+deux modes de défaillance. Les fusionner dans un seul fichier rendrait les
+deux plus difficiles à lire et à tester. Dans ce cas, le fichier porte le
+nom de l'usage, pas un suffixe technique.
+
 ### Pourquoi séparer `models.py` et `schemas.py`
 
 `models.py` décrit la base de données. `schemas.py` décrit le contrat de
@@ -119,7 +126,8 @@ pistes.
 
 `consommation` regroupe la mesure instantanée et l'historique : c'est la
 même grandeur, seule la source diffère — l'API EnerVision pour l'instant
-présent (`client.py`), la base pour le passé (`repository.py`).
+présent (`client.py`), la base pour le passé (`repository.py`, à venir ;
+aujourd'hui l'historique passe encore par l'API source).
 
 Les recommandations vivent dans `previsions` parce qu'elles en découlent
 directement. Elles en sortiront le jour où elles seront déclenchées par
@@ -138,10 +146,94 @@ portées par Azure Data Factory, hors du back-end.
 |---|---|---|
 | `GET /health` | — | état du service et de la base |
 | `GET /api/consommation/resume` | `consommation` | `/api/v1/stats/summary` |
+| `GET /api/consommation/historique` | `consommation` | `/api/v1/readings` |
 
 Les noms des endpoints reprennent ceux de l'API source quand ils en
 dérivent (`resume` pour `summary`), pour qu'on sache immédiatement d'où
 vient une donnée quand on débogue.
+
+`/resume` renvoie, à côté de la mesure :
+
+| Champ | Rôle |
+|---|---|
+| `fetched_at` | Heure de la mesure |
+| `next_at` | Heure de la prochaine mesure, pour que le client s'y cale |
+| `stale` | Vrai si la mesure dépasse `CONSUMPTION_STALENESS_S` |
+
+`next_at` évite au front de sonder à l'aveugle : il planifie son appel juste
+après l'heure annoncée, et reçoit chaque mesure quelques secondes après
+qu'elle existe, pour un seul appel par cycle.
+
+## Règles de réponse
+
+**Pas de valeur de repli inventée.** Quand l'API source ne répond pas,
+l'endpoint renvoie une erreur franche : 502 si la source a répondu mais a
+refusé, 503 si elle est injoignable. Des chiffres plausibles servis en cas
+de panne sont pires qu'une erreur, parce que rien ne les distingue des
+vrais.
+
+**Une mesure absente reste `null`.** Jamais zéro : zéro est une mesure,
+l'absence de mesure n'en est pas une.
+
+**Les horodatages de la source sont relayés tels quels**, sans reformatage.
+Les retoucher au passage fait perdre la trace de ce que la source a
+réellement envoyé.
+
+## Pièges de l'API source
+
+Ces comportements ont été établis par la mesure, pas par la documentation.
+Le script `ml/scripts/probe_readings.py` les reproduit.
+
+**`limit` ne plafonne pas, il fixe le pas.** Sur `/api/v1/readings`, ce
+paramètre découpe la plage demandée et divise le quota entre les sites.
+Mesuré sur 24 heures et 7 sites :
+
+| `limit` | points/site | pas |
+|---|---|---|
+| 100 (défaut) | 14 | 103 min |
+| **168** | **24** | **60 min** |
+| 500 | 71 | 20 min |
+| 1000 | 142 | 10 min |
+
+D'où `limit = heures × sites`, calculé et jamais écrit en dur. Avec la
+valeur par défaut, on recevrait un point toutes les 1 h 43 sans qu'aucune
+erreur ne le signale.
+
+Conséquence : le pas horaire sur 7 jours exigerait 1 176 points, au-dessus
+du plafond de 1 000. Une fenêtre plus longue que 5 jours impose soit un pas
+plus grossier, soit un appel par site.
+
+**Les bornes doivent être en UTC sans fuseau.** La source raisonne en UTC et
+refuse toute borne dans le futur :
+
+```
+400 — Impossible de générer ou d'accéder à des données dans le futur.
+```
+
+Envoyer `datetime.now()` depuis une machine à l'heure de Paris produit cette
+erreur, puisque la source voit une demande deux heures en avance. Utiliser
+`datetime.now(UTC).replace(tzinfo=None)` et retrancher une marge pour
+l'écart d'horloge.
+
+**Deux conventions de fuseau dans la même API.** `/readings` date ses points
+avec un `Z`, `/stats/summary` sans rien — alors qu'il s'agit d'UTC dans les
+deux cas. Un client qui lit l'horodatage nu comme de l'heure locale affiche
+deux heures de moins, sans erreur.
+
+**`consumption_kw` et `consumption_kwh` sont toujours égaux.**
+Simplification du simulateur, confirmée par le formateur. Une énergie ne
+peut donc pas être lue directement : elle doit être intégrée à partir des
+puissances.
+
+**Les alertes de `/alerts` sont décorrélées des mesures.** Elles sont
+générées indépendamment de la consommation réelle. Les afficher à côté de
+nos propres courbes produirait des contradictions visibles. Nos badges et
+seuils sont dérivés des mesures, pas de cet endpoint.
+
+**`/readings` n'est pas reproductible.** Deux appels identiques renvoient
+des valeurs différentes : la source régénère son historique à chaque fois.
+Toute ingestion vers la base doit donc être idempotente — contrainte
+d'unicité site + horodatage, et `ON CONFLICT DO NOTHING`.
 
 ## Nommage
 
@@ -163,15 +255,21 @@ compte est que l'équipe comprenne vite.
 proviennent (`consumption_kw`, `data_quality`), pour qu'une valeur se trace
 de bout en bout sans table de correspondance.
 
+> `db.py` et `tests/test_health.py` sont encore en français
+> (`creer_moteur`, `reponse`, `duree`). C'est un reste d'avant cette
+> convention, et un ticket est ouvert pour l'aligner. Ne pas s'en inspirer.
+
 ## Tests
 
-Les tests suivent la même organisation que le code :
+Les tests suivent la même organisation que le code, un fichier par fichier :
 
 ```
 tests/
-├── sites/
-│   └── test_service.py
+├── conftest.py
+├── test_health.py
 └── consommation/
+    ├── test_client.py
+    ├── test_historique.py
     ├── test_routes.py
     └── test_service.py
 ```
@@ -179,12 +277,22 @@ tests/
 Un test ne doit pas dépendre du lancement de Docker ni d'un appel réseau
 réel. Si une fonction a besoin de la base, le test remplace le repository ;
 si elle appelle une API extérieure, le test lance un serveur local qui
-imite les réponses attendues.
+imite les réponses attendues (voir la fixture `fake_api`).
+
+Les tests marqués `db` sont ignorés quand aucune base n'est joignable. **En
+CI, `REQUIRE_DB=1` doit être positionné** : un test `db` doit alors échouer
+plutôt qu'être ignoré, sinon une base absente rendrait la CI verte à tort.
+
+Un test gagne à garder un piège plutôt qu'à vérifier une évidence. Les plus
+utiles de cette suite vérifient que les bornes envoyées à la source sont en
+UTC et dans le passé, que `limit` vaut bien `heures × sites`, et que
+`next_at` reflète la cadence configurée — trois erreurs qui ont réellement
+coûté du temps.
 
 ## Avant de pousser
 
 ```bash
-cd ~/smart_energy_optimizer
+cd app/back
 ruff check .
 ruff format --check .
 pytest
@@ -195,8 +303,19 @@ Ce sont exactement les trois commandes que lance la CI. Les passer en local
 étant commune à toutes les branches.
 
 Les deux premières sont lancées automatiquement à chaque commit si vous avez
-installé `pre-commit` (voir le README). Les relancer à la main reste utile
-avant d'ouvrir une pull request : le hook ne vérifie que les fichiers que
-vous avez modifiés, alors que la CI passe sur tout le dépôt — y compris sur
-le travail des autres, qui peut faire échouer votre pipeline sans que vous
-y soyez pour quelque chose.
+installé `pre-commit` :
+
+```bash
+cd ~/smart_energy_optimizer
+pre-commit install
+pre-commit install --hook-type pre-push
+```
+
+**À faire une fois par personne.** La CI a déjà échoué plusieurs fois sur du
+code poussé sans ces hooks, bloquant les pull requests d'autres membres de
+l'équipe.
+
+Les relancer à la main reste utile avant d'ouvrir une pull request : le hook
+ne vérifie que les fichiers que vous avez modifiés, alors que la CI passe
+sur tout le dépôt — y compris sur le travail des autres, qui peut faire
+échouer votre pipeline sans que vous y soyez pour quelque chose.

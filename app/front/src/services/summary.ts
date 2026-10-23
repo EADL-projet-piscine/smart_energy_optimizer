@@ -2,15 +2,21 @@ import { fetchJson } from '../api/client'
 import type { ParkSummary } from './model'
 import { normalizeSummary } from './normalize'
 
-/** L'API métier renvoie `{ data, fetched_at, stale }` ; on ne garde que `data`. */
-function unwrap(envelope: unknown): unknown {
-  return typeof envelope === 'object' && envelope !== null && 'data' in envelope
-    ? (envelope as { data: unknown }).data
-    : envelope
+export type SummaryResponse = {
+  summary: ParkSummary
+  /** Heure annoncée de la prochaine mesure, pour que le client s'y cale. */
+  nextAt: string | null
 }
 
-export async function loadSummary(signal?: AbortSignal): Promise<ParkSummary> {
-  const summary = normalizeSummary(unwrap(await fetchJson('/api/consommation/resume', signal)))
+type Envelope = { data?: unknown; next_at?: unknown }
+
+export async function loadSummary(signal?: AbortSignal): Promise<SummaryResponse> {
+  const body = (await fetchJson('/api/consommation/resume', signal)) as Envelope
+  const summary = normalizeSummary(body?.data ?? body)
   if (!summary) throw new Error('Forme de réponse non reconnue')
-  return summary
+
+  return {
+    summary,
+    nextAt: typeof body?.next_at === 'string' ? body.next_at : null,
+  }
 }

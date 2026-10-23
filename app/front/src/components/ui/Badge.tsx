@@ -10,7 +10,9 @@ export type BadgeTone = keyof typeof variants
 
 export function Badge({ children, tone }: { children: string; tone: BadgeTone }) {
   return (
-    <span className={cn('rounded-full px-2.5 py-1.5 text-[12.5px] font-[650] whitespace-nowrap', variants[tone])}>
+    <span
+      className={cn('rounded-full px-2.5 py-1.5 text-[12.5px] font-[650] whitespace-nowrap', variants[tone])}
+    >
       {children}
     </span>
   )

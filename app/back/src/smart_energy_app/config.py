@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://enervision:enervision@localhost:5433/enervision"
     consumption_refresh_s: float = 60.0
     consumption_staleness_s: float = 120.0
+    history_hours: int = 24
+    history_site_count: int = 7
+    history_margin_s: int = 300
     consumption_min_refresh_s: float = 2.0
 
 

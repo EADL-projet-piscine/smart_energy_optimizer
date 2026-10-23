@@ -2,19 +2,20 @@ import { useEffect, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
 import { Badge, badgeTone } from '../components/ui/Badge'
 import { Card } from '../components/ui/Card'
+import { cn } from '../components/ui/cn'
 import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Tabs } from '../components/ui/Tabs'
 import { Caption, Subtitle } from '../components/ui/Text'
 import { Toast } from '../components/ui/Toast'
-import { cn } from '../components/ui/cn'
 import { formatKw, formatNumber } from '../services/format'
-import type { Alert, Site } from '../services/model'
+import type { Alert, SeriesPoint, Site } from '../services/model'
 
 type Props = {
   sites: Site[]
   siteId: string
   onSelect: (id: string) => void
+  seriesBySite: Record<string, SeriesPoint[]>
 }
 
 /** Alerte mise en avant dans le toast : la plus grave, sinon la première. */
@@ -22,11 +23,12 @@ function mainAlert(site: Site): Alert | null {
   return site.alerts.find((alert) => alert.severity === 'critique') ?? site.alerts[0] ?? null
 }
 
-export function SiteDetail({ sites, siteId, onSelect }: Props) {
+export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
   const site = sites.find((candidate) => candidate.id === siteId) ?? sites[0]
   const [toastClosed, setToastClosed] = useState(false)
   const [highlighted, setHighlighted] = useState(false)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: déclencheur, pas une valeur lue
   useEffect(() => {
     setToastClosed(false)
     setHighlighted(false)
@@ -121,7 +123,7 @@ export function SiteDetail({ sites, siteId, onSelect }: Props) {
         </div>
 
         <div className="relative mt-2">
-          <ConsumptionChart series={site.series} thresholdKw={site.thresholdKw} compact />
+          <ConsumptionChart series={seriesBySite[site.id] ?? []} thresholdKw={site.thresholdKw} compact />
           {main && !toastClosed && (
             <Toast
               severity={main.severity}

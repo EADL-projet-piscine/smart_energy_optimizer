@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
 import { IconBolt, IconMoon, IconSun } from '../components/Icons'
 import { Banner } from '../components/ui/Banner'
@@ -9,6 +9,9 @@ import { Metric } from '../components/ui/Metric'
 import { Ring } from '../components/ui/Ring'
 import { Label, SiteText } from '../components/ui/Text'
 import { alertsLabel, formatCollectedAt, formatNumber, sitesLabel } from '../services/format'
+import { appendCurrent } from '../services/history'
+import type { SeriesPoint } from '../services/model'
+import { useHistory } from '../services/useHistory'
 import { useSummary } from '../services/useSummary'
 import { SiteDetail } from './SiteDetail'
 
@@ -16,12 +19,32 @@ export function Dashboard() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
-  const { summary, siteId, setSiteId } = useSummary()
+  const { summary, error, siteId, setSiteId } = useSummary()
+  const { history, error: historyError } = useHistory()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('enervision-theme', theme)
   }, [theme])
+
+  // L'historique s'arrête à l'heure précédente ; la mesure temps réel le prolonge
+  // jusqu'à maintenant, pour que la courbe rejoigne le chiffre affiché au-dessus.
+  const parkSeries = useMemo(
+    () => appendCurrent(history?.park ?? [], summary?.consumptionKw ?? null, summary?.lastCollectedAt),
+    [history, summary],
+  )
+
+  const seriesBySite = useMemo(() => {
+    const result: Record<string, SeriesPoint[]> = {}
+    for (const site of summary?.sites ?? []) {
+      result[site.id] = appendCurrent(
+        history?.bySite[site.id] ?? [],
+        site.currentKw,
+        summary?.lastCollectedAt,
+      )
+    }
+    return result
+  }, [history, summary])
 
   const exclusionMessage =
     summary && summary.excludedSites.length > 0
@@ -54,16 +77,23 @@ export function Dashboard() {
           </h1>
           <p className="mt-1.5 flex items-center gap-2 text-sm text-discret">
             <span
-              className={`size-[7px] shrink-0 rounded-full ${
-                summary?.source === 'demonstration' ? 'bg-ambre' : 'bg-hausse'
-              }`}
+              className={`size-[7px] shrink-0 rounded-full ${error ? 'bg-danger' : 'bg-hausse'}`}
               aria-hidden="true"
             />
             {summary
               ? `${sitesLabel(summary.siteCount)} · dernière collecte à ${formatCollectedAt(summary.lastCollectedAt) || '—'}`
-              : 'Chargement des sites…'}
+              : error
+                ? 'API injoignable'
+                : 'Chargement des sites…'}
           </p>
         </div>
+
+        {summary && error && (
+          <Banner>
+            L’API métier ne répond plus. Les valeurs ci-dessous sont les dernières reçues et ne sont plus
+            rafraîchies.
+          </Banner>
+        )}
 
         {summary ? (
           <>
@@ -111,7 +141,9 @@ export function Dashboard() {
                 value={summary.dailyCostEur === null ? '—' : formatNumber(summary.dailyCostEur)}
                 unit={summary.dailyCostEur === null ? undefined : '€'}
                 size="lg"
-                detail={summary.co2Tons === null ? '—' : `${formatNumber(summary.co2Tons, 1)} t CO₂ équivalent`}
+                detail={
+                  summary.co2Tons === null ? '—' : `${formatNumber(summary.co2Tons, 1)} t CO₂ équivalent`
+                }
               />
             </section>
 
@@ -124,26 +156,40 @@ export function Dashboard() {
             <Card aria-labelledby="chart-title">
               <header className="flex items-start justify-between gap-4 max-[680px]:flex-col">
                 <h2 id="chart-title" className="m-0 text-base font-[650] tracking-[-0.02em]">
-                  Consommation et prévision
+                  Consommation des dernières 24 heures
                 </h2>
                 <Legend
                   entries={[
                     { label: 'Mesuré', style: 'mesure' },
-                    { label: 'Prévision', style: 'prevision' },
                     { label: 'Seuil contractuel', style: 'seuil' },
                   ]}
                 />
               </header>
-              <ConsumptionChart series={summary.series} thresholdKw={summary.thresholdKw} showPeakValue />
+              {historyError ? (
+                <p className="mt-1.5 text-[13px] text-discret">Historique indisponible : {historyError}</p>
+              ) : (
+                <ConsumptionChart series={parkSeries} thresholdKw={summary.thresholdKw} />
+              )}
               {summary.comment && (
                 <p className="mt-1 text-[13px] leading-snug text-discret">{summary.comment}</p>
               )}
             </Card>
 
-            <SiteDetail sites={summary.sites} siteId={siteId ?? ''} onSelect={setSiteId} />
+            <SiteDetail
+              sites={summary.sites}
+              siteId={siteId ?? ''}
+              onSelect={setSiteId}
+              seriesBySite={seriesBySite}
+            />
           </>
         ) : (
-          <p className="mt-1.5 text-sm text-discret">Lecture du résumé du parc…</p>
+          <Card>
+            <p className="m-0 text-sm text-discret">
+              {error
+                ? `Aucune donnée disponible : l’API métier ne répond pas (${error}).`
+                : 'Lecture du résumé du parc…'}
+            </p>
+          </Card>
         )}
       </main>
     </div>

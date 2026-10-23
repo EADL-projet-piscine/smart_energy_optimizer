@@ -51,7 +51,13 @@ export function IconWarning({ className }: Props) {
 export function IconClose({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M7 7l10 10M17 7 7 17" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        d="M7 7l10 10M17 7 7 17"
+      />
     </svg>
   )
 }

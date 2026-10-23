@@ -107,8 +107,12 @@ Puis monter le routeur dans `main.py` :
 ```python
 from smart_energy_app.<domaine>.routes import router as <domaine>_router
 
-app.include_router(<domaine>_router, prefix="/api/<domaine>", tags=["<Domaine>"])
+app.include_router(<domaine>_router, prefix="/api/<domaines>", tags=["<Domaines>"])
 ```
+
+Le préfixe est au **pluriel** : c'est lui qui porte la collection (voir
+« Nommage des endpoints » plus bas). Le dossier du module reste au
+singulier, comme tous les dossiers du projet.
 
 Un module se crée **quand son ticket est pris**, pas à l'avance. Des
 dossiers vides créés par anticipation envoient les autres sur de fausses
@@ -145,14 +149,10 @@ portées par Azure Data Factory, hors du back-end.
 | Endpoint | Module | Source |
 |---|---|---|
 | `GET /health` | — | état du service et de la base |
-| `GET /api/consommation/resume` | `consommation` | `/api/v1/stats/summary` |
-| `GET /api/consommation/historique` | `consommation` | `/api/v1/readings` |
+| `GET /api/consommations` | `consommation` | `/api/v1/stats/summary` |
+| `GET /api/consommations/historique` | `consommation` | `/api/v1/readings` |
 
-Les noms des endpoints reprennent ceux de l'API source quand ils en
-dérivent (`resume` pour `summary`), pour qu'on sache immédiatement d'où
-vient une donnée quand on débogue.
-
-`/resume` renvoie, à côté de la mesure :
+`/api/consommations` renvoie, à côté de la mesure :
 
 | Champ | Rôle |
 |---|---|
@@ -163,6 +163,39 @@ vient une donnée quand on débogue.
 `next_at` évite au front de sonder à l'aveugle : il planifie son appel juste
 après l'heure annoncée, et reçoit chaque mesure quelques secondes après
 qu'elle existe, pour un seul appel par cycle.
+
+### Nommage des endpoints
+
+**Les collections sont au pluriel, les vues calculées sur une collection au
+singulier.**
+
+| Chemin | Ce que c'est |
+|---|---|
+| `/api/consommations` | la collection : consommation courante de tous les sites |
+| `/api/consommations/historique` | une vue sur cette collection : les 24 dernières heures |
+
+Il n'y a qu'un seul historique, comme il n'y a qu'un seul résumé : mettre
+ces vues au pluriel par réflexe produit des chemins qui ne désignent rien.
+
+**Le pluriel est porté une seule fois, par le préfixe du routeur.** Dans
+`main.py` le préfixe vaut `/api/consommations` ; dans `routes.py` les
+chemins sont relatifs à lui. Répéter le mot des deux côtés donne
+`/api/consommation/consommations`.
+
+**Le chemin de la collection est `""`, pas `"/"`.** Avec un préfixe, `"/"`
+produit une URL à barre finale et une redirection 307 que le client suit —
+donc deux appels au lieu d'un.
+
+```python
+# routes.py
+@router.get("", summary="Consommation courante de tous les sites")
+@router.get("/historique", summary="Consommation des dernières 24 heures")
+```
+
+> Renommer un endpoint touche plus de fichiers qu'il n'y paraît : le front,
+> les tests des deux côtés, le script de charge, le README et ce document.
+> Le vérifier d'un `grep -rn "/api/"` avant de pousser, et regarder `/docs`
+> après : Swagger affiche les URL complètes, préfixe compris.
 
 ## Règles de réponse
 
@@ -259,6 +292,25 @@ de bout en bout sans table de correspondance.
 > (`creer_moteur`, `reponse`, `duree`). C'est un reste d'avant cette
 > convention, et un ticket est ouvert pour l'aligner. Ne pas s'en inspirer.
 
+## Cycle de vie de l'application
+
+`main.py` lance la boucle de rafraîchissement dans le `lifespan` et
+l'arrête à la fermeture :
+
+```python
+task = asyncio.create_task(refresh_loop())
+try:
+    yield
+finally:
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+```
+
+Annuler ne suffit pas : sans attendre la tâche, asyncio signale au mieux
+« Task was destroyed but it is pending » à l'arrêt, au pire interrompt un
+appel HTTP en cours.
+
 ## Tests
 
 Les tests suivent la même organisation que le code, un fichier par fichier :
@@ -319,3 +371,9 @@ Les relancer à la main reste utile avant d'ouvrir une pull request : le hook
 ne vérifie que les fichiers que vous avez modifiés, alors que la CI passe
 sur tout le dépôt — y compris sur le travail des autres, qui peut faire
 échouer votre pipeline sans que vous y soyez pour quelque chose.
+
+> Si `pytest` est introuvable alors que le venv est actif, c'est que les
+> dépendances de développement ne sont pas installées :
+> `pip install -e "./app/back[dev]"` depuis la racine. Le `-e` n'est pas
+> optionnel — sans lui, Python importe une copie figée dans
+> `site-packages` et aucune de vos modifications n'atteint le serveur.

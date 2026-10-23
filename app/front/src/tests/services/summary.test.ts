@@ -24,7 +24,7 @@ describe('loadSummary', () => {
 
     const { summary, nextAt } = await loadSummary(signal)
 
-    expect(fetchJson).toHaveBeenCalledWith('/api/consommation/resume', signal)
+    expect(fetchJson).toHaveBeenCalledWith('/api/consommations', signal)
     expect(summary).toMatchObject({ siteCount: 1, consumptionKw: 412.5 })
     expect(nextAt).toBe('2026-10-21T09:36:00+00:00')
   })

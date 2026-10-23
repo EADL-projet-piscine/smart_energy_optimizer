@@ -69,19 +69,6 @@ class EnerVisionClient:
 
         return data
 
-    def get_sites(self) -> list[dict[str, Any]]:
-        """Récupère les métadonnées des sites EnerVision."""
-
-        response = self.client.get("/api/v1/sites")
-        response.raise_for_status()
-
-        data = response.json()
-
-        if not isinstance(data, list):
-            raise TypeError("Réponse inattendue : une liste JSON était attendue")
-
-        return data
-
     def close(self) -> None:
         self.client.close()
 

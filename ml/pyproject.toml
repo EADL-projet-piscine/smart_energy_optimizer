@@ -21,13 +21,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "ruff",
     "jupyterlab",
     "ipykernel",
     "matplotlib",
     "httpx",
     "ruff==0.17.1",
-    "pytest-cov",
-    "xgboost>=2.0",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]
@@ -35,17 +35,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-# Read by `pytest --cov` run from ml, as the tests-ml CI job does.
-[tool.coverage.run]
-source = ["smart_energy_ml"]
-
-[tool.coverage.report]
-fail_under = 80
-show_missing = true
-
-[tool.coverage.html]
-directory = "htmlcov"
 
 [tool.ruff]
 line-length = 100

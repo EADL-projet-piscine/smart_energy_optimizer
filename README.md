@@ -94,6 +94,11 @@ http://localhost:8001 — rien d'autre à installer.
 - http://localhost:8001/health — état du service ML
 - http://localhost:8001/docs — documentation interactive de l'API ML
 
+Le `--build` n'est pas optionnel après un changement de branche ou un
+`git pull` : sans lui, Docker réutilise l'image précédente et vous servez
+l'ancien code sans vous en apercevoir. En cas de doute, `/docs` montre les
+routes réellement servies.
+
 Lancez cette commande depuis le dossier où se trouve le dépôt. Si le dépôt
 est dans WSL, lancez-la depuis WSL : un terminal Windows ne verra pas les
 mêmes chemins.
@@ -133,10 +138,25 @@ npm run dev
 Le dashboard est disponible sur l'adresse affichée par Vite, en principe
 http://localhost:5173.
 
+**Aucun fichier `.env` n'est nécessaire côté front** pour une installation
+locale : les valeurs par défaut conviennent. N'en créez un que pour viser
+une API métier qui n'est pas sur votre machine.
+
 Le front n'appelle jamais l'API source directement : il passe par l'API
-métier, à travers le proxy de développement de Vite (`VITE_API_PROXY_TARGET`
-dans `app/front/.env`, `http://localhost:8000` par défaut). Vite ne relit ce
-fichier qu'au démarrage : après l'avoir modifié, relancez `npm run dev`.
+métier, à travers le proxy de développement de Vite. Deux variables le
+gouvernent, et les confondre est la cause la plus fréquente d'un dashboard
+qui ne reçoit rien :
+
+- **`VITE_API_PROXY_TARGET`** — l'adresse vers laquelle le proxy relaie.
+  `http://localhost:8000` par défaut (valeur de repli dans `vite.config.ts`).
+- **`VITE_API_URL`** — un préfixe appliqué à chaque appel. **Doit rester
+  vide** : les appels partent alors en chemin relatif et passent par le
+  proxy. Toute valeur ici court-circuite le proxy et envoie les requêtes
+  ailleurs — typiquement sur l'API source, qui ne connaît pas nos routes et
+  répond 404.
+
+Vite ne relit `app/front/.env` qu'au démarrage : après l'avoir modifié,
+relancez `npm run dev`.
 
 Les étapes suivantes décrivent l'installation du back sans conteneur, utile
 pour développer avec le rechargement automatique.
@@ -185,6 +205,14 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 Lancez les commandes **une par une**. Collées en bloc, certains terminaux
 perdent les retours à la ligne et les fusionnent.
+
+Le `-e` de `pip install` n'est pas optionnel : sans lui, Python importe une
+copie figée du code et aucune de vos modifications n'atteint le serveur,
+même avec `--reload`.
+
+**Un seul back à la fois.** Si la stack Docker tourne déjà, arrêtez-la
+(`docker compose stop back`) avant de lancer uvicorn : les deux occupent le
+port 8000, et celui qui répond n'est pas forcément celui que vous croyez.
 
 L'application est disponible sur http://127.0.0.1:8000
 
@@ -434,6 +462,11 @@ Les images publiées sont étiquetées avec le SHA du commit et `latest` :
 GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
 pull request dont la CI est rouge.**
 
+**Après un merge de `main` dans votre branche**, relancez les deux suites de
+tests avant de pousser : une résolution de conflit peut ramener du code qui
+contredit vos modifications, sans qu'aucun marqueur n'apparaisse dans le
+fichier.
+
 ## Configuration
 
 Les paramètres sont lus depuis les variables d'environnement, ou depuis le
@@ -457,9 +490,19 @@ par Git. Le fichier `.env.example` sert de modèle.
 
 ### Dashboard (`app/front/.env`)
 
+Ce fichier est **optionnel** : sans lui, les valeurs par défaut conviennent
+à une installation locale.
+
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `VITE_API_PROXY_TARGET` | Adresse de l'API métier, pour le proxy de développement | `http://localhost:8000` |
+| `VITE_API_PROXY_TARGET` | Adresse de l'API métier vers laquelle le proxy de développement relaie | `http://localhost:8000` |
+| `VITE_API_URL` | Préfixe appliqué aux appels de l'API métier. **Laisser vide** : les appels partent alors en chemin relatif et passent par le proxy ci-dessus. Toute valeur ici court-circuite le proxy. | vide |
+
+Les deux servent à joindre l'API métier, mais pas au même endroit :
+`VITE_API_PROXY_TARGET` est lue par `vite.config.ts` et ne concerne que le
+serveur de développement ; `VITE_API_URL` est lue par `src/api/client.ts` et
+préfixe chaque requête du navigateur. Renseigner la seconde fait sortir les
+appels du proxy, et donc échouer tout ce qui dépend de lui.
 
 Vite ne lit ce fichier qu'au démarrage : relancez `npm run dev` après
 l'avoir modifié.
@@ -500,13 +543,32 @@ fichier n'est lu qu'au démarrage.
 récupérée. Regardez les logs de l'application : le rafraîchissement tourne
 toutes les minutes et journalise chaque tentative.
 
+**Le dashboard reçoit un 404 sur `/api/consommations`** — ses requêtes
+n'arrivent pas à notre API métier. Trois causes, de la plus fréquente à la
+plus rare :
+
+1. `VITE_API_URL` est renseignée dans `app/front/.env`. Elle doit être
+   **vide**, sinon les appels sortent du proxy et partent vers une adresse
+   qui ne connaît pas nos routes.
+2. `VITE_API_PROXY_TARGET` ne pointe pas sur votre API métier. Attendu :
+   `http://localhost:8000`.
+3. Le back tourne sur du code ancien. Ouvrez `http://localhost:8000/docs` :
+   si les routes affichées ne sont pas celles de votre branche, relancez
+   avec `docker compose up -d --build`, ou vérifiez qu'un uvicorn oublié
+   n'occupe pas le port (`ss -ltnp | grep 8000`, ou
+   `Get-NetTCPConnection -LocalPort 8000` sous PowerShell).
+
+Swagger garde sa spécification en mémoire : fermez l'onglet `/docs` et
+rouvrez-le, un simple rafraîchissement ne suffit pas toujours.
+
 **Le dashboard affiche « API injoignable »** — le front ne reçoit rien de
 l'API métier. Dans l'ordre :
 
 1. l'API métier répond-elle ? `curl -s localhost:8000/health`
 2. a-t-elle des mesures ? `curl -s localhost:8000/api/consommations | head -c 200` — un 503 renvoie aux deux entrées précédentes, le plus souvent un `.env` absent ou sans identifiants
-3. le proxy pointe-t-il au bon endroit ? `VITE_API_PROXY_TARGET` dans
-   `app/front/.env`, puis relancer `npm run dev`
+3. la configuration du front est-elle bonne ? Dans `app/front/.env`,
+   `VITE_API_URL` doit être vide et `VITE_API_PROXY_TARGET` valoir
+   `http://localhost:8000`. Puis relancer `npm run dev`.
 
 Le dashboard n'affiche jamais de données inventées : s'il dit que l'API est
 injoignable, c'est qu'elle l'est.
@@ -526,6 +588,10 @@ tombé. Depuis PowerShell : `wsl --shutdown`, puis rouvrir le terminal.
 **`npm run dev` échoue sur la version de Node** — `nvm use` depuis
 `app/front` sélectionne Node 22, la version fixée dans `.nvmrc` et utilisée
 par la CI.
+
+**`pytest : command not found` alors que `(.venv)` s'affiche** — les
+dépendances de développement ne sont pas installées dans cet environnement :
+`pip install -e "./app/back[dev]"` depuis la racine.
 
 ## Conventions
 

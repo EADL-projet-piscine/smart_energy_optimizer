@@ -275,7 +275,9 @@ WSL, `.venv\Scripts\Activate.ps1` sous PowerShell. L'invite doit afficher
 Les tests marqués `@pytest.mark.db` interrogent une vraie base PostgreSQL.
 Sans base joignable, ils sont **ignorés** (`SKIPPED`) : le reste de la suite
 tourne quand même. Pour les exécuter, lancez la base (`docker compose up -d
-db`) avant `pytest`.
+db`) avant `pytest`, avec `DATABASE_URL` renseigné : dans `app/back/.env`
+(lancer alors `pytest` depuis `app/back`) ou dans l'environnement. Le code ne
+contient aucun identifiant par défaut.
 
 En CI, `REQUIRE_DB=1` est défini : une base absente fait alors **échouer**
 ces tests au lieu de les ignorer.
@@ -517,7 +519,7 @@ par Git. Le fichier `.env.example` sert de modèle.
 | `ENERVISION_TIMEOUT_S` | Délai d'attente des appels API, en secondes | `10` |
 | `ENERVISION_USER` | Identifiant HTTP Basic de l'API source | vide |
 | `ENERVISION_PASSWORD` | Mot de passe HTTP Basic de l'API source | vide |
-| `DATABASE_URL` | Connexion PostgreSQL | `postgresql+psycopg://enervision:enervision@localhost:5433/enervision` |
+| `DATABASE_URL` | Connexion PostgreSQL, identifiants compris | `postgresql+psycopg://localhost:5433/enervision` : **sans identifiants**, à renseigner dans `.env` (voir `.env.example`) |
 | `CONSUMPTION_REFRESH_S` | Intervalle de rafraîchissement de la mesure courante, en secondes | `60` |
 | `CONSUMPTION_STALENESS_S` | Âge à partir duquel une mesure est signalée périmée, en secondes | `120` |
 | `HISTORY_HOURS` | Profondeur de l'historique renvoyé, en heures | `24` |

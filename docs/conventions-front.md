@@ -178,6 +178,8 @@ Les tests vivent dans `src/tests/`, en miroir de l'arborescence du code :
 src/tests/
 ├── api/
 │   └── client.test.ts
+├── components/
+│   └── ConsumptionChart.test.tsx
 ├── components/ui/
 │   ├── Badge.test.ts
 │   ├── Tabs.test.tsx

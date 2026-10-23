@@ -37,9 +37,32 @@ services:
       context: ./ml
       dockerfile: Dockerfile
     image: smart-energy-ml:dev
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: smart-energy-forecasting
     ports:
       - "8001:8000"
+    depends_on:
+      - mlflow
+    restart: unless-stopped
+
+  mlflow:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile.mlflow
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --serve-artifacts
+      --host 0.0.0.0
+      --port 5000
     restart: unless-stopped
 
 volumes:
   pgdata:
+  mlflow_data:

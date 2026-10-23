@@ -29,6 +29,9 @@ ml/data
 *.pkl
 *.joblib
 
+# MLflow - données locales d'expérimentation
+ml/mlruns/
+
 # --- Secrets et configuration locale ---
 .env
 .env.*

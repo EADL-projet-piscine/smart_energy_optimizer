@@ -142,7 +142,7 @@ def test_route_502_when_source_refuses(fake_api):
     """L'API a répondu mais a refusé : erreur franche, aucune donnée de repli."""
     fake_api.code = 500
 
-    response = TestClient(app).get("/api/consommation/historique")
+    response = TestClient(app).get("/api/consommations/historique")
 
     assert response.status_code == 502
     assert "sites" not in response.json()
@@ -151,7 +151,7 @@ def test_route_502_when_source_refuses(fake_api):
 def test_route_503_when_source_unreachable(monkeypatch):
     monkeypatch.setattr(settings, "enervision_api_url", "http://127.0.0.1:1")
 
-    response = TestClient(app).get("/api/consommation/historique")
+    response = TestClient(app).get("/api/consommations/historique")
 
     assert response.status_code == 503
     assert "sites" not in response.json()

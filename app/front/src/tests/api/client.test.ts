@@ -44,10 +44,10 @@ describe('fetchJson', () => {
     vi.stubEnv('VITE_API_URL', '')
     fetchMock.mockResolvedValue(jsonResponse([]))
 
-    await fetchJson('/api/consommation/resume', undefined, 'POST')
+    await fetchJson('/api/consommations', undefined, 'POST')
 
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('/api/consommation/resume')
+    expect(url).toBe('/api/consommations')
     expect(init).toMatchObject({ method: 'POST' })
   })
 

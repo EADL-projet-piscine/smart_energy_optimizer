@@ -8,10 +8,11 @@ export type SummaryResponse = {
   nextAt: string | null
 }
 
+/** Enveloppe renvoyée par l'API métier autour de la mesure. */
 type Envelope = { data?: unknown; next_at?: unknown }
 
 export async function loadSummary(signal?: AbortSignal): Promise<SummaryResponse> {
-  const body = (await fetchJson('/api/consommation/resume', signal)) as Envelope
+  const body = (await fetchJson('/api/consommations', signal)) as Envelope
   const summary = normalizeSummary(body?.data ?? body)
   if (!summary) throw new Error('Forme de réponse non reconnue')
 

@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/resume", summary="Consommation courante de tous les sites")
+# Chemin vide : le préfixe du routeur porte déjà « /api/consommations ».
+# Un « / » ici produirait une barre finale et une redirection 307 à chaque appel.
+@router.get("", summary="Consommation courante de tous les sites")
 def consumption_summary() -> dict:
     if state.data is None:
         raise HTTPException(
@@ -31,6 +33,8 @@ def consumption_summary() -> dict:
     }
 
 
+# Singulier : « historique » est une vue calculée sur la collection, pas une
+# collection d'historiques. Le pluriel est porté par le préfixe.
 @router.get("/historique", summary="Consommation des dernières 24 heures")
 async def consumption_history() -> dict:
     try:

@@ -36,7 +36,7 @@ def clean_state():
 
 def test_returns_503_without_data():
     with TestClient(app) as client:
-        response = client.get("/api/consommation/resume")
+        response = client.get("/api/consommations")
 
     assert response.status_code == 503
 
@@ -46,7 +46,7 @@ def test_relays_full_response():
     state.fetched_at = datetime.now(UTC)
 
     with TestClient(app) as client:
-        response = client.get("/api/consommation/resume")
+        response = client.get("/api/consommations")
 
     assert response.status_code == 200
     body = response.json()
@@ -60,7 +60,7 @@ def test_flags_stale_data():
     state.fetched_at = datetime.now(UTC) - timedelta(minutes=10)
 
     with TestClient(app) as client:
-        response = client.get("/api/consommation/resume")
+        response = client.get("/api/consommations")
 
     assert response.status_code == 200
     assert response.json()["stale"] is True
@@ -73,7 +73,7 @@ def test_announces_next_measurement(monkeypatch):
     state.fetched_at = datetime.now(UTC)
 
     with TestClient(app) as client:
-        body = client.get("/api/consommation/resume").json()
+        body = client.get("/api/consommations").json()
 
     ecart = datetime.fromisoformat(body["next_at"]) - datetime.fromisoformat(body["fetched_at"])
     assert ecart == timedelta(seconds=30)

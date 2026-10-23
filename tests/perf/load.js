@@ -26,7 +26,7 @@ export default function () {
     "back health: database reachable": (r) => r.json("database") === "ok",
   });
 
-  const summary = http.get(`${BACK_URL}/api/consommation/resume`, {
+  const summary = http.get(`${BACK_URL}/api/consommations`, {
     tags: { endpoint: "consumption_summary" },
   });
   check(summary, {

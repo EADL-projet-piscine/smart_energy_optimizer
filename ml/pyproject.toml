@@ -27,6 +27,7 @@ dev = [
     "httpx",
     "ruff==0.17.1",
     "pytest-cov",
+    "xgboost>=2.0",
 ]
 
 [tool.setuptools.packages.find]

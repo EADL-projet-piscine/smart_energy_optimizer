@@ -289,7 +289,7 @@ test.
 
 `tests/perf/load.js` est un scénario [k6](https://grafana.com/docs/k6/) :
 10 utilisateurs virtuels pendant 30 secondes appellent `/health` du back et
-du service ML, et la route métier `/api/consommation/resume` que le dashboard
+du service ML, et la route métier `/api/consommations` que le dashboard
 interroge toutes les 10 secondes. Il échoue si :
 
 | Seuil | Valeur |

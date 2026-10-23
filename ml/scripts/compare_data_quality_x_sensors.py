@@ -17,11 +17,12 @@ Fichier produit (un seul, écrasé à chaque collecte) :
 Les identifiants sont lus dans le .env du projet :
     ENERVISION_API_URL, ENERVISION_API_USERNAME, ENERVISION_API_PASSWORD
 """
+
 import argparse
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -105,7 +106,7 @@ def collect(minutes: int, interval: int) -> None:
     try:
         with make_client() as c:
             while time.time() < end_at:
-                t0 = datetime.now(timezone.utc)
+                t0 = datetime.now(UTC)
 
                 # Un seul appel /sensors/status renvoie les 7 sites d'un coup :
                 # tous les sites sont comparés à un état des capteurs du même instant.
@@ -174,7 +175,7 @@ def sensor_table(df: pd.DataFrame) -> pd.DataFrame:
     for s in SENSORS:
         # Vrai si /current cite ce capteur dans null_reasons
         reason = df["null_reasons"].apply(
-            lambda r: any(REASON_TO_SENSOR.get(x) == s for x in r.split("|") if x)
+            lambda r, s=s: any(REASON_TO_SENSOR.get(x) == s for x in r.split("|") if x)
         )
         # Vrai si /sensors/status ne dit pas "ok" pour ce capteur
         failing = ~df[f"sensor_{s}"].isin(["ok", ""])
@@ -183,28 +184,31 @@ def sensor_table(df: pd.DataFrame) -> pd.DataFrame:
         only_reason = int((reason & ~failing).sum())
         only_status = int((~reason & failing).sum())
         none = int((~reason & ~failing).sum())
-        lignes.append({
-            "capteur": s,
-            "les deux": both,
-            "null_reason seul": only_reason,
-            "status seul": only_status,
-            "aucun": none,
-            "concordance": f"{(both + none) / max(len(df), 1):.0%}",
-        })
+        lignes.append(
+            {
+                "capteur": s,
+                "les deux": both,
+                "null_reason seul": only_reason,
+                "status seul": only_status,
+                "aucun": none,
+                "concordance": f"{(both + none) / max(len(df), 1):.0%}",
+            }
+        )
     return pd.DataFrame(lignes).set_index("capteur")
 
 
 def analyze() -> None:
     df = load_snapshots()
     n = len(df)
-    print(f"\n{n} observations | {df['site_id'].nunique()} sites | "
-          f"{df['polled_at'].nunique()} relevés | "
-          f"{df['polled_at'].min():%H:%M:%S} -> {df['polled_at'].max():%H:%M:%S}")
+    print(
+        f"\n{n} observations | {df['site_id'].nunique()} sites | "
+        f"{df['polled_at'].nunique()} relevés | "
+        f"{df['polled_at'].min():%H:%M:%S} -> {df['polled_at'].max():%H:%M:%S}"
+    )
 
     # ---- 2.1 Vue d'ensemble -------------------------------------------------
     titre("1. data_quality (/current) vs overall (/sensors/status)")
-    print(f"Concordance globale : {df['agree'].mean():.1%} "
-          f"({int(df['agree'].sum())} / {n})\n")
+    print(f"Concordance globale : {df['agree'].mean():.1%} ({int(df['agree'].sum())} / {n})\n")
 
     effectifs = pd.crosstab(df["data_quality"], df["overall"]).reindex(
         index=QUALITY_ORDER, columns=OVERALL_ORDER, fill_value=0
@@ -223,8 +227,10 @@ def analyze() -> None:
     if dis.empty:
         print("Aucun désaccord.")
     else:
-        print(f"{len(dis)} désaccords sur {n} ({len(dis) / n:.1%}). "
-              "S'ils sont isolés, c'est probablement un décalage de timing entre les 2 appels.\n")
+        print(
+            f"{len(dis)} désaccords sur {n} ({len(dis) / n:.1%}). "
+            "S'ils sont isolés, c'est probablement un décalage de timing entre les 2 appels.\n"
+        )
         vue = dis[["polled_at", "site_id", "data_quality", "overall", "null_reasons"]].copy()
         vue["polled_at"] = vue["polled_at"].dt.strftime("%H:%M:%S")
         print(vue.to_string(index=False))
@@ -235,15 +241,21 @@ def analyze() -> None:
 
     # ---- 2.4 Hypothèse network_loss ----------------------------------------
     titre("4. Test d'hypothèse : l'effet de la perte réseau (lignes critical exclues)")
-    print("Hypothèse : en cas de perte réseau, /current ne cite que 'network_loss' alors que\n"
-          "/sensors/status marque tous les capteurs en panne. Si c'est vrai, la colonne\n"
-          "'status seul' doit presque disparaître une fois les lignes critical retirées.\n")
+    print(
+        "Hypothèse : en cas de perte réseau, /current ne cite que 'network_loss' alors que\n"
+        "/sensors/status marque tous les capteurs en panne. Si c'est vrai, la colonne\n"
+        "'status seul' doit presque disparaître une fois les lignes critical retirées.\n"
+    )
     sans_critical = df[df["data_quality"] != "critical"]
     print(f"{len(sans_critical)} observations sans critical :")
     print(sensor_table(sans_critical).to_string())
     print("\nnull_reasons observés sur les lignes critical :")
-    print(df[df["data_quality"] == "critical"]["null_reasons"]
-          .replace("", "(vide)").value_counts().to_string())
+    print(
+        df[df["data_quality"] == "critical"]["null_reasons"]
+        .replace("", "(vide)")
+        .value_counts()
+        .to_string()
+    )
 
     # ---- 2.5 Taux de panne --------------------------------------------------
     titre("5. Taux de panne par capteur (d'après /sensors/status)")
@@ -253,10 +265,16 @@ def analyze() -> None:
     for s, v in taux.items():
         print(f"  {s:12s} {v:5.1f} %")
 
-    par_site = pd.DataFrame(
-        {s: (~df[f"sensor_{s}"].isin(["ok", ""])).groupby(df["site_id"]).mean() * 100
-         for s in SENSORS}
-    ).round(0).astype(int)
+    par_site = (
+        pd.DataFrame(
+            {
+                s: (~df[f"sensor_{s}"].isin(["ok", ""])).groupby(df["site_id"]).mean() * 100
+                for s in SENSORS
+            }
+        )
+        .round(0)
+        .astype(int)
+    )
     print("\nTaux de panne (%) par site :")
     print(par_site.to_string())
 
@@ -266,15 +284,20 @@ def analyze() -> None:
 # ==========================================================================
 def history() -> None:
     """Statistiques sur /readings des dernières 24 h. Aucun fichier écrit."""
-    end = datetime.now(timezone.utc) - timedelta(minutes=5)  # marge sur l'horloge serveur
+    end = datetime.now(UTC) - timedelta(minutes=5)  # marge sur l'horloge serveur
     start = end - timedelta(hours=24)
     rows = []
     with make_client() as c:
         for site in SITES:
-            r = c.get("/api/v1/readings", params={
-                "site_id": site, "limit": 1000,
-                "start_time": start.isoformat(), "end_time": end.isoformat(),
-            })
+            r = c.get(
+                "/api/v1/readings",
+                params={
+                    "site_id": site,
+                    "limit": 1000,
+                    "start_time": start.isoformat(),
+                    "end_time": end.isoformat(),
+                },
+            )
             r.raise_for_status()
             for x in r.json():
                 x["null_reasons"] = "|".join(x.get("null_reasons", []))

@@ -87,7 +87,13 @@ def test_loop_interval(monkeypatch):
         calls.append(1)
         return True
 
+    async def fake_refresh_details():
+        return True
+
     monkeypatch.setattr(planificateur, "refresh", fake_refresh)
+    # La boucle charge aussi le détail des sites : sans cette doublure, le test
+    # part sur le réseau réel et n'exécute qu'un seul cycle.
+    monkeypatch.setattr(planificateur, "refresh_details", fake_refresh_details)
 
     async def scenario():
         task = asyncio.create_task(planificateur.refresh_loop())

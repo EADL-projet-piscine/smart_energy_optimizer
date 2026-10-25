@@ -188,3 +188,18 @@ export function buildSummary(summary: ParkSummary): ParkSummary {
         : summary.mediumAlerts,
   }
 }
+
+/** Libellés de l'échelle `data_quality` de l'API source. */
+const QUALITY_LABELS: Record<string, string> = {
+  good: 'Toutes les mesures sont disponibles',
+  partial: 'Un capteur secondaire en panne',
+  degraded: 'Plusieurs capteurs en panne',
+  critical: 'Perte réseau : aucune mesure',
+}
+
+/** Traduit `data_quality` en phrase lisible, ou rend la valeur brute si elle
+ * est inconnue — mieux vaut afficher un mot étrange que rien du tout. */
+export function qualityLabel(quality: string | null): string | null {
+  if (!quality) return null
+  return QUALITY_LABELS[quality] ?? quality
+}

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SiteDetail } from '../../screens/SiteDetail'
-import type { Alert, Site } from '../../services/model'
+import type { Alert, SiteDetail as Detail, DetailsBySite, Site } from '../../services/model'
 
 // Le graphique est du ressort de Recharts : le remplacer isole ce qu'on teste
 // et évite les avertissements de dimensions nulles sous jsdom.
@@ -35,9 +35,24 @@ function site(partiel: Partial<Site> = {}): Site {
   }
 }
 
-function afficher(sites: Site[], siteId = sites[0]?.id ?? '') {
+function detail(partiel: Partial<Detail> = {}): Detail {
+  return {
+    at: '2026-10-25T13:15:16Z',
+    stale: false,
+    dataQuality: 'good',
+    nullReasons: [],
+    voltageV: 405.8,
+    currentA: 247.4,
+    powerFactor: 0.909,
+    temperatureC: 7.8,
+    humidityPct: 39.3,
+    ...partiel,
+  }
+}
+
+function afficher(sites: Site[], siteId = sites[0]?.id ?? '', details: DetailsBySite = {}) {
   const onSelect = vi.fn()
-  render(<SiteDetail sites={sites} siteId={siteId} onSelect={onSelect} seriesBySite={{}} />)
+  render(<SiteDetail sites={sites} siteId={siteId} onSelect={onSelect} seriesBySite={{}} details={details} />)
   return onSelect
 }
 
@@ -83,6 +98,75 @@ describe('SiteDetail', () => {
     afficher([site({ receivedCount: null, expectedCount: null })])
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('SiteDetail — diagnostic', () => {
+  it('affiche l’état de l’installation', () => {
+    afficher([site()], 'SITE001', { SITE001: detail() })
+
+    expect(screen.getByText('405,8')).toBeInTheDocument()
+    expect(screen.getByText('247,4')).toBeInTheDocument()
+    expect(screen.getByText('0,909')).toBeInTheDocument()
+    expect(screen.getByText('7,8')).toBeInTheDocument()
+  })
+
+  it('signale un facteur de puissance sous le seuil de facturation', () => {
+    // Sous 0,9, le fournisseur facture la puissance réactive : c'est la seule
+    // grandeur de ce bloc qui appelle une action.
+    afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.82 }) })
+
+    expect(screen.getByText(/puissance réactive facturée/)).toBeInTheDocument()
+  })
+
+  it('ne signale rien quand le facteur de puissance est correct', () => {
+    afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.95 }) })
+
+    expect(screen.queryByText(/puissance réactive facturée/)).not.toBeInTheDocument()
+  })
+
+  it('explique pourquoi des mesures manquent', () => {
+    // C'est l'objet du ticket : le résumé dit qu'il en manque, le détail dit
+    // pourquoi. Sans ça, l'écran affiche « 22/24 » et rien d'autre.
+    afficher([site({ receivedCount: 22, expectedCount: 24 })], 'SITE001', {
+      SITE001: detail({ dataQuality: 'partial' }),
+    })
+
+    expect(screen.getAllByText('Un capteur secondaire en panne').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('affiche un badge quand la qualité est dégradée', () => {
+    afficher([site()], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
+
+    expect(screen.getAllByText('Perte réseau : aucune mesure').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('n’affiche aucun badge quand tout va bien', () => {
+    // Inutile d'annoncer que tout fonctionne : le badge ne sert qu'à signaler.
+    afficher([site()], 'SITE001', { SITE001: detail({ dataQuality: 'good' }) })
+
+    expect(screen.queryByText('Toutes les mesures sont disponibles')).not.toBeInTheDocument()
+  })
+
+  it('liste les capteurs indisponibles', () => {
+    afficher([site()], 'SITE001', {
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['sonde de tension HS'] }),
+    })
+
+    expect(screen.getByText('sonde de tension HS')).toBeInTheDocument()
+  })
+
+  it('met un tiret sur une grandeur absente', () => {
+    afficher([site()], 'SITE001', { SITE001: detail({ voltageV: null, powerFactor: null }) })
+
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('n’affiche pas le bloc quand le détail manque', () => {
+    // Le détail vient d'un autre endpoint : son absence ne doit rien casser.
+    afficher([site()], 'SITE001', {})
+
+    expect(screen.queryByText('État de l’installation')).not.toBeInTheDocument()
   })
 })
 

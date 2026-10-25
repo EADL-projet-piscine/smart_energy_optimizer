@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dashboard } from '../../screens/Dashboard'
-import type { ParkSummary } from '../../services/model'
+import type { DetailsBySite, ParkSummary } from '../../services/model'
 import { useHistory } from '../../services/useHistory'
 import { useSummary } from '../../services/useSummary'
 
@@ -30,9 +30,10 @@ const SUMMARY: ParkSummary = {
   source: 'api',
 }
 
-function mockHooks(summary: ParkSummary | null, error: string | null) {
+function mockHooks(summary: ParkSummary | null, error: string | null, details: DetailsBySite = {}) {
   vi.mocked(useSummary).mockReturnValue({
     summary,
+    details,
     error,
     loading: false,
     siteId: null,
@@ -88,5 +89,14 @@ describe('Dashboard', () => {
     render(<Dashboard />)
 
     expect(screen.getByText(/Historique indisponible/)).toBeInTheDocument()
+  })
+
+  it('affiche le parc même sans détail des sites', () => {
+    // Le détail est un complément : le résumé doit s'afficher sans lui.
+    mockHooks(SUMMARY, null, {})
+
+    render(<Dashboard />)
+
+    expect(screen.getByText('2 847')).toBeInTheDocument()
   })
 })

@@ -8,14 +8,15 @@ import { Bullet, List, Row } from '../components/ui/Row'
 import { Tabs } from '../components/ui/Tabs'
 import { Caption, Subtitle } from '../components/ui/Text'
 import { Toast } from '../components/ui/Toast'
-import { formatKw, formatNumber } from '../services/format'
-import type { Alert, SeriesPoint, Site } from '../services/model'
+import { formatKw, formatNumber, qualityLabel } from '../services/format'
+import type { Alert, SiteDetail as Detail, DetailsBySite, SeriesPoint, Site } from '../services/model'
 
 type Props = {
   sites: Site[]
   siteId: string
   onSelect: (id: string) => void
   seriesBySite: Record<string, SeriesPoint[]>
+  details: DetailsBySite
 }
 
 /** Alerte mise en avant dans le toast : la plus grave, sinon la première. */
@@ -23,7 +24,58 @@ function mainAlert(site: Site): Alert | null {
   return site.alerts.find((alert) => alert.severity === 'critique') ?? site.alerts[0] ?? null
 }
 
-export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
+/** Couleur du badge de qualité : rouge si rien n'arrive, ambre sinon. */
+function qualityTone(quality: string | null): 'ok' | 'ambre' | 'alert' {
+  if (quality === 'good') return 'ok'
+  if (quality === 'critical') return 'alert'
+  return 'ambre'
+}
+
+/** En dessous de ce seuil, le fournisseur facture la puissance réactive. */
+const POWER_FACTOR_FLOOR = 0.9
+
+/** Grandeurs électriques du site, absentes du résumé du parc. */
+function Installation({ detail }: { detail: Detail }) {
+  const poorPowerFactor = detail.powerFactor !== null && detail.powerFactor < POWER_FACTOR_FLOOR
+
+  return (
+    <div>
+      <Subtitle>État de l’installation</Subtitle>
+      <div className="grid grid-cols-2 gap-3 min-[981px]:grid-cols-4">
+        <Metric
+          variant="inset"
+          label="Tension"
+          value={detail.voltageV === null ? '—' : formatNumber(detail.voltageV, 1)}
+          unit={detail.voltageV === null ? undefined : 'V'}
+        />
+        <Metric
+          variant="inset"
+          label="Intensité"
+          value={detail.currentA === null ? '—' : formatNumber(detail.currentA, 1)}
+          unit={detail.currentA === null ? undefined : 'A'}
+        />
+        <Metric
+          variant="inset"
+          label="Facteur de puissance"
+          tone={poorPowerFactor ? 'ambre' : 'defaut'}
+          value={detail.powerFactor === null ? '—' : formatNumber(detail.powerFactor, 3)}
+          detail={poorPowerFactor ? 'Sous 0,9 : puissance réactive facturée' : undefined}
+        />
+        <Metric
+          variant="inset"
+          label="Température"
+          value={detail.temperatureC === null ? '—' : formatNumber(detail.temperatureC, 1)}
+          unit={detail.temperatureC === null ? undefined : '°C'}
+          detail={
+            detail.humidityPct === null ? undefined : `${formatNumber(detail.humidityPct)} % d’humidité`
+          }
+        />
+      </div>
+    </div>
+  )
+}
+
+export function SiteDetail({ sites, siteId, onSelect, seriesBySite, details }: Props) {
   const site = sites.find((candidate) => candidate.id === siteId) ?? sites[0]
   const [toastClosed, setToastClosed] = useState(false)
   const [highlighted, setHighlighted] = useState(false)
@@ -56,6 +108,13 @@ export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
     site.receivedCount !== null && site.expectedCount !== null && site.receivedCount < site.expectedCount
   const readingsTone = readingsComplete ? 'ok' : readingsPartial ? 'ambre' : 'defaut'
 
+  // Le détail vient d'un autre endpoint que le résumé : il peut manquer sans
+  // que le reste de l'écran en souffre.
+  const detail = details[site.id] ?? null
+  // La qualité ne s'affiche que lorsqu'elle pose problème : « 24/24 » suivi de
+  // « toutes les mesures sont disponibles » n'apprend rien au lecteur.
+  const qualityIssue = detail && detail.dataQuality !== 'good' ? qualityLabel(detail.dataQuality) : null
+
   function scrollToActions() {
     document.getElementById(`actions-${site.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     setHighlighted(true)
@@ -87,7 +146,10 @@ export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
               {site.type} · {site.readingLabel}
             </p>
           </div>
-          {site.badge && <Badge tone={badgeTone(site.badge)}>{site.badge}</Badge>}
+          <div className="flex items-center gap-2">
+            {qualityIssue && <Badge tone={qualityTone(detail?.dataQuality ?? null)}>{qualityIssue}</Badge>}
+            {site.badge && <Badge tone={badgeTone(site.badge)}>{site.badge}</Badge>}
+          </div>
         </header>
 
         <div className="mt-4 grid grid-cols-1 gap-3 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4">
@@ -119,6 +181,8 @@ export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
                 ? '—'
                 : `${formatNumber(site.receivedCount)}/${formatNumber(site.expectedCount)}`
             }
+            // Le résumé dit qu'il manque des mesures, le détail dit pourquoi.
+            detail={qualityIssue}
           />
         </div>
 
@@ -143,6 +207,21 @@ export function SiteDetail({ sites, siteId, onSelect, seriesBySite }: Props) {
             highlighted && 'rounded-xl shadow-[0_0_0_2px_rgba(91,157,255,0.45)]',
           )}
         >
+          {detail && <Installation detail={detail} />}
+
+          {detail && detail.nullReasons.length > 0 && (
+            <div>
+              <Subtitle>Capteurs indisponibles</Subtitle>
+              <List>
+                {detail.nullReasons.map((reason) => (
+                  <Row key={reason} accent="ambre">
+                    <p className="m-0 text-[13px] leading-snug text-secondaire">{reason}</p>
+                  </Row>
+                ))}
+              </List>
+            </div>
+          )}
+
           {others.length > 0 && (
             <div>
               <Subtitle>Alertes</Subtitle>

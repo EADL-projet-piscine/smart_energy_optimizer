@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     enervision_timeout_s: float = 10.0
     enervision_user: str = ""
     enervision_password: SecretStr = SecretStr("")
-    database_url: str = "postgresql+psycopg://enervision:enervision@localhost:5433/enervision"
+    # Sans identifiants : ils viennent de DATABASE_URL (variable d'environnement ou .env,
+    # voir .env.example), jamais du code.
+    database_url: str = "postgresql+psycopg://localhost:5433/enervision"
     consumption_refresh_s: float = 60.0
     consumption_staleness_s: float = 120.0
     history_hours: int = 24

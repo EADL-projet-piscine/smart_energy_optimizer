@@ -29,6 +29,9 @@ ml/data
 *.pkl
 *.joblib
 
+# MLflow - données locales d'expérimentation
+ml/mlruns/
+
 # --- Secrets et configuration locale ---
 .env
 .env.*
@@ -44,6 +47,9 @@ ml/data
 node_modules/
 dist/
 .vite/
+
+# --- Analyse SonarQube (dossier de travail du scanner) ---
+.scannerwork/
 
 # --- Système ---
 .DS_Store

@@ -12,8 +12,9 @@ export default defineConfig({
     restoreMocks: true,
     coverage: {
       provider: 'v8',
-      // text : journal de CI ; coverage.txt : résumé du run ; html : artefact.
-      reporter: ['text', ['text', { file: 'coverage.txt' }], 'html'],
+      // text : journal de CI ; coverage.txt : résumé du run ; html : artefact ;
+      // lcov : rapport lu par SonarQube.
+      reporter: ['text', ['text', { file: 'coverage.txt' }], 'html', 'lcov'],
       // Tout fichier source compte, testé ou non — sinon la couverture ne
       // mesure que ce qu'on a bien voulu mesurer.
       include: ['src/**/*.{ts,tsx}'],

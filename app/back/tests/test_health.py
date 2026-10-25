@@ -7,7 +7,7 @@ from smart_energy_app import db
 from smart_energy_app.main import app
 
 # Adresse réservée à la documentation (RFC 5737) : jamais routée, la connexion ne répond pas.
-URL_INJOIGNABLE = "postgresql+psycopg://enervision:enervision@192.0.2.1:5432/enervision"
+URL_INJOIGNABLE = "postgresql+psycopg://192.0.2.1:5432/enervision"
 
 
 def test_health():

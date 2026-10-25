@@ -6,8 +6,11 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 import pytest
+
+matplotlib.use("Agg")
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "compare_algo_multi_run.py"
 

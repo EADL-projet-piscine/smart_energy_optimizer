@@ -68,3 +68,18 @@ export type History = {
   park: SeriesPoint[]
   bySite: Record<string, SeriesPoint[]>
 }
+
+/** Détail temps réel d'un site : ce que le résumé ne dit pas. */
+export type SiteDetail = {
+  at: string | null
+  stale: boolean
+  dataQuality: string | null
+  nullReasons: string[]
+  voltageV: number | null
+  currentA: number | null
+  powerFactor: number | null
+  temperatureC: number | null
+  humidityPct: number | null
+}
+
+export type DetailsBySite = Record<string, SiteDetail>

@@ -3,7 +3,12 @@ from typing import Any
 
 import httpx
 
-from smart_energy_app.commun.enervision import READINGS_PATH, SUMMARY_PATH
+from smart_energy_app.commun.enervision import (
+    READINGS_PATH,
+    SITE_CURRENT_PATH,
+    SITES_PATH,
+    SUMMARY_PATH,
+)
 from smart_energy_app.config import settings
 
 
@@ -44,3 +49,17 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         response = await client.get(url, params=params)
         response.raise_for_status()
         return response.json()
+
+
+async def fetch_sites() -> list[dict]:
+    """Appelle /api/v1/sites : le référentiel des sites du parc."""
+    return await _get(SITES_PATH)
+
+
+async def fetch_site_current(site_id: str) -> dict:
+    """Appelle /api/v1/sites/{site_id}/current : la mesure détaillée d'un site.
+
+    Contrairement au résumé, la réponse porte la cause d'une mesure absente
+    (`data_quality`, `null_reasons`) et les grandeurs électriques du site.
+    """
+    return await _get(SITE_CURRENT_PATH.format(site_id=site_id))

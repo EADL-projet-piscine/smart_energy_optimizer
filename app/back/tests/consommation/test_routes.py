@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from smart_energy_app.config import settings
+from smart_energy_app.consommation.details import state as details_state
 from smart_energy_app.consommation.service import state
 from smart_energy_app.main import app
 
@@ -23,15 +24,43 @@ SUMMARY = {
     ],
 }
 
+SITE_DETAIL = {
+    "site_id": "SITE001",
+    "data_quality": "good",
+    "null_reasons": [],
+    "voltage_v": 405.8,
+    "temperature_celsius": 7.8,
+}
+
 
 @pytest.fixture(autouse=True)
 def clean_state():
-    """Remet l'état à zéro avant et après chaque test."""
+    """Remet les deux états à zéro avant et après chaque test.
+
+    `state` et `details_state` sont des singletons de module : un test qui en
+    laisse un rempli contamine le suivant.
+    """
     state.data = None
     state.fetched_at = None
+    details_state.by_site = {}
+    details_state.site_ids = []
+
     yield
+
     state.data = None
     state.fetched_at = None
+    details_state.by_site = {}
+    details_state.site_ids = []
+
+
+@pytest.fixture
+def details():
+    """Deux sites au référentiel, dont un seul a réellement répondu."""
+    details_state.site_ids = ["SITE001", "SITE002"]
+    details_state.by_site = {
+        "SITE001": {"data": SITE_DETAIL, "fetched_at": datetime.now(UTC)},
+    }
+    return details_state
 
 
 def test_returns_503_without_data():
@@ -77,3 +106,42 @@ def test_announces_next_measurement(monkeypatch):
 
     ecart = datetime.fromisoformat(body["next_at"]) - datetime.fromisoformat(body["fetched_at"])
     assert ecart == timedelta(seconds=30)
+
+
+def test_sites_returns_every_known_detail(details):
+    response = TestClient(app).get("/api/consommations/sites")
+
+    assert response.status_code == 200
+    assert "SITE001" in response.json()["sites"]
+
+
+def test_sites_answers_503_before_the_first_refresh():
+    response = TestClient(app).get("/api/consommations/sites")
+
+    assert response.status_code == 503
+
+
+def test_site_relays_the_payload_untouched(details):
+    """Aucun champ n'est filtré : c'est tout l'intérêt de cet endpoint."""
+    response = TestClient(app).get("/api/consommations/sites/SITE001")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == SITE_DETAIL
+    assert body["data"]["data_quality"] == "good"
+    assert body["stale"] is False
+
+
+def test_unknown_site_answers_404(details):
+    """Un identifiant inconnu est une erreur du client, pas une panne."""
+    response = TestClient(app).get("/api/consommations/sites/SITE999")
+
+    assert response.status_code == 404
+    assert "SITE999" in response.json()["detail"]
+
+
+def test_known_site_without_measure_answers_503(details):
+    """SITE002 est au référentiel mais n'a jamais répondu : ce n'est pas un 404."""
+    response = TestClient(app).get("/api/consommations/sites/SITE002")
+
+    assert response.status_code == 503

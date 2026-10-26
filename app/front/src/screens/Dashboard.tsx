@@ -19,7 +19,7 @@ export function Dashboard() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
-  const { summary, error, siteId, setSiteId } = useSummary()
+  const { summary, details, error, siteId, setSiteId } = useSummary()
   const { history, error: historyError } = useHistory()
 
   useEffect(() => {
@@ -180,6 +180,7 @@ export function Dashboard() {
               siteId={siteId ?? ''}
               onSelect={setSiteId}
               seriesBySite={seriesBySite}
+              details={details}
             />
           </>
         ) : (

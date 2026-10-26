@@ -61,7 +61,9 @@ docstrings.
 
 **Les valeurs de données restent telles que l'API les fournit.** `Severity`
 vaut `'critique' | 'moyenne' | 'info'` : ce sont des données, pas des
-identifiants.
+identifiants. Il en va de même pour `dataQuality`, qui vaut `'good'`,
+`'partial'`, `'degraded'` ou `'critical'` : `qualityLabel()` les traduit à
+l'affichage, le modèle les garde tels quels.
 
 > Attention aux renommages mécaniques. Un `sed` sur un identifiant traverse
 > les chaînes de caractères, et TypeScript ne le voit pas. Un renommage
@@ -83,22 +85,39 @@ l'absence de mesure n'en est pas une. Sur un graphique, une valeur manquante
 interrompt la courbe au lieu d'être reliée.
 
 **Les horodatages portent leur fuseau.** L'API source date `/stats/summary`
-sans fuseau alors qu'il s'agit d'UTC, et `/readings` avec un `Z`.
-`toIsoUtc()` normalise les deux. Sans cela, JavaScript lit un horodatage nu
-comme de l'heure locale et affiche deux heures de moins en France, sans
-erreur.
+et `/sites/{id}/current` sans fuseau alors qu'il s'agit d'UTC, et
+`/readings` avec un `Z`. `toIsoUtc()` normalise les trois. Sans cela,
+JavaScript lit un horodatage nu comme de l'heure locale et affiche deux
+heures de moins en France, sans erreur.
 
 **Un point de série est daté, pas numéroté.** `SeriesPoint` porte `at`, une
 chaîne ISO. Un entier d'heure ne distingue pas 9h hier de 9h aujourd'hui :
 sur une fenêtre glissante, trier par heure relie deux points séparés de
 vingt-trois heures.
 
+**Un champ affiché a une seule source.** Deux endpoints qui servent la même
+donnée, ce sont deux versions de la vérité, et c'est toujours celle qu'on ne
+regarde pas qui est la bonne. Voir la section suivante.
+
 ## Endpoints consommés
 
-| Service | Endpoint |
-|---|---|
-| `summary.ts` | `GET /api/consommations` |
-| `history.ts` | `GET /api/consommations/historique` |
+| Service | Endpoint | Ce qu'il apporte |
+|---|---|---|
+| `summary.ts` | `GET /api/consommations` | le parc : totaux, consommation de chaque site, alertes, recommandations |
+| `details.ts` | `GET /api/consommations/sites` | par site : qualité de la mesure, causes d'absence, grandeurs électriques |
+| `history.ts` | `GET /api/consommations/historique` | les 24 dernières heures, par site et pour le parc |
+
+**Le résumé dit *combien*, le détail dit *pourquoi*.** Les deux portent
+`consumption_kw`, et c'est le seul recouvrement : la consommation affichée à
+l'écran vient **toujours du résumé**, parce que le total du parc en est
+dérivé et qu'une valeur prise à un autre instant ferait que la somme des
+sites ne tombe plus juste. Du détail viennent `dataQuality`, `nullReasons`,
+la tension, l'intensité, le facteur de puissance, la température et
+l'humidité — que le résumé ne contient pas.
+
+Le détail est un **complément** : s'il échoue, l'écran perd son bloc
+« État de l'installation » et garde tout le reste. C'est pour cela que
+`useSummary` les charge avec `Promise.allSettled` et non `Promise.all`.
 
 Les chemins sont écrits dans les services, jamais dans un composant. Ce sont
 des **chaînes de caractères** : ni TypeScript ni Biome ne les vérifie, et une
@@ -126,13 +145,23 @@ mesures.
 
 | Donnée | Cadence | Où |
 |---|---|---|
-| Résumé temps réel | Calée sur `next_at` annoncé par le serveur | `useSummary.ts` |
+| Résumé du parc | Calée sur `next_at` annoncé par le serveur | `useSummary.ts` |
+| Détail des sites | Dans le même cycle que le résumé | `useSummary.ts` |
 | Historique 24 h | 5 minutes | `useHistory.ts` |
 
 Le serveur annonce dans `/api/consommations` l'heure de sa prochaine mesure
 (`next_at`). Le client planifie son appel juste après, au lieu de sonder à
 l'aveugle : une mesure arrive à l'écran deux à trois secondes après avoir
-été collectée, pour un seul appel par cycle.
+été collectée, pour un seul appel par cycle. Trois garde-fous encadrent ce
+calcul : un repli à 60 secondes si le serveur n'annonce rien ou annonce une
+heure illisible, un plafond à 60 secondes, et un plancher à 5 secondes qui
+évite une rafale d'appels si les horloges divergent.
+
+**Le résumé et le détail partent ensemble.** Les deux endpoints sont
+rafraîchis par la même boucle côté serveur ; les charger dans le même cycle
+garantit qu'un chiffre et son explication décrivent le même instant.
+Changer d'onglet de site ne déclenche **aucun appel** : les sept détails
+sont déjà chargés.
 
 L'historique est au pas horaire : le rafraîchir plus souvent ne montrerait
 rien de neuf, et la source régénère ses valeurs à chaque appel — la courbe
@@ -153,6 +182,9 @@ La configuration est dans `biome.json`. Elle suit le style déjà en place —
 deux espaces, pas de point-virgule, guillemets simples, 110 colonnes — et
 non les réglages par défaut de Biome, qui reformateraient tout le dossier
 sans rien apporter.
+
+> Les fichiers créés ou copiés depuis Windows arrivent en CRLF et font
+> échouer le formateur. `sed -i 's/\r$//' <fichier>` les remet en LF.
 
 ### Les exemptions
 
@@ -204,20 +236,23 @@ src/tests/
 ├── api/
 │   └── client.test.ts
 ├── components/
-│   └── ConsumptionChart.test.tsx
-├── components/ui/
-│   ├── Badge.test.ts
-│   ├── Tabs.test.tsx
-│   ├── Text.test.tsx
-│   └── Toast.test.tsx
+│   ├── ConsumptionChart.test.tsx
+│   └── ui/
+│       ├── Badge.test.ts
+│       ├── Tabs.test.tsx
+│       ├── Text.test.tsx
+│       └── Toast.test.tsx
 ├── screens/
 │   ├── Dashboard.test.tsx
 │   └── SiteDetail.test.tsx
 └── services/
+    ├── details.test.ts
     ├── format.test.ts
     ├── history.test.ts
     ├── normalize.test.ts
-    └── summary.test.ts
+    ├── summary.test.ts
+    ├── useHistory.test.ts
+    └── useSummary.test.ts
 ```
 
 Ils tournent avec **Vitest** et ne font **aucun appel réseau réel** : le
@@ -237,13 +272,25 @@ UTC.
 Un test gagne à garder une décision plutôt qu'à vérifier une évidence. Les
 plus utiles de cette suite vérifient qu'aucun chiffre ne s'affiche quand
 l'API ne répond pas, qu'un site muet ne compte pas pour zéro dans le total
-du parc, et qu'un horodatage sans fuseau est bien lu comme de l'UTC — trois
-erreurs qui ont réellement coûté du temps.
+du parc, qu'un horodatage sans fuseau est bien lu comme de l'UTC, et qu'un
+détail de site indisponible n'efface pas le résumé — quatre erreurs qui ont
+réellement coûté du temps, ou qui auraient pu.
 
-Comme le client HTTP est simulé, **aucun test ne vérifie l'URL réellement
-appelée**. C'est le trou connu de cette suite, et c'est exactement par là
-qu'est passé le bug du dashboard affichant des données de démonstration.
-Seul un test de bout en bout le fermerait.
+### Tester un hook
+
+Les hooks se testent avec `renderHook` et des temporisateurs simulés :
+
+```ts
+vi.useFakeTimers({ shouldAdvanceTime: true })
+```
+
+L'option `shouldAdvanceTime` n'est pas décorative : `waitFor` a lui-même
+besoin que le temps avance, et sans elle il attendrait indéfiniment. Pour
+franchir une échéance, `await vi.advanceTimersByTimeAsync(ms)`, qui laisse
+aussi les promesses se résoudre.
+
+Chaque hook vérifie au minimum qu'il n'appelle plus rien après le
+démontage : un timer qui survit à son composant est une fuite silencieuse.
 
 ### Couverture
 
@@ -252,11 +299,20 @@ Les seuils sont dans `vitest.config.ts`. Le périmètre couvre **tout
 types et des données de démonstration : une couverture qui ne mesure que les
 fichiers déjà testés ne mesure rien.
 
-Seul ce qui est réellement couvert est verrouillé. Les hooks `use*` sont
-encore à zéro ; le seuil sera étendu quand leurs tests arriveront.
+Le seuil est un cliquet, pas une cible : il est calé juste sous la
+couverture constatée, pour interdire une régression sans forcer à écrire des
+tests inutiles.
 
 La CI (job `tests-front`) lance `npm run test:coverage` : un seuil non tenu
 fait échouer la pull request.
+
+### Ce qui n'est pas couvert
+
+Le client HTTP étant simulé, **aucun test ne vérifie qu'une URL atteint
+réellement le back**. Les tests vérifient le chemin demandé, pas qu'il
+existe de l'autre côté. C'est exactement par là qu'est passé le bug du
+dashboard affichant des données de démonstration, et seul un test de bout en
+bout le fermerait.
 
 ## Avant de pousser
 
@@ -264,9 +320,12 @@ fait échouer la pull request.
 cd app/front
 npm run lint
 npx tsc --noEmit
-npm test
+npm run test:coverage
 npm run build
 ```
+
+`test:coverage` plutôt que `test` : c'est ce que lance la CI, et un seuil
+non tenu ne se voit pas autrement.
 
 Le `build` vérifie en plus que le bundle de production se construit : une
 erreur qui ne gêne pas le serveur de développement peut le casser.

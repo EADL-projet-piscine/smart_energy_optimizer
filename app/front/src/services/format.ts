@@ -31,9 +31,9 @@ export function sitesLabel(count: number): string {
   return SITE_COUNT_LABELS[count] ?? `${count} sites`
 }
 
-/** L'API source date /stats/summary sans fuseau alors qu'il s'agit d'UTC, tandis que
- * /readings met un Z. Sans ce correctif, JavaScript lit l'horodatage nu comme de
- * l'heure locale et affiche deux heures de moins en France. */
+/** L'API source date /stats/summary et /sites/{id}/current sans fuseau alors qu'il
+ * s'agit d'UTC, tandis que /readings met un Z. Sans ce correctif, JavaScript lit
+ * l'horodatage nu comme de l'heure locale et affiche deux heures de moins en France. */
 export function toIsoUtc(value: string): string {
   return /(Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`
 }
@@ -187,4 +187,34 @@ export function buildSummary(summary: ParkSummary): ParkSummary {
         ? alerts.filter((alert) => alert.severity === 'moyenne').length
         : summary.mediumAlerts,
   }
+}
+
+/** Libellés de l'échelle `data_quality` de l'API source. */
+const QUALITY_LABELS: Record<string, string> = {
+  good: 'Toutes les mesures sont disponibles',
+  partial: 'Un capteur secondaire en panne',
+  degraded: 'Plusieurs capteurs en panne',
+  critical: 'Perte réseau : aucune mesure',
+}
+
+/** Version courte des mêmes états, pour le bout d'une ligne de liste où la
+ * phrase complète ne tiendrait pas. */
+const QUALITY_SHORT: Record<string, string> = {
+  partial: 'capteur en panne',
+  degraded: 'capteurs en panne',
+  critical: 'perte réseau',
+}
+
+/** Traduit `data_quality` en phrase lisible, ou rend la valeur brute si elle
+ * est inconnue — mieux vaut afficher un mot étrange que rien du tout. */
+export function qualityLabel(quality: string | null): string | null {
+  if (!quality) return null
+  return QUALITY_LABELS[quality] ?? quality
+}
+
+/** Même chose en quelques mots, et `null` quand tout va bien : la ligne
+ * affiche alors la mesure plutôt qu'un état qui n'apprend rien. */
+export function qualityShort(quality: string | null): string | null {
+  if (!quality || quality === 'good') return null
+  return QUALITY_SHORT[quality] ?? quality
 }

@@ -5,6 +5,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 
 from smart_energy_app.config import settings
+from smart_energy_app.consommation.details import state as details_state
 from smart_energy_app.consommation.historique import load_history
 from smart_energy_app.consommation.service import state
 
@@ -51,3 +52,30 @@ async def consumption_history() -> dict:
             status_code=503,
             detail="L'API source est injoignable.",
         ) from error
+
+
+@router.get("/sites", summary="Détail temps réel de tous les sites")
+def site_details() -> dict:
+    if not details_state.by_site:
+        raise HTTPException(
+            status_code=503,
+            detail="Aucun détail disponible : l'API source n'a pas encore répondu.",
+        )
+    return {
+        "sites": {site_id: details_state.as_payload(site_id) for site_id in details_state.by_site}
+    }
+
+
+@router.get("/sites/{site_id}", summary="Détail temps réel d'un site")
+def site_detail(site_id: str) -> dict:
+    payload = details_state.as_payload(site_id)
+    if payload is None:
+        # Distinguer les deux cas : un identifiant inconnu est une erreur du
+        # client, une absence de mesure est une indisponibilité du service.
+        if site_id not in details_state.site_ids:
+            raise HTTPException(status_code=404, detail=f"Site inconnu : {site_id}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Aucune mesure disponible pour {site_id}.",
+        )
+    return payload

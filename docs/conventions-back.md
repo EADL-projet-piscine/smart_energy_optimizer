@@ -155,6 +155,8 @@ portées par Azure Data Factory, hors du back-end.
 | `GET /health` | — | état du service et de la base |
 | `GET /api/consommations` | `consommation` | `/api/v1/stats/summary` |
 | `GET /api/consommations/historique` | `consommation` | `/api/v1/readings` |
+| `GET /api/consommations/sites` | `consommation` | `/api/v1/sites/{id}/current` × 7 |
+| `GET /api/consommations/sites/{site_id}` | `consommation` | `/api/v1/sites/{id}/current` |
 
 `/api/consommations` renvoie, à côté de la mesure :
 

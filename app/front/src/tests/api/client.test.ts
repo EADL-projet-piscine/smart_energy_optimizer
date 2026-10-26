@@ -39,7 +39,6 @@ describe('fetchJson', () => {
     expect(url).toBe('http://api.test/health')
     expect(init).toMatchObject({ method: 'GET', headers: { Accept: 'application/json' } })
   })
-
   it('appelle un chemin relatif quand aucune URL de base n’est configurée', async () => {
     vi.stubEnv('VITE_API_URL', '')
     fetchMock.mockResolvedValue(jsonResponse([]))
@@ -49,6 +48,17 @@ describe('fetchJson', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/consommations')
     expect(init).toMatchObject({ method: 'POST' })
+  })
+
+  it('appelle un chemin relatif quand VITE_API_URL n’est pas définie du tout', async () => {
+    // Cas par défaut en développement : aucune variable, donc aucun préfixe,
+    // et l'appel passe par le proxy de Vite. Distinct de la chaîne vide.
+    vi.stubEnv('VITE_API_URL', undefined)
+    fetchMock.mockResolvedValue(jsonResponse({}))
+
+    await fetchJson('/api/consommations')
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/consommations')
   })
 
   it('rejette un statut d’erreur', async () => {

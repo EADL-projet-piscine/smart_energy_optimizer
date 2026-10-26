@@ -56,17 +56,82 @@ function afficher(sites: Site[], siteId = sites[0]?.id ?? '', details: DetailsBy
   return onSelect
 }
 
+/** La ligne dépliable d'un site, repérée par son nom. */
+function ligne(nom: string) {
+  return screen.getByRole('button', { name: new RegExp(nom) })
+}
+
 describe('SiteDetail', () => {
-  it('affiche le site demandé', () => {
+  it('déplie le site demandé et laisse les autres fermés', () => {
     afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'B')
 
-    expect(screen.getByRole('heading', { name: 'Usine Lyon' })).toBeInTheDocument()
+    expect(ligne('Usine Lyon')).toHaveAttribute('aria-expanded', 'true')
+    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('retombe sur le premier site quand l’identifiant est inconnu', () => {
+  it('liste tous les sites, y compris ceux qui sont repliés', () => {
+    // C'est la raison d'être du panneau dépliant : le nom de chaque site est
+    // lisible sans avoir à l'ouvrir.
+    afficher([
+      site({ id: 'A', name: 'Bureau Paris' }),
+      site({ id: 'B', name: 'Usine Lyon' }),
+      site({ id: 'C', name: 'Data Center Marseille' }),
+    ])
+
+    expect(ligne('Bureau Paris')).toBeInTheDocument()
+    expect(ligne('Usine Lyon')).toBeInTheDocument()
+    expect(ligne('Data Center Marseille')).toBeInTheDocument()
+  })
+
+  it('ouvre le premier site quand l’identifiant demandé n’existe pas', () => {
     afficher([site({ id: 'A', name: 'Bureau Paris' })], 'INEXISTANT')
 
-    expect(screen.getByRole('heading', { name: 'Bureau Paris' })).toBeInTheDocument()
+    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('prévient quand on choisit un autre site', () => {
+    const onSelect = afficher(
+      [site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })],
+      'A',
+    )
+
+    fireEvent.click(ligne('Usine Lyon'))
+
+    expect(onSelect).toHaveBeenCalledWith('B')
+  })
+
+  it('garde les panneaux déjà ouverts quand on en ouvre un autre', () => {
+    // On compare souvent deux installations : refermer la première rendrait
+    // la comparaison impossible.
+    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A')
+
+    fireEvent.click(ligne('Usine Lyon'))
+
+    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'true')
+    expect(ligne('Usine Lyon')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('replie le site ouvert quand on reclique dessus', () => {
+    afficher([site({ id: 'A', name: 'Bureau Paris' })], 'A')
+
+    fireEvent.click(ligne('Bureau Paris'))
+
+    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Aucune recommandation pour ce site.')).not.toBeInTheDocument()
+  })
+
+  it('montre le détail de chaque panneau ouvert, pas celui du dernier', () => {
+    // Le bug qu'on évite : un panneau qui afficherait les données du site
+    // sélectionné au lieu des siennes.
+    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
+      A: detail({ voltageV: 405.8 }),
+      B: detail({ voltageV: 231.4 }),
+    })
+
+    fireEvent.click(ligne('Usine Lyon'))
+
+    expect(screen.getByText('405,8')).toBeInTheDocument()
+    expect(screen.getByText('231,4')).toBeInTheDocument()
   })
 
   it('prévient quand le résumé ne contient aucun site', () => {
@@ -98,6 +163,45 @@ describe('SiteDetail', () => {
     afficher([site({ receivedCount: null, expectedCount: null })])
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('SiteDetail — bout de ligne', () => {
+  it('affiche la mesure quand tout va bien', () => {
+    afficher([site({ currentKw: 165 })], 'SITE001', { SITE001: detail() })
+
+    expect(ligne('Bureau Paris')).toHaveTextContent('165 kW')
+  })
+
+  it('remplace la mesure par l’anomalie', () => {
+    // Un problème passe devant un chiffre : la liste sert d'abord à repérer
+    // le site qui demande une attention.
+    afficher([site()], 'SITE001', { SITE001: detail({ dataQuality: 'partial' }) })
+
+    expect(ligne('Bureau Paris')).toHaveTextContent('capteur en panne')
+    expect(ligne('Bureau Paris')).not.toHaveTextContent('100 kW')
+  })
+
+  it('signale un site qui ne transmet plus', () => {
+    afficher([site({ isTransmitting: false })])
+
+    expect(ligne('Bureau Paris')).toHaveTextContent('relevé interrompu')
+  })
+
+  it('met un tiret quand la mesure manque sans anomalie connue', () => {
+    afficher([site({ currentKw: null })])
+
+    expect(ligne('Bureau Paris')).toHaveTextContent('—')
+  })
+
+  it('affiche l’état de chaque ligne, même repliée', () => {
+    // L'intérêt de la liste : repérer le site en panne sans l'ouvrir.
+    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
+      B: detail({ dataQuality: 'critical' }),
+    })
+
+    expect(ligne('Usine Lyon')).toHaveAttribute('aria-expanded', 'false')
+    expect(ligne('Usine Lyon')).toHaveTextContent('perte réseau')
   })
 })
 
@@ -168,6 +272,16 @@ describe('SiteDetail — diagnostic', () => {
 
     expect(screen.queryByText('État de l’installation')).not.toBeInTheDocument()
   })
+
+  it('ne montre pas le détail d’un site replié', () => {
+    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
+      A: detail(),
+      B: detail({ voltageV: 231.4 }),
+    })
+
+    expect(screen.getByText('405,8')).toBeInTheDocument()
+    expect(screen.queryByText('231,4')).not.toBeInTheDocument()
+  })
 })
 
 describe('SiteDetail — alertes', () => {
@@ -205,6 +319,22 @@ describe('SiteDetail — alertes', () => {
     afficher([site()])
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('garde le toast de chaque site indépendant', () => {
+    // Chaque ligne porte son propre état : fermer l'un ne ferme pas l'autre.
+    afficher(
+      [
+        site({ id: 'A', name: 'Bureau Paris', alerts: [alert('critique', 'Urgent A')] }),
+        site({ id: 'B', name: 'Usine Lyon', alerts: [alert('critique', 'Urgent B')] }),
+      ],
+      'A',
+    )
+    fireEvent.click(ligne('Usine Lyon'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Fermer/ })[0])
+
+    expect(screen.getByRole('status')).toHaveTextContent('Urgent B')
   })
 })
 

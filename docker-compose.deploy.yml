@@ -1,0 +1,21 @@
+services:
+  back:
+    image: ${BACK_IMAGE:?BACK_IMAGE must be set}
+    build: null
+    env_file:
+      - path: /home/egrondin/enervision/back.env
+        required: false
+    restart: unless-stopped
+
+  ml:
+    image: ${ML_IMAGE:?ML_IMAGE must be set}
+    build: null
+    restart: unless-stopped
+    env_file:
+      - path: /home/egrondin/enervision/ml.env
+        required: false
+
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    restart: unless-stopped

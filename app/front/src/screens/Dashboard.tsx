@@ -98,7 +98,7 @@ export function Dashboard() {
         {summary ? (
           <>
             <section
-              className="mt-[22px] grid grid-cols-1 gap-3.5 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4"
+              className="mt-[22px] grid grid-cols-1 gap-3.5 min-[681px]:grid-cols-2 min-[981px]:grid-cols-3"
               aria-label="Indicateurs du parc"
             >
               <Metric
@@ -131,19 +131,9 @@ export function Dashboard() {
               <Metric
                 label="Alertes en cours"
                 value={formatNumber(summary.totalAlerts)}
-                tone="danger"
+                tone={summary.criticalAlerts > 0 ? 'danger' : summary.totalAlerts > 0 ? 'ambre' : 'defaut'}
                 size="lg"
                 detail={alertsLabel(summary.criticalAlerts, summary.mediumAlerts)}
-              />
-
-              <Metric
-                label="Coût du jour"
-                value={summary.dailyCostEur === null ? '—' : formatNumber(summary.dailyCostEur)}
-                unit={summary.dailyCostEur === null ? undefined : '€'}
-                size="lg"
-                detail={
-                  summary.co2Tons === null ? '—' : `${formatNumber(summary.co2Tons, 1)} t CO₂ équivalent`
-                }
               />
             </section>
 
@@ -158,19 +148,16 @@ export function Dashboard() {
                 <h2 id="chart-title" className="m-0 text-base font-[650] tracking-[-0.02em]">
                   Consommation des dernières 24 heures
                 </h2>
-                <Legend
-                  entries={[
-                    { label: 'Mesuré', style: 'mesure' },
-                    // « Capacité » et non « Seuil contractuel » : la ligne trace
-                    // la limite technique du parc, seule valeur que l'API donne.
-                    { label: 'Capacité', style: 'seuil' },
-                  ]}
-                />
+                {/* Pas de ligne de capacité ici : la somme des sept
+                    installations est une limite théorique, jamais atteinte
+                    simultanément, et le total affiché exclut les sites muets.
+                    La capacité garde tout son sens au niveau d'un site. */}
+                <Legend entries={[{ label: 'Mesuré', style: 'mesure' }]} />
               </header>
               {historyError ? (
                 <p className="mt-1.5 text-[13px] text-discret">Historique indisponible : {historyError}</p>
               ) : (
-                <ConsumptionChart series={parkSeries} capacityKw={summary.capacityKw ?? null} />
+                <ConsumptionChart series={parkSeries} capacityKw={null} />
               )}
               {summary.comment && (
                 <p className="mt-1 text-[13px] leading-snug text-discret">{summary.comment}</p>

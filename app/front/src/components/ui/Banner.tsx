@@ -10,7 +10,7 @@ export type BannerTone = 'ambre' | 'danger'
  * fond sombre devient illisible en thème clair.
  */
 const TONES: Record<BannerTone, string> = {
-  ambre: 'border-banniere-bord bg-banniere text-banniere-text',
+  ambre: 'border-banniere-bord bg-banniere text-banniere-texte',
   danger:
     'border-[rgba(255,109,70,0.4)] bg-[rgba(255,109,70,0.16)] text-[#ff8d62] light:border-[#fdba74] light:bg-[#ffedd5] light:text-[#c2410c]',
 }

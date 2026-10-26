@@ -114,13 +114,13 @@ export function ConsumptionChart({ series, capacityKw, showPeakValue = false, co
           {capacityKw !== null && (
             <ReferenceLine
               y={capacityKw}
-              stroke="var(--seuil)"
+              stroke="var(--ambre)"
               strokeDasharray="6 6"
               strokeWidth={1.6}
               label={{
                 value: `${formatNumber(capacityKw)} kW`,
                 position: 'insideTopRight',
-                className: 'fill-seuil text-[13px] font-bold',
+                className: 'fill-ambre text-[13px] font-bold',
               }}
             />
           )}

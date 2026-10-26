@@ -1,0 +1,8 @@
+student_id      = "student_id"
+subscription_id = "subscription_id"
+address_index   = "address_index"
+sa_name         = "sa_name"
+admin_username  = "admin_username"
+ip              = "ip"
+api_username    = "api_username"
+api_password    = "api_password"

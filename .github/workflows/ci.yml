@@ -7,10 +7,12 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A new push cancels the previous run of the same branch.
+# A new push cancels the previous run of the same pull request. Runs on main are never
+# cancelled: each one publishes the images of its own commit, and the changed files are
+# computed per push, so a cancelled run would lose its images for good.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -20,15 +22,109 @@ jobs:
   # passes here.
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
       - name: Lint and formatting
         run: sh scripts/check.sh
 
+  # Detects which component jobs need to run. Pull requests require pull-requests: read
+  # so paths-filter can query the changed files.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      back: ${{ steps.filter.outputs.back }}
+      ml: ${{ steps.filter.outputs.ml }}
+      front: ${{ steps.filter.outputs.front }}
+      perf: ${{ steps.filter.outputs.perf }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+      shared: ${{ steps.filter.outputs.shared }}
+      sonar_back_enabled: ${{ steps.sonar-config.outputs.back }}
+      sonar_ml_enabled: ${{ steps.sonar-config.outputs.ml }}
+      sonar_front_enabled: ${{ steps.sonar-config.outputs.front }}
+    steps:
+      - name: Check Sonar configuration
+        id: sonar-config
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+          PROJECT_KEY_BACK: ${{ vars.SONAR_PROJECT_KEY_BACK }}
+          PROJECT_KEY_ML: ${{ vars.SONAR_PROJECT_KEY_ML }}
+          PROJECT_KEY_FRONT: ${{ vars.SONAR_PROJECT_KEY_FRONT }}
+        run: |
+          for component in back ml front; do
+            variable="PROJECT_KEY_${component^^}"
+            missing=()
+            [ -n "$SONAR_TOKEN" ] || missing+=(SONAR_TOKEN)
+            [ -n "$SONAR_ORGANIZATION" ] || missing+=(SONAR_ORGANIZATION)
+            [ -n "${!variable}" ] || missing+=("SONAR_PROJECT_KEY_${component^^}")
+            if (( ${#missing[@]} == 0 )); then
+              echo "$component=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$component=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::SonarQube ($component) skipped, missing: ${missing[*]}."
+            fi
+          done
+
+      - uses: actions/checkout@v5
+
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # act events can omit repository.default_branch; this workflow targets main.
+          base: ${{ env.ACT == 'true' && 'HEAD' || github.event.repository.default_branch || 'main' }}
+          filters: |
+            back:
+              - 'app/back/**'
+              - 'db/**'
+              - 'pyproject.toml'
+            ml:
+              - 'ml/src/**'
+              - 'ml/tests/**'
+              - 'ml/scripts/**'
+              - 'ml/pyproject.toml'
+              - 'ml/Dockerfile'
+              - 'pyproject.toml'
+            front:
+              - 'app/front/**'
+            # Touching the CI itself runs every job, so a workflow change is always tested.
+            shared:
+              - '.github/workflows/ci.yml'
+              - 'sonar-project.properties'
+            perf:
+              - '.github/workflows/ci.yml'
+              - 'app/back/**'
+              - 'db/**'
+              - 'ml/src/**'
+              - 'ml/pyproject.toml'
+              - 'ml/Dockerfile'
+              - 'ml/Dockerfile.mlflow'
+              - 'docker-compose*.yml'
+              - 'tests/perf/**'
+            deploy:
+              - 'app/back/**'
+              - 'db/**'
+              - 'ml/src/**'
+              - 'ml/pyproject.toml'
+              - 'ml/Dockerfile'
+              - 'ml/Dockerfile.mlflow'
+              - 'docker-compose.yml'
+              - 'docker-compose.deploy.yml'
+
   # Back-end tests against a real PostgreSQL database. Coverage scope and 80 % threshold:
   # app/back/pyproject.toml.
   tests-back:
+    needs: changes
+    timeout-minutes: 30
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.shared == 'true' ||
+      needs.changes.outputs.back == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -86,6 +182,12 @@ jobs:
 
   # ML service tests. Coverage scope and 80 % threshold: ml/pyproject.toml.
   tests-ml:
+    needs: changes
+    timeout-minutes: 30
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.shared == 'true' ||
+      needs.changes.outputs.ml == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -126,6 +228,7 @@ jobs:
   # Repository scan: vulnerable dependencies, misconfigurations, committed secrets.
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -142,6 +245,12 @@ jobs:
   # Front end: type-check, production build and unit tests. Coverage scope and 80 %
   # threshold on the TypeScript logic: app/front/vitest.config.ts.
   tests-front:
+    needs: changes
+    timeout-minutes: 30
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.shared == 'true' ||
+      needs.changes.outputs.front == 'true'
     runs-on: ubuntu-latest
     env:
       # The dashboard shows Paris time, while GitHub runners use UTC.
@@ -185,97 +294,175 @@ jobs:
           path: app/front/coverage/
           retention-days: 14
 
-  # SonarQube analysis (Cloud by default, Server with the SONAR_HOST_URL variable) of the
-  # three projects, with the coverage reports of the tests-* jobs. Scope and exclusions:
-  # sonar-project.properties. The job is skipped until the SONAR_TOKEN secret and the
-  # SONAR_PROJECT_KEY variable exist, and on pull requests from forks, which have no secret.
-  sonar:
-    needs: [tests-back, tests-ml, tests-front]
+  # Each SonarCloud monorepo project is analyzed only when its component changes.
+  # The component test job supplies its matching coverage report.
+  sonar-back:
+    needs: [changes, tests-back]
+    timeout-minutes: 30
+    if: >-
+      !cancelled() &&
+      needs.changes.outputs.sonar_back_enabled == 'true' &&
+      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.back == 'true') &&
+      needs.tests-back.result == 'success'
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@v5
         with:
-          # SonarQube needs the whole history to blame lines and to tell what is new code.
           fetch-depth: 0
 
-      - name: Check configuration
-        id: config
-        env:
-          PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
-        run: |
-          if [ -n "$SONAR_TOKEN" ] && [ -n "$PROJECT_KEY" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::SonarQube skipped: set the SONAR_TOKEN secret and the SONAR_PROJECT_KEY variable."
-          fi
-
-      - name: Download back-end coverage
-        if: steps.config.outputs.enabled == 'true'
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
           name: back-coverage
           path: app/back
 
-      - name: Download ML coverage
-        if: steps.config.outputs.enabled == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: ml-coverage
-          path: ml
-
-      - name: Download front-end coverage
-        if: steps.config.outputs.enabled == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: front-coverage
-          path: app/front/coverage
-
-      # coverage.py and Vitest write paths relative to the project they ran in, while
-      # SonarQube resolves them from the repository root. Without this step it would find no
-      # file and report 0 % coverage without any error, so the job fails if a path is unknown.
-      - name: Make coverage paths relative to the repository root
-        if: steps.config.outputs.enabled == 'true'
+      - name: Make back-end coverage paths relative to the repository root
         run: |
-          prefix_xml() {
-            sed -i \
-              -e "s#filename=\"#filename=\"$2/#g" \
-              -e "s#<source>[^<]*</source>#<source>$GITHUB_WORKSPACE</source>#" \
-              "$1"
-          }
-          prefix_xml app/back/coverage.xml app/back
-          prefix_xml ml/coverage.xml ml
-          sed -i 's#^SF:#SF:app/front/#' app/front/coverage/lcov.info
-
+          sed -i \
+            -e 's#filename="#filename="app/back/#g' \
+            -e "s#<source>[^<]*</source>#<source>$GITHUB_WORKSPACE</source>#" \
+            app/back/coverage.xml
           missing=0
           while read -r path; do
             if [ ! -f "$path" ]; then
               echo "Coverage path not found in the repository: $path" >&2
               missing=1
             fi
-          done < <(
-            grep -h -o 'filename="[^"]*"' app/back/coverage.xml ml/coverage.xml | cut -d'"' -f2
-            grep -h '^SF:' app/front/coverage/lcov.info | cut -d: -f2-
-          )
+          done < <(grep -o 'filename="[^"]*"' app/back/coverage.xml | cut -d'"' -f2)
           exit "$missing"
 
-      # The quality gate decides the result: the job fails when the gate is red.
-      - name: SonarQube scan
-        if: steps.config.outputs.enabled == 'true'
+      - name: SonarQube Cloud scan (back)
         uses: SonarSource/sonarqube-scan-action@v8.3.0
         env:
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
         with:
           args: >
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY_BACK }}
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.inclusions=app/back/src/**
+            -Dsonar.test.inclusions=app/back/tests/**
+            -Dsonar.python.coverage.reportPaths=app/back/coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=
+            -Dsonar.coverage.exclusions=**/__init__.py
             -Dsonar.qualitygate.wait=true
 
-  # Builds and scans each image, then hands it over to the next jobs.
+  sonar-ml:
+    needs: [changes, tests-ml]
+    timeout-minutes: 30
+    if: >-
+      !cancelled() &&
+      needs.changes.outputs.sonar_ml_enabled == 'true' &&
+      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.ml == 'true') &&
+      needs.tests-ml.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ml-coverage
+          path: ml
+
+      - name: Make ML coverage paths relative to the repository root
+        run: |
+          sed -i \
+            -e 's#filename="#filename="ml/#g' \
+            -e "s#<source>[^<]*</source>#<source>$GITHUB_WORKSPACE</source>#" \
+            ml/coverage.xml
+          missing=0
+          while read -r path; do
+            if [ ! -f "$path" ]; then
+              echo "Coverage path not found in the repository: $path" >&2
+              missing=1
+            fi
+          done < <(grep -o 'filename="[^"]*"' ml/coverage.xml | cut -d'"' -f2)
+          exit "$missing"
+
+      - name: SonarQube Cloud scan (ML)
+        uses: SonarSource/sonarqube-scan-action@v8.3.0
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY_ML }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.inclusions=ml/src/**
+            -Dsonar.test.inclusions=ml/tests/**
+            -Dsonar.python.coverage.reportPaths=ml/coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=
+            -Dsonar.coverage.exclusions=**/__init__.py
+            -Dsonar.qualitygate.wait=true
+
+  sonar-front:
+    needs: [changes, tests-front]
+    timeout-minutes: 30
+    if: >-
+      !cancelled() &&
+      needs.changes.outputs.sonar_front_enabled == 'true' &&
+      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.front == 'true') &&
+      needs.tests-front.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: front-coverage
+          path: app/front/coverage
+
+      - name: Make front-end coverage paths relative to the repository root
+        run: |
+          sed -i 's#^SF:#SF:app/front/#' app/front/coverage/lcov.info
+          missing=0
+          while read -r path; do
+            if [ ! -f "$path" ]; then
+              echo "Coverage path not found in the repository: $path" >&2
+              missing=1
+            fi
+          done < <(grep '^SF:' app/front/coverage/lcov.info | cut -d: -f2-)
+          exit "$missing"
+
+      - name: SonarQube Cloud scan (front)
+        uses: SonarSource/sonarqube-scan-action@v8.3.0
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY_FRONT }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.inclusions=app/front/src/**
+            -Dsonar.test.inclusions=app/front/src/tests/**
+            -Dsonar.python.coverage.reportPaths=
+            -Dsonar.javascript.lcov.reportPaths=app/front/coverage/lcov.info
+            -Dsonar.coverage.exclusions=app/front/src/main.tsx,app/front/src/App.tsx,app/front/src/vite-env.d.ts,app/front/src/services/model.ts,app/front/src/data/**
+            -Dsonar.qualitygate.wait=true
+
+  # Builds and scans each image, then hands it over to the next jobs. The component tests
+  # may be skipped (nothing changed there), but never failed.
+  #
+  # Every job downstream of a skipped one is skipped too, even through a job that runs: a
+  # job that needs build, perf or publish must therefore state its own condition with
+  # !cancelled() and check the result of the job it needs, not rely on the default success().
   build:
-    needs: [lint, scan, tests-back, tests-ml, tests-front]
+    needs: [changes, lint, scan, tests-back, tests-ml, tests-front]
+    timeout-minutes: 45
+    if: >-
+      !cancelled() &&
+      (needs.changes.outputs.perf == 'true' || github.event_name == 'workflow_dispatch') &&
+      needs.lint.result == 'success' &&
+      needs.scan.result == 'success' &&
+      (needs.tests-back.result == 'success' || needs.tests-back.result == 'skipped') &&
+      (needs.tests-ml.result == 'success' || needs.tests-ml.result == 'skipped') &&
+      (needs.tests-front.result == 'success' || needs.tests-front.result == 'skipped')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -333,7 +520,12 @@ jobs:
   # Load test against the stack started from the built images. The back reads its data
   # from a local EnerVision stand-in (docker-compose.ci.yml), never from the real API.
   perf:
-    needs: build
+    needs: [changes, build]
+    timeout-minutes: 45
+    if: >-
+      !cancelled() &&
+      needs.build.result == 'success' &&
+      (needs.changes.outputs.perf == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     env:
       BACK_IMAGE: ghcr.io/${{ github.repository }}/back:${{ github.sha }}
@@ -351,9 +543,11 @@ jobs:
       - name: Load images
         run: |
           for archive in /tmp/images/*.tar; do docker load -i "$archive"; done
-          echo "BACK_IMAGE=${BACK_IMAGE,,}" >> "$GITHUB_ENV"
-          echo "ML_IMAGE=${ML_IMAGE,,}" >> "$GITHUB_ENV"
-          echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}" >> "$GITHUB_ENV"
+          {
+            echo "BACK_IMAGE=${BACK_IMAGE,,}"
+            echo "ML_IMAGE=${ML_IMAGE,,}"
+            echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}"
+          } >> "$GITHUB_ENV"
 
       - name: Start stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
@@ -394,10 +588,17 @@ jobs:
           path: perf-results/
           retention-days: 14
 
-  # Publishes to GHCR, from main only, the images that passed every check.
+  # Publishes the complete runtime image set to GHCR after a deployable change on main.
+  # The deploy workflow refuses to deploy a commit whose image set is incomplete.
   publish:
-    needs: perf
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [changes, perf]
+    timeout-minutes: 15
+    if: >-
+      !cancelled() &&
+      needs.perf.result == 'success' &&
+      needs.changes.outputs.deploy == 'true' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

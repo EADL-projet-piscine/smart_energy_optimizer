@@ -440,27 +440,45 @@ local.
 
 ## Intégration continue
 
-Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request et à
-chaque merge dans `main`. `lint`, `scan` et les jobs `tests-*` tournent en
-parallèle ; un seul test en échec fait échouer son job, et chaque job de tests
-affiche sa couverture dans le résumé du run :
+Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request, à chaque
+merge dans `main` et à la demande (*Run workflow*). Le job `changes` regarde
+les fichiers modifiés et ne lance que ce qui les concerne ; `lint` et `scan`
+tournent toujours. Chaque job de tests affiche sa couverture dans le résumé du
+run :
 
-| Job           | Rôle                                                                                                                                                                            |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lint`        | `sh scripts/check.sh`, les mêmes contrôles que les hooks locaux                                                                                                                 |
-| `scan`        | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets                                                                                                             |
-| `tests-back`  | `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`)                                                                 |
-| `tests-ml`    | `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`)                                                                                                              |
-| `tests-front` | Node 22 et `TZ=Europe/Paris` : `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`)        |
-| `sonar`       | Analyse SonarQube des trois projets, avec la couverture des jobs `tests-*` ; échoue si le _quality gate_ est rouge. Ignoré tant que Sonar n'est pas configuré (voir ci-dessous) |
-| `build`       | Une fois `lint`, `scan` et les trois jobs `tests-*` réussis : construit les images `back` et `ml`, les scanne avec Trivy                                                        |
-| `perf`        | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier)                                               |
-| `publish`     | Publie les images sur GHCR (depuis `main` uniquement)                                                                                                                           |
+| Job | Rôle |
+|---|---|
+| `lint` | `sh scripts/check.sh`, les mêmes contrôles que les hooks locaux. Toujours lancé |
+| `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets. Toujours lancé |
+| `changes` | Détecte les fichiers modifiés (`dorny/paths-filter`) et la configuration Sonar, puis décide quels jobs lancer |
+| `tests-back` | Si `app/back/`, `db/` ou `pyproject.toml` changent : `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`) |
+| `tests-ml` | Si `ml/` (code, tests, scripts, `pyproject.toml`, `Dockerfile`) ou `pyproject.toml` changent : `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
+| `tests-front` | Si `app/front/` change : Node 22 et `TZ=Europe/Paris`, `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
+| `sonar-back`, `sonar-ml`, `sonar-front` | Analyse SonarQube du composant dont les tests viennent de tourner, avec leur couverture ; échoue si le _quality gate_ est rouge (voir ci-dessous) |
+| `build` | Si du code déployable ou l'environnement de test change : construit les images `back`, `ml` et `mlflow`, les scanne avec Trivy |
+| `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
+| `publish` | Sur `main` seulement, après un changement déployable : publie les trois images sur GHCR |
 
-Chaque étape attend la réussite de la précédente : `lint`, `scan` et les
-trois jobs `tests-*` → `build` → `perf` → `publish`. Une image n'est donc
-publiée qu'après avoir passé les tests, le scan de sécurité et le test de
-charge.
+**Ce qui lance quoi.** Les tests d'un composant sont _ignorés_ quand aucun de
+ses fichiers n'a changé : un job ignoré ne fait pas échouer la CI. Un test en
+échec fait en revanche toujours échouer son job et empêche `build`. Modifier
+`ci.yml` ou `sonar-project.properties` lance **tous** les jobs, pour qu'un
+changement de CI soit toujours testé ; un lancement manuel aussi (sauf
+`publish`, réservé aux merges dans `main`).
+
+Les étapes se suivent : `lint`, `scan` et les tests lancés → `build` → `perf`
+→ `publish`. Une image n'est donc publiée qu'après avoir passé les tests, le
+scan de sécurité et le test de charge. Un commit de `main` qui ne change rien
+de déployable (documentation, front, tests) ne publie aucune image.
+
+Un nouveau push sur une pull request annule l'exécution précédente de cette
+pull request ; les exécutions sur `main` ne sont jamais annulées.
+
+**Si vous ajoutez un job qui dépend de `build`, `perf` ou `publish`**, écrivez
+sa condition avec `!cancelled()` et le résultat du job requis
+(`needs.build.result == 'success'`). Un job qui en suit un autre, lui-même
+ignoré, est ignoré à son tour, même si la chaîne a tourné entre-temps : c'est
+ce qui aurait empêché `perf` et `publish` de tourner sans cette précaution.
 
 Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour les
 images, seules celles qui ont un correctif disponible sont bloquantes.
@@ -473,6 +491,7 @@ Les images publiées sont étiquetées avec le SHA du commit et `latest` :
 
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/back
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/mlflow
 
 GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
 pull request dont la CI est rouge.**
@@ -484,35 +503,44 @@ fichier.
 
 ### SonarQube
 
-Le job `sonar` analyse le back, le service ML, le front et `infra/` (périmètre
-et exclusions : `sonar-project.properties`). Il ne bloque pas `build` : une
+Trois jobs analysent chacun un composant, dans son propre projet SonarQube :
+`sonar-back` (`app/back/src`), `sonar-ml` (`ml/src`) et `sonar-front`
+(`app/front/src`). Un composant n'est analysé que lorsque ses fichiers
+changent. Le périmètre et les exclusions sont dans `sonar-project.properties`
+et dans les arguments de chaque job. Ces jobs ne bloquent pas `build` : une
 panne de Sonar n'empêche pas de construire les images.
+
+**`infra/` n'est plus analysé par Sonar** : les inclusions de chaque job se
+limitent au code source de son composant. Le Terraform reste contrôlé par
+Trivy (job `scan`, mauvaises configurations).
 
 **Activation, une seule fois** (par un administrateur du dépôt) :
 
-1. Sur [SonarQube Cloud](https://sonarcloud.io), importer le dépôt GitHub : cela
-   crée le projet et donne sa clé et celle de l'organisation. Pour un
-   SonarQube Server auto-hébergé, créer le projet à la main.
+1. Sur [SonarQube Cloud](https://sonarcloud.io), créer trois projets, un par
+   composant, dans l'organisation du dépôt, et noter leurs clés. Pour un
+   SonarQube Server auto-hébergé, les créer à la main.
 2. Dans _Settings → Secrets and variables → Actions_ du dépôt GitHub :
    - secret `SONAR_TOKEN` : jeton généré dans Sonar (_My Account → Security_) ;
-   - variable `SONAR_PROJECT_KEY` : clé du projet ;
-   - variable `SONAR_ORGANIZATION` : clé de l'organisation (Cloud seulement) ;
+   - variable `SONAR_ORGANIZATION` : clé de l'organisation ;
+   - variables `SONAR_PROJECT_KEY_BACK`, `SONAR_PROJECT_KEY_ML` et
+     `SONAR_PROJECT_KEY_FRONT` : clés des trois projets ;
    - variable `SONAR_HOST_URL` : seulement pour un Server (Cloud par défaut).
-3. Dans Sonar, désactiver l'« analyse automatique » du projet : elle ferait
-   double emploi avec la CI et n'a pas la couverture.
+3. Dans Sonar, désactiver l'« analyse automatique » de chaque projet : elle
+   ferait double emploi avec la CI et n'a pas la couverture.
 
-Tant que le secret et la clé de projet manquent, les étapes sont ignorées et
-le job reste vert (message _notice_ dans le run). Il l'est aussi sur les pull
-requests venues d'un fork, qui n'ont accès à aucun secret.
+Un composant dont la configuration est incomplète est ignoré, sans faire
+échouer la CI : le job `changes` indique dans le run (message _notice_) ce qui
+manque. C'est aussi le cas des pull requests venues d'un fork, qui n'ont accès
+à aucun secret.
 
 **Couverture.** Sonar lit `coverage.xml` (back, ML) et `lcov.info` (front), produits
 par les jobs `tests-*`. Leurs chemins sont relatifs au projet, alors que Sonar
-les résout depuis la racine du dépôt : le job les préfixe, puis échoue si l'un
-d'eux ne correspond à aucun fichier. Sans ce contrôle, Sonar afficherait 0 % de
-couverture sans le moindre message.
+les résout depuis la racine du dépôt : chaque job les préfixe, puis échoue si
+l'un d'eux ne correspond à aucun fichier. Sans ce contrôle, Sonar afficherait
+0 % de couverture sans le moindre message.
 
-**Quality gate.** Le job attend le verdict de Sonar (`sonar.qualitygate.wait`) et
-échoue s'il est rouge. Le _quality gate_ par défaut (« Sonar way », réglable
+**Quality gate.** Chaque job attend le verdict de Sonar (`sonar.qualitygate.wait`)
+et échoue s'il est rouge. Le _quality gate_ par défaut (« Sonar way », réglable
 dans Sonar) porte sur le **nouveau code** : couverture, duplication et nouveaux
 bugs ou failles. Pour ne pas bloquer, retirer cet argument dans `ci.yml` :
 l'analyse reste publiée et commentée sur la pull request.

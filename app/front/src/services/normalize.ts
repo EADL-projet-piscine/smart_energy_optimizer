@@ -1,4 +1,4 @@
-import { buildSummary } from './format'
+import { buildSummary, formatNumber, formatTime } from './format'
 import type { Alert, ParkSummary, Recommendation, SeriesPoint, Severity, Site } from './model'
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -155,6 +155,7 @@ function parseSite(value: unknown, index: number): Site | null {
     forecast2hKw: toNumber(
       pick(value, ['forecast_2h_kw', 'forecast_plus_2h_kw', 'prevu_2h_kw', 'prevision_2h_kw', 'forecast_kw']),
     ),
+    capacityKw: toNumber(pick(value, ['capacity_kw', 'capacite_kw', 'capacity'])),
     thresholdKw: toNumber(
       pick(value, [
         'threshold_kw',
@@ -279,6 +280,7 @@ function parseSummaryObject(source: Record<string, unknown>): ParkSummary | null
     dailyCostEur: toNumber(pick(source, ['daily_cost_eur', 'cout_jour_eur', 'cost_eur', 'daily_cost'])),
     co2Tons: toNumber(pick(source, ['co2_equivalent_t', 'co2_tons', 'co2_t', 'co2_equivalent_tons'])),
     excludedSites: extractIds(pick(source, ['excluded_sites', 'excluded_site_ids', 'sites_exclus'])),
+    capacityKw: toNumber(pick(source, ['total_capacity_kw', 'capacity_kw', 'capacite_totale_kw'])),
     thresholdKw: toNumber(
       pick(source, ['threshold_kw', 'contractual_threshold_kw', 'seuil_kw', 'seuil_contractuel_kw']),
     ),
@@ -291,6 +293,110 @@ function parseSummaryObject(source: Record<string, unknown>): ParkSummary | null
   }
 
   return buildSummary(summary)
+}
+
+/** Attache à chaque site sa dernière consommation réellement mesurée.
+ *
+ * L'API source renvoie `null` dès qu'un site se tait ; l'API métier garde en
+ * mémoire la dernière valeur reçue et la place dans l'enveloppe, à côté du
+ * résumé. Elle ne remplace jamais la mesure courante : l'écran doit pouvoir
+ * distinguer une mesure de l'instant d'un souvenir.
+ */
+export function attachLastReadings(summary: ParkSummary, raw: unknown): ParkSummary {
+  if (!isObject(raw)) return summary
+  return {
+    ...summary,
+    sites: summary.sites.map((site) => {
+      const entry = raw[site.id]
+      if (!isObject(entry)) return site
+      return {
+        ...site,
+        lastKnownKw: toNumber(entry.consumption_kw),
+        lastKnownAt: toText(entry.at),
+      }
+    }),
+  }
+}
+
+/** Titres des alertes de capacité, par gravité. */
+const CAPACITY_TITLES: Record<string, string> = {
+  critique: 'Capacité dépassée',
+  moyenne: 'Capacité bientôt atteinte',
+}
+
+/** Transforme une alerte de capacité de l'API métier en alerte du modèle.
+ *
+ * Le message du serveur dit ce qui se passe ; on y ajoute de quoi en juger :
+ * la charge constatée, la capacité du site, et depuis quand l'alerte dure.
+ */
+function parseCapacityAlert(value: unknown): { siteId: string; alert: Alert } | null {
+  if (!isObject(value)) return null
+  const siteId = toText(value.site_id)
+  const message = toText(value.message)
+  if (!siteId || !message) return null
+
+  const severity = toSeverity(value.severity)
+  const loadPct = toNumber(value.load_percent)
+  const capacityKw = toNumber(value.capacity_kw)
+  const raisedAt = toText(value.raised_at)
+
+  const details: string[] = []
+  if (loadPct !== null) {
+    details.push(
+      capacityKw === null
+        ? `${formatNumber(loadPct, 1)} % de charge`
+        : `${formatNumber(loadPct, 1)} % de ${formatNumber(capacityKw)} kW`,
+    )
+  }
+  // La charge est celle du dernier cycle connu, l'horodatage celui de la levée :
+  // deux faits distincts, qu'il ne faut pas présenter comme un seul. « Relevé à »
+  // laisserait croire que les deux décrivent le même instant.
+  if (raisedAt !== null) details.push(`alerte levée à ${formatTime(raisedAt)}`)
+
+  return {
+    siteId,
+    alert: {
+      // L'horodatage fait partie de l'identité : un changement de gravité est
+      // un nouvel événement, et doit remplacer le précédent dans la liste.
+      id: `capacite-${siteId}-${raisedAt ?? 'inconnu'}`,
+      severity,
+      title: CAPACITY_TITLES[severity] ?? 'Capacité',
+      // Le message du serveur redirait le titre ; seuls les chiffres
+      // permettent de juger, on ne garde qu'eux.
+      message: details.length === 0 ? message : `${details.join(', ')}.`,
+    },
+  }
+}
+
+/** Attache aux sites les alertes de capacité calculées par l'API métier.
+ *
+ * Elles rejoignent les alertes déjà portées par chaque site : le compteur du
+ * bandeau, le toast et la liste du panneau les reprennent sans rien de plus.
+ */
+export function attachCapacityAlerts(summary: ParkSummary, raw: unknown): ParkSummary {
+  if (!Array.isArray(raw) || raw.length === 0) return summary
+
+  const bySite = new Map<string, Alert[]>()
+  for (const value of raw) {
+    const parsed = parseCapacityAlert(value)
+    if (!parsed) continue
+    const existing = bySite.get(parsed.siteId)
+    if (existing) existing.push(parsed.alert)
+    else bySite.set(parsed.siteId, [parsed.alert])
+  }
+  if (bySite.size === 0) return summary
+
+  const sites = summary.sites.map((site) => {
+    const added = bySite.get(site.id)
+    if (!added) return site
+    // Jamais deux fois la même : l'identifiant porte l'horodatage de levée.
+    const nouvelles = added.filter((alert) => !site.alerts.some((existing) => existing.id === alert.id))
+    return { ...site, alerts: [...site.alerts, ...nouvelles] }
+  })
+
+  // Repasser par buildSummary : les compteurs du bandeau et les badges se
+  // déduisent des alertes des sites, qui viennent de changer.
+  return buildSummary({ ...summary, sites })
 }
 
 /** Point d'entrée : accepte un tableau de sites, un résumé, ou un résumé enveloppé. */

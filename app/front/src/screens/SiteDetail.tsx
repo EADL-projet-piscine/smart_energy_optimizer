@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
 import { Badge, badgeTone } from '../components/ui/Badge'
+import { Banner } from '../components/ui/Banner'
 import { Card } from '../components/ui/Card'
 import { cn } from '../components/ui/cn'
 import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Caption, Subtitle } from '../components/ui/Text'
-import { Toast } from '../components/ui/Toast'
 import {
   formatKw,
   formatNumber,
@@ -37,41 +37,30 @@ function qualityTone(quality: string | null): 'ok' | 'ambre' | 'alert' {
   return 'ambre'
 }
 
-/** Code de panne du compteur qui mesure la consommation elle-même. */
-const CONSUMPTION_SENSOR = 'consumption_sensor_failure'
-
-/** La consommation vient du résumé, la qualité du détail. Quand le détail dit
- * que plus rien n'est mesuré, le chiffre du résumé est la dernière valeur
- * connue : l'afficher sans le dire le ferait lire comme une mesure de l'instant.
- */
-function isConsumptionStale(detail: Detail | null): boolean {
-  if (detail === null) return false
-  return detail.dataQuality === 'critical' || detail.nullReasons.includes(CONSUMPTION_SENSOR)
-}
-
 type Reading = { value: number | null; note: string | undefined; stale: boolean }
 
 /** Ce que montre la case « Actuel », et ce qu'il faut en dire.
  *
- * Trois situations, dans cet ordre : le site s'est tu et on ressort la dernière
- * valeur mémorisée ; le site transmet mais son compteur est tombé, donc le
- * chiffre du résumé date ; ou tout va bien. Un tiret n'apparaît que lorsqu'on
- * n'a jamais rien mesuré — c'est le seul cas où il n'y a réellement rien à dire.
+ * Un chiffre n'est marqué comme daté que lorsqu'il sort réellement de la
+ * mémoire. L'état des capteurs, lui, ne périme rien : le détail et le résumé
+ * sont deux endpoints décorrélés, et le badge du panneau dit déjà qu'un
+ * capteur est tombé. Le tiret ne reste que si l'on n'a jamais rien mesuré.
  */
-function currentReading(site: Site, detail: Detail | null): Reading {
+function currentReading(site: Site): Reading {
+  if (site.currentKw !== null) return { value: site.currentKw, note: undefined, stale: false }
+
   const remembered = site.lastKnownKw ?? null
-  // Un chiffre périmé sans date n'apprend rien : le lecteur ne peut pas juger
-  // s'il peut encore s'y fier. L'heure vient de la mémoire du back, quelle que
-  // soit la raison pour laquelle la mesure ne vaut plus.
-  const note = site.lastKnownAt ? `Relevé de ${formatTime(site.lastKnownAt)}` : 'Dernière valeur connue'
+  if (remembered === null) return { value: null, note: undefined, stale: false }
 
-  if (site.currentKw === null) {
-    if (remembered === null) return { value: null, note: undefined, stale: false }
-    return { value: remembered, note, stale: true }
+  return {
+    value: remembered,
+    // Un chiffre daté sans son heure n'apprend rien : le lecteur ne peut pas
+    // juger s'il peut encore s'y fier.
+    note: site.lastKnownAt
+      ? `Dernier relevé datant de ${formatTime(site.lastKnownAt)}`
+      : 'Dernière valeur connue',
+    stale: true,
   }
-  if (isConsumptionStale(detail)) return { value: site.currentKw, note, stale: true }
-
-  return { value: site.currentKw, note: undefined, stale: false }
 }
 
 /** Ce qu'affiche le bout d'une ligne : l'anomalie si elle existe, sinon la mesure.
@@ -152,11 +141,8 @@ type RowProps = {
  * ouverts à la fois sans que l'un affiche le contenu de l'autre.
  */
 function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
-  const [toastClosed, setToastClosed] = useState(false)
-  const [highlighted, setHighlighted] = useState(false)
-
   const main = mainAlert(site)
-  const others = site.alerts.filter((alert) => alert !== main || toastClosed)
+  const others = site.alerts.filter((alert) => alert !== main)
   const status = rowStatus(site, detail)
   const forecastExceeds =
     site.thresholdKw !== null && site.forecast2hKw !== null && site.forecast2hKw > site.thresholdKw
@@ -172,13 +158,14 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // La qualité ne s'affiche que lorsqu'elle pose problème : « 24/24 » suivi de
   // « toutes les mesures sont disponibles » n'apprend rien au lecteur.
   const qualityIssue = detail && detail.dataQuality !== 'good' ? qualityLabel(detail.dataQuality) : null
-  const reading = currentReading(site, detail)
+  const reading = currentReading(site)
 
-  function scrollToActions() {
-    document.getElementById(`actions-${site.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    setHighlighted(true)
-    window.setTimeout(() => setHighlighted(false), 1800)
-  }
+  // Part de la capacité réellement utilisée. Une capacité seule ne dit rien ;
+  // c'est le rapport à la consommation qui informe, et c'est aussi la grandeur
+  // sur laquelle les alertes se déclenchent. Aucun seuil n'est jugé ici : le
+  // bandeau s'en charge, et le dupliquer risquerait de le contredire.
+  const loadPct = reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
+  const loadLabel = loadPct === null ? undefined : `${formatNumber(loadPct, 1)} % utilisés`
 
   return (
     <div
@@ -244,9 +231,13 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             />
             <Metric
               variant="inset"
-              label="Seuil contractuel"
-              value={formatKw(site.thresholdKw)}
-              unit={site.thresholdKw === null ? undefined : 'kW'}
+              // « Capacité » et non « Seuil contractuel » : l'API n'expose que
+              // la limite technique de l'installation. Afficher une capacité
+              // sous un nom contractuel ferait passer l'une pour l'autre.
+              label="Capacité"
+              value={formatKw(site.capacityKw ?? null)}
+              unit={site.capacityKw == null ? undefined : 'kW'}
+              detail={loadLabel}
             />
             <Metric
               variant="inset"
@@ -262,27 +253,20 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             />
           </div>
 
-          <div className="relative mt-2">
-            <ConsumptionChart series={series} thresholdKw={site.thresholdKw} compact />
-            {main && !toastClosed && (
-              <Toast
-                severity={main.severity}
-                title={main.title}
-                message={main.message}
-                onClose={() => setToastClosed(true)}
-                onDetail={scrollToActions}
-              />
-            )}
+          {/* Au-dessus du graphique, et non par-dessus : une alerte posée sur
+              la courbe cache précisément ce qu'elle commente. */}
+          {main && (
+            <Banner tone={main.severity === 'critique' ? 'danger' : 'ambre'}>
+              <strong className="font-[650]">{main.title}</strong>&nbsp;: {main.message}
+            </Banner>
+          )}
+
+          <div className="mt-2">
+            <ConsumptionChart series={series} capacityKw={site.capacityKw ?? null} compact />
           </div>
           {site.comment && <Caption>{site.comment}</Caption>}
 
-          <div
-            id={`actions-${site.id}`}
-            className={cn(
-              'mt-2 grid gap-4 pt-2',
-              highlighted && 'rounded-xl shadow-[0_0_0_2px_rgba(91,157,255,0.45)]',
-            )}
-          >
+          <div className="mt-2 grid gap-4 pt-2">
             {detail && <Installation detail={detail} />}
 
             {detail && detail.nullReasons.length > 0 && (
@@ -291,9 +275,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <List>
                   {detail.nullReasons.map((reason) => (
                     <Row key={reason} accent="ambre">
-                      <p className="m-0 text-[13px] leading-snug text-secondaire">
-                        {sensorLabel(reason)}
-                      </p>
+                      <p className="m-0 text-[13px] leading-snug text-secondaire">{sensorLabel(reason)}</p>
                     </Row>
                   ))}
                 </List>

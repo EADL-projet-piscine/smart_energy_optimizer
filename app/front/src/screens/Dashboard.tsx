@@ -161,14 +161,16 @@ export function Dashboard() {
                 <Legend
                   entries={[
                     { label: 'Mesuré', style: 'mesure' },
-                    { label: 'Seuil contractuel', style: 'seuil' },
+                    // « Capacité » et non « Seuil contractuel » : la ligne trace
+                    // la limite technique du parc, seule valeur que l'API donne.
+                    { label: 'Capacité', style: 'seuil' },
                   ]}
                 />
               </header>
               {historyError ? (
                 <p className="mt-1.5 text-[13px] text-discret">Historique indisponible : {historyError}</p>
               ) : (
-                <ConsumptionChart series={parkSeries} thresholdKw={summary.thresholdKw} />
+                <ConsumptionChart series={parkSeries} capacityKw={summary.capacityKw ?? null} />
               )}
               {summary.comment && (
                 <p className="mt-1 text-[13px] leading-snug text-discret">{summary.comment}</p>

@@ -152,3 +152,44 @@ Le service ML est intégré au monorepo `smart_energy_optimizer`, tout en conser
 Les environnements virtuels, secrets, données volumineuses et modèles entraînés sont exclus du versionnement Git.
 
 Le développement s'effectue sur des branches dédiées, avec intégration dans `main` après validation.
+
+## 9. Expérimentations et validation des modèles
+
+Le service ML fait l'objet d'une phase exploratoire visant à évaluer la faisabilité de la prévision de consommation énergétique à partir des données EnerVision.
+
+### Objectif
+
+Prédire la consommation électrique des différents sites pour les horizons H+1 à H+24, en exploitant les historiques de consommation et les caractéristiques temporelles.
+
+### Approche expérimentale
+
+Les expérimentations sont réalisées dans des notebooks Jupyter, avant l'intégration du code validé dans les modules Python du service.
+
+Les travaux comprennent :
+
+- L'exploration et le nettoyage des données énergétiques.
+- L'agrégation des relevés à une granularité horaire.
+- La construction des variables temporelles et historiques (*feature engineering*).
+- L'établissement de références de prédiction (*baselines*) à H-24 et H-168.
+- La comparaison de modèles de régression linéaire et Random Forest.
+- La comparaison entre modèles globaux et modèles spécialisés par type de site.
+- La validation chronologique des modèles sur un historique couvrant 2023 et 2024.
+
+### Résultats obtenus
+
+| Expérimentation | Modèle | MAE | RMSE |
+|---|---|---:|---:|
+| Readings sur 30 jours | Baseline H-168 | 6,78 kW | 10,48 kW |
+| Readings sur 30 jours | Random Forest globale | 6,21 kW | 9,61 kW |
+| Historique 2023–2024, test indépendant | Baseline H-168 | 95,99 kW | 215,53 kW |
+| Historique 2023–2024, test indépendant | Random Forest globale | 74,70 kW | 163,29 kW |
+
+Sur le jeu de test historique indépendant, la Random Forest globale réduit la MAE de **22,18 %** par rapport à la baseline hebdomadaire.
+
+Ces résultats constituent une première validation expérimentale de l'approche. Ils ne garantissent pas les mêmes performances en production, notamment sur des sites ou des périodes non représentés dans les données étudiées.
+
+### Limites identifiées
+
+Les données expérimentales restent synthétiques et concernent sept sites. Les résultats obtenus sur les deux jeux de données ne sont pas directement comparables en valeur absolue.
+
+La disponibilité d'un historique suffisant, la gestion des données manquantes et la généralisation à de nouveaux sites constituent des points de vigilance pour l'industrialisation.

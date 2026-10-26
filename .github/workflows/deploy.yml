@@ -63,6 +63,7 @@ jobs:
 
           export BACK_IMAGE="${IMAGE_PREFIX}/back:${IMAGE_TAG}"
           export ML_IMAGE="${IMAGE_PREFIX}/ml:${IMAGE_TAG}"
+          export MLFLOW_IMAGE="${IMAGE_PREFIX}/mlflow:${IMAGE_TAG}"
 
           PROD_ENV="$HOME/enervision/.env"
 

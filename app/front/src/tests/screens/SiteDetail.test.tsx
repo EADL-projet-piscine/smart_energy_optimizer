@@ -252,12 +252,22 @@ describe('SiteDetail — diagnostic', () => {
     expect(screen.queryByText('Toutes les mesures sont disponibles')).not.toBeInTheDocument()
   })
 
-  it('liste les capteurs indisponibles', () => {
+  it('liste les capteurs indisponibles en clair', () => {
+    // L'API renvoie des codes : les afficher tels quels donnerait des noms de
+    // variables à un lecteur métier.
     afficher([site()], 'SITE001', {
-      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['sonde de tension HS'] }),
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['humidity_sensor_failure'] }),
     })
 
-    expect(screen.getByText('sonde de tension HS')).toBeInTheDocument()
+    expect(screen.getByText('Sonde d’humidité en panne')).toBeInTheDocument()
+  })
+
+  it('affiche un code de panne inconnu plutôt que rien', () => {
+    afficher([site()], 'SITE001', {
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['code_inedit'] }),
+    })
+
+    expect(screen.getByText('code_inedit')).toBeInTheDocument()
   })
 
   it('met un tiret sur une grandeur absente', () => {
@@ -281,6 +291,46 @@ describe('SiteDetail — diagnostic', () => {
 
     expect(screen.getByText('405,8')).toBeInTheDocument()
     expect(screen.queryByText('231,4')).not.toBeInTheDocument()
+  })
+})
+
+describe('SiteDetail — consommation périmée', () => {
+  // La consommation vient du résumé, la qualité du détail. Quand les deux se
+  // contredisent, le chiffre doit dire qu'il n'est plus mesuré.
+
+  it('signale une consommation qui n’est plus mesurée', () => {
+    afficher([site({ currentKw: 794 })], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
+
+    expect(screen.getByText('Dernière valeur connue')).toBeInTheDocument()
+  })
+
+  it('signale aussi la panne du compteur de consommation', () => {
+    // La qualité peut rester « dégradée » alors que c'est précisément le
+    // compteur de consommation qui est tombé.
+    afficher([site({ currentKw: 167 })], 'SITE001', {
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['consumption_sensor_failure'] }),
+    })
+
+    expect(screen.getByText('Dernière valeur connue')).toBeInTheDocument()
+  })
+
+  it('n’ajoute rien quand la consommation est mesurée', () => {
+    afficher([site({ currentKw: 138 })], 'SITE001', { SITE001: detail() })
+
+    expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
+  })
+
+  it('n’annonce pas de dernière valeur quand il n’y en a aucune', () => {
+    // « — » suivi de « dernière valeur connue » ne veut rien dire.
+    afficher([site({ currentKw: null })], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
+
+    expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
+  })
+
+  it('n’ajoute rien quand le détail manque', () => {
+    afficher([site({ currentKw: 138 })], 'SITE001', {})
+
+    expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
   })
 })
 

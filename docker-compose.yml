@@ -24,6 +24,8 @@ services:
   back:
     build: ./app/back
     container_name: enervision-back
+    env_file:
+      - app/back/.env
     environment:
       DATABASE_URL: postgresql+psycopg://enervision_app:enervision_app@db:5432/enervision
       ENERVISION_API_URL: https://api-mock.charlieandre.fr

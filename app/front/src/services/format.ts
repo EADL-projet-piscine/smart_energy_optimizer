@@ -218,3 +218,17 @@ export function qualityShort(quality: string | null): string | null {
   if (!quality || quality === 'good') return null
   return QUALITY_SHORT[quality] ?? quality
 }
+
+const SENSOR_LABELS: Record<string, string> = {
+  consumption_sensor_failure: 'Compteur de consommation en panne',
+  electrical_sensor_failure: 'Capteur électrique en panne',
+  humidity_sensor_failure: 'Sonde d’humidité en panne',
+  network_loss: 'Lien réseau interrompu',
+  temperature_sensor_failure: 'Sonde de température en panne',
+}
+
+/** Traduit un code de panne, ou rend le code brut s'il est inconnu : un mot
+ * étrange reste plus exploitable pour le diagnostic qu'une ligne disparue. */
+export function sensorLabel(reason: string): string {
+  return SENSOR_LABELS[reason] ?? reason
+}

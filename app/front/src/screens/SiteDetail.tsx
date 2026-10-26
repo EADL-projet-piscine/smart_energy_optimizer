@@ -7,7 +7,7 @@ import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Caption, Subtitle } from '../components/ui/Text'
 import { Toast } from '../components/ui/Toast'
-import { formatKw, formatNumber, qualityLabel, qualityShort } from '../services/format'
+import { formatKw, formatNumber, qualityLabel, qualityShort, sensorLabel } from '../services/format'
 import type { Alert, SiteDetail as Detail, DetailsBySite, SeriesPoint, Site } from '../services/model'
 
 type Props = {
@@ -32,6 +32,18 @@ function qualityTone(quality: string | null): 'ok' | 'ambre' | 'alert' {
 
 /** En dessous de ce seuil, le fournisseur facture la puissance réactive. */
 const POWER_FACTOR_FLOOR = 0.9
+
+/** Code de panne du compteur qui mesure la consommation elle-même. */
+const CONSUMPTION_SENSOR = 'consumption_sensor_failure'
+
+/** La consommation vient du résumé, la qualité du détail. Quand le détail dit
+ * que plus rien n'est mesuré, le chiffre du résumé est la dernière valeur
+ * connue : l'afficher sans le dire le ferait lire comme une mesure de l'instant.
+ */
+function isConsumptionStale(detail: Detail | null): boolean {
+  if (detail === null) return false
+  return detail.dataQuality === 'critical' || detail.nullReasons.includes(CONSUMPTION_SENSOR)
+}
 
 /** Ce qu'affiche le bout d'une ligne : l'anomalie si elle existe, sinon la mesure.
  *
@@ -140,7 +152,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // La qualité ne s'affiche que lorsqu'elle pose problème : « 24/24 » suivi de
   // « toutes les mesures sont disponibles » n'apprend rien au lecteur.
   const qualityIssue = detail && detail.dataQuality !== 'good' ? qualityLabel(detail.dataQuality) : null
-
+  const consumptionStale = site.currentKw !== null && isConsumptionStale(detail)
   function scrollToActions() {
     document.getElementById(`actions-${site.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     setHighlighted(true)
@@ -197,8 +209,10 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             <Metric
               variant="inset"
               label="Actuel"
+              tone={consumptionStale ? 'ambre' : 'defaut'}
               value={formatKw(site.currentKw)}
               unit={site.currentKw === null ? undefined : 'kW'}
+              detail={consumptionStale ? 'Dernière valeur connue' : undefined}
             />
             <Metric
               variant="inset"
@@ -256,7 +270,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <List>
                   {detail.nullReasons.map((reason) => (
                     <Row key={reason} accent="ambre">
-                      <p className="m-0 text-[13px] leading-snug text-secondaire">{reason}</p>
+                      <p className="m-0 text-[13px] leading-snug text-secondaire">{sensorLabel(reason)}</p>
                     </Row>
                   ))}
                 </List>

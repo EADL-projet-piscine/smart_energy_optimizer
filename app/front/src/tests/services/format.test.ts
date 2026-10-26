@@ -11,6 +11,7 @@ import {
   formatTime,
   hourOf,
   lastMeasuredIndex,
+  sensorLabel,
   sitesLabel,
   toIsoUtc,
 } from '../../services/format'
@@ -393,5 +394,20 @@ describe('buildSummary', () => {
     expect(resultat.sites).toEqual([])
     expect(resultat.coveragePct).toBeNull()
     expect(resultat.comment).toBeNull()
+  })
+})
+
+// ─────────────────────────────── Capteurs ────────────────────────────────────
+
+describe('sensorLabel', () => {
+  it('traduit les codes relevés sur l’API source', () => {
+    expect(sensorLabel('network_loss')).toBe('Lien réseau interrompu')
+    expect(sensorLabel('consumption_sensor_failure')).toBe('Compteur de consommation en panne')
+  })
+
+  it('rend le code brut quand il est inconnu', () => {
+    // La liste n'est pas contractuelle : un code inédit doit rester lisible
+    // pour le diagnostic plutôt que de faire disparaître la ligne.
+    expect(sensorLabel('code_inedit')).toBe('code_inedit')
   })
 })

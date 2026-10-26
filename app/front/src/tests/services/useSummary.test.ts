@@ -132,6 +132,20 @@ describe('useSummary', () => {
     await waitFor(() => expect(result.current.error).toBe('API injoignable'))
   })
 
+  it('signale une erreur survenue pendant le traitement', async () => {
+    // Une réponse hors contrat fait lancer le traitement, pas le réseau.
+    // allSettled ne rejette jamais : sans le catch, ce rejet serait avalé et
+    // l'écran resterait muet.
+    vi.mocked(loadSummary).mockResolvedValue(
+      null as unknown as { summary: ParkSummary; nextAt: string | null },
+    )
+
+    const { result } = renderHook(() => useSummary())
+
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.summary).toBeNull()
+  })
+
   it('sélectionne le site le plus critique au premier chargement', async () => {
     vi.mocked(loadSummary).mockResolvedValue({
       summary: summary([site('SITE001'), site('SITE002', true)]),

@@ -87,6 +87,10 @@ __all__ = ["get_site", "list_sites"]
 | `db.py` | Moteur SQLAlchemy et sessions. |
 | `commun/` | Ce qui sert à plusieurs modules : adresses de l'API source (`enervision.py`), erreurs, pagination, conversion de fuseaux. |
 
+Le schéma PostgreSQL est versionné dans `db/migrations` et décrit dans
+`db/README.md` (tables, relations, rôles). `db.py` ne fait qu'ouvrir la
+connexion : il ne crée pas les tables.
+
 `commun/` est à utiliser avec parcimonie. Dès qu'on y met de la logique
 métier, il devient un fourre-tout dont tout le monde dépend.
 

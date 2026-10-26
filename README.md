@@ -170,6 +170,13 @@ docker compose ps
 
 Attendre que la colonne `STATUS` indique `healthy`.
 
+Au premier démarrage, le conteneur crée la base `enervision`, les tables
+(`db/migrations`) et deux rôles : `enervision_app` pour l'API métier,
+`enervision_ml` pour les traitements. Le détail du schéma est dans
+`db/README.md`. Un volume déjà créé avant ce schéma ne relance pas
+l'initialisation : `sh scripts/apply_schema.sh` l'applique sans effacer les
+données.
+
 PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 éviter les conflits avec une instance déjà installée).
 
@@ -219,12 +226,13 @@ L'application est disponible sur http://127.0.0.1:8000
 Réponse attendue sur `/health` :
 
 ```json
-{"status": "ok", "database": "ok"}
+{ "status": "ok", "database": "ok" }
 ```
 
 Si `database` vaut `indisponible`, vérifier que le conteneur tourne
 (`docker compose ps`) et que `DATABASE_URL` dans `app/back/.env` pointe
-bien sur le port 5433.
+bien sur le port 5433. Un volume créé avant l'ajout du schéma n'a pas le
+rôle `enervision_app` : lancer `sh scripts/apply_schema.sh`.
 
 L'adresse de la base diffère selon le mode de lancement : `db:5432` depuis
 un conteneur, `localhost:5433` depuis la machine.
@@ -279,6 +287,10 @@ db`) avant `pytest`, avec `DATABASE_URL` renseigné : dans `app/back/.env`
 (lancer alors `pytest` depuis `app/back`) ou dans l'environnement. Le code ne
 contient aucun identifiant par défaut.
 
+Le test de schéma applique `db/migrations` si les tables manquent. Il faut
+alors être connecté avec le super-utilisateur `enervision`. Avec le rôle
+applicatif, le schéma doit déjà avoir été créé au démarrage du conteneur.
+
 En CI, `REQUIRE_DB=1` est défini : une base absente fait alors **échouer**
 ces tests au lieu de les ignorer.
 
@@ -322,12 +334,12 @@ test.
 du service ML, et la route métier `/api/consommations` que le dashboard
 interroge toutes les 10 secondes. Il échoue si :
 
-| Seuil | Valeur |
-|---|---|
-| Temps de réponse p95, toutes routes | < 500 ms |
+| Seuil                                    | Valeur   |
+| ---------------------------------------- | -------- |
+| Temps de réponse p95, toutes routes      | < 500 ms |
 | Temps de réponse p95, route métier seule | < 500 ms |
-| Requêtes en erreur | < 1 % |
-| Vérifications réussies | > 99 % |
+| Requêtes en erreur                       | < 1 %    |
+| Vérifications réussies                   | > 99 %   |
 
 La route métier a son propre seuil : des `/health` rapides ne peuvent pas
 masquer une route métier lente. Ses vérifications portent aussi sur le
@@ -377,10 +389,10 @@ passe en local passe sur la pull request.
 ruff en binaire autonome, à la version épinglée dans `pyproject.toml`, vérifie
 son empreinte SHA-256 et le range dans `.tools/` (ignoré par Git).
 
-| Moment | Contrôles | Effet |
-|---|---|---|
+| Moment              | Contrôles                                                                                                                                                                    | Effet                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Avant chaque commit | sur les fichiers indexés : `ruff check`, formatage ruff, espaces en fin de ligne, lignes vides en fin de fichier, marqueurs de conflit, saut de ligne final, fichiers > 1 Mo | bloque le commit ; corrige automatiquement ce que ruff sait corriger |
-| Avant chaque push | les mêmes contrôles, sur chaque commit poussé | bloque le push (rattrape un `git commit --no-verify`) |
+| Avant chaque push   | les mêmes contrôles, sur chaque commit poussé                                                                                                                                | bloque le push (rattrape un `git commit --no-verify`)                |
 
 **Activation** : automatique dans la plupart des cas, sinon une commande.
 
@@ -433,17 +445,17 @@ chaque merge dans `main`. `lint`, `scan` et les jobs `tests-*` tournent en
 parallèle ; un seul test en échec fait échouer son job, et chaque job de tests
 affiche sa couverture dans le résumé du run :
 
-| Job | Rôle |
-|---|---|
-| `lint` | `sh scripts/check.sh`, les mêmes contrôles que les hooks locaux |
-| `scan` | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets |
-| `tests-back` | `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`) |
-| `tests-ml` | `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
-| `tests-front` | Node 22 et `TZ=Europe/Paris` : `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
-| `sonar` | Analyse SonarQube des trois projets, avec la couverture des jobs `tests-*` ; échoue si le *quality gate* est rouge. Ignoré tant que Sonar n'est pas configuré (voir ci-dessous) |
-| `build` | Une fois `lint`, `scan` et les trois jobs `tests-*` réussis : construit les images `back` et `ml`, les scanne avec Trivy |
-| `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
-| `publish` | Publie les images sur GHCR (depuis `main` uniquement) |
+| Job           | Rôle                                                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lint`        | `sh scripts/check.sh`, les mêmes contrôles que les hooks locaux                                                                                                                 |
+| `scan`        | Trivy sur le dépôt : dépendances, mauvaises configurations, secrets                                                                                                             |
+| `tests-back`  | `pytest` du back contre un service PostgreSQL 16 (`REQUIRE_DB=1`), couverture ≥ 80 % (artefact `back-coverage`)                                                                 |
+| `tests-ml`    | `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`)                                                                                                              |
+| `tests-front` | Node 22 et `TZ=Europe/Paris` : `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`)        |
+| `sonar`       | Analyse SonarQube des trois projets, avec la couverture des jobs `tests-*` ; échoue si le _quality gate_ est rouge. Ignoré tant que Sonar n'est pas configuré (voir ci-dessous) |
+| `build`       | Une fois `lint`, `scan` et les trois jobs `tests-*` réussis : construit les images `back` et `ml`, les scanne avec Trivy                                                        |
+| `perf`        | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier)                                               |
+| `publish`     | Publie les images sur GHCR (depuis `main` uniquement)                                                                                                                           |
 
 Chaque étape attend la réussite de la précédente : `lint`, `scan` et les
 trois jobs `tests-*` → `build` → `perf` → `publish`. Une image n'est donc
@@ -453,8 +465,8 @@ charge.
 Les scans échouent sur toute vulnérabilité HIGH ou CRITICAL ; pour les
 images, seules celles qui ont un correctif disponible sont bloquantes.
 
-Rapports publiés en artefacts sur chaque run (onglet *Actions* → run →
-*Artifacts*) : `back-coverage` et `ml-coverage` (HTML + XML),
+Rapports publiés en artefacts sur chaque run (onglet _Actions_ → run →
+_Artifacts_) : `back-coverage` et `ml-coverage` (HTML + XML),
 `front-coverage` (HTML) et `k6-results` (résumé JSON du test de charge).
 
 Les images publiées sont étiquetées avec le SHA du commit et `latest` :
@@ -481,8 +493,8 @@ panne de Sonar n'empêche pas de construire les images.
 1. Sur [SonarQube Cloud](https://sonarcloud.io), importer le dépôt GitHub : cela
    crée le projet et donne sa clé et celle de l'organisation. Pour un
    SonarQube Server auto-hébergé, créer le projet à la main.
-2. Dans *Settings → Secrets and variables → Actions* du dépôt GitHub :
-   - secret `SONAR_TOKEN` : jeton généré dans Sonar (*My Account → Security*) ;
+2. Dans _Settings → Secrets and variables → Actions_ du dépôt GitHub :
+   - secret `SONAR_TOKEN` : jeton généré dans Sonar (_My Account → Security_) ;
    - variable `SONAR_PROJECT_KEY` : clé du projet ;
    - variable `SONAR_ORGANIZATION` : clé de l'organisation (Cloud seulement) ;
    - variable `SONAR_HOST_URL` : seulement pour un Server (Cloud par défaut).
@@ -490,7 +502,7 @@ panne de Sonar n'empêche pas de construire les images.
    double emploi avec la CI et n'a pas la couverture.
 
 Tant que le secret et la clé de projet manquent, les étapes sont ignorées et
-le job reste vert (message *notice* dans le run). Il l'est aussi sur les pull
+le job reste vert (message _notice_ dans le run). Il l'est aussi sur les pull
 requests venues d'un fork, qui n'ont accès à aucun secret.
 
 **Couverture.** Sonar lit `coverage.xml` (back, ML) et `lcov.info` (front), produits
@@ -500,7 +512,7 @@ d'eux ne correspond à aucun fichier. Sans ce contrôle, Sonar afficherait 0 % d
 couverture sans le moindre message.
 
 **Quality gate.** Le job attend le verdict de Sonar (`sonar.qualitygate.wait`) et
-échoue s'il est rouge. Le *quality gate* par défaut (« Sonar way », réglable
+échoue s'il est rouge. Le _quality gate_ par défaut (« Sonar way », réglable
 dans Sonar) porte sur le **nouveau code** : couverture, duplication et nouveaux
 bugs ou failles. Pour ne pas bloquer, retirer cet argument dans `ci.yml` :
 l'analyse reste publiée et commentée sur la pull request.
@@ -513,28 +525,28 @@ par Git. Le fichier `.env.example` sert de modèle.
 
 ### API métier (`app/back/.env`)
 
-| Variable | Rôle | Défaut |
-|---|---|---|
-| `ENERVISION_API_URL` | URL de l'API source | `https://api-mock.charlieandre.fr` |
-| `ENERVISION_TIMEOUT_S` | Délai d'attente des appels API, en secondes | `10` |
-| `ENERVISION_USER` | Identifiant HTTP Basic de l'API source | vide |
-| `ENERVISION_PASSWORD` | Mot de passe HTTP Basic de l'API source | vide |
-| `DATABASE_URL` | Connexion PostgreSQL, identifiants compris | `postgresql+psycopg://localhost:5433/enervision` : **sans identifiants**, à renseigner dans `.env` (voir `.env.example`) |
-| `CONSUMPTION_REFRESH_S` | Intervalle de rafraîchissement de la mesure courante, en secondes | `60` |
-| `CONSUMPTION_STALENESS_S` | Âge à partir duquel une mesure est signalée périmée, en secondes | `120` |
-| `HISTORY_HOURS` | Profondeur de l'historique renvoyé, en heures | `24` |
-| `HISTORY_SITE_COUNT` | Nombre de sites du parc, qui fixe le pas d'échantillonnage | `7` |
-| `HISTORY_MARGIN_S` | Marge sur l'heure courante, pour l'écart d'horloge avec la source | `300` |
+| Variable                  | Rôle                                                              | Défaut                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `ENERVISION_API_URL`      | URL de l'API source                                               | `https://api-mock.charlieandre.fr`                                                                                       |
+| `ENERVISION_TIMEOUT_S`    | Délai d'attente des appels API, en secondes                       | `10`                                                                                                                     |
+| `ENERVISION_USER`         | Identifiant HTTP Basic de l'API source                            | vide                                                                                                                     |
+| `ENERVISION_PASSWORD`     | Mot de passe HTTP Basic de l'API source                           | vide                                                                                                                     |
+| `DATABASE_URL`            | Connexion PostgreSQL, identifiants compris                        | `postgresql+psycopg://localhost:5433/enervision` : **sans identifiants**, à renseigner dans `.env` (voir `.env.example`) |
+| `CONSUMPTION_REFRESH_S`   | Intervalle de rafraîchissement de la mesure courante, en secondes | `60`                                                                                                                     |
+| `CONSUMPTION_STALENESS_S` | Âge à partir duquel une mesure est signalée périmée, en secondes  | `120`                                                                                                                    |
+| `HISTORY_HOURS`           | Profondeur de l'historique renvoyé, en heures                     | `24`                                                                                                                     |
+| `HISTORY_SITE_COUNT`      | Nombre de sites du parc, qui fixe le pas d'échantillonnage        | `7`                                                                                                                      |
+| `HISTORY_MARGIN_S`        | Marge sur l'heure courante, pour l'écart d'horloge avec la source | `300`                                                                                                                    |
 
 ### Dashboard (`app/front/.env`)
 
 Ce fichier est **optionnel** : sans lui, les valeurs par défaut conviennent
 à une installation locale.
 
-| Variable | Rôle | Défaut |
-|---|---|---|
-| `VITE_API_PROXY_TARGET` | Adresse de l'API métier vers laquelle le proxy de développement relaie | `http://localhost:8000` |
-| `VITE_API_URL` | Préfixe appliqué aux appels de l'API métier. **Laisser vide** : les appels partent alors en chemin relatif et passent par le proxy ci-dessus. Toute valeur ici court-circuite le proxy. | vide |
+| Variable                | Rôle                                                                                                                                                                                    | Défaut                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `VITE_API_PROXY_TARGET` | Adresse de l'API métier vers laquelle le proxy de développement relaie                                                                                                                  | `http://localhost:8000` |
+| `VITE_API_URL`          | Préfixe appliqué aux appels de l'API métier. **Laisser vide** : les appels partent alors en chemin relatif et passent par le proxy ci-dessus. Toute valeur ici court-circuite le proxy. | vide                    |
 
 Les deux servent à joindre l'API métier, mais pas au même endroit :
 `VITE_API_PROXY_TARGET` est lue par `vite.config.ts` et ne concerne que le
@@ -563,7 +575,7 @@ copier-coller a perdu les retours à la ligne. Relancez les commandes une
 par une.
 
 **`failed to connect to the docker API`** — Docker Desktop n'est pas lancé.
-L'ouvrir et attendre l'état *Engine running*.
+L'ouvrir et attendre l'état _Engine running_.
 
 **`port is already allocated`** — le port 8000 ou 5433 est déjà utilisé sur
 votre machine. Arrêtez le programme qui l'occupe, ou changez le port dans

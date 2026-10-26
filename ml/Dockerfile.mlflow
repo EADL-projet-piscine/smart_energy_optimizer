@@ -1,7 +1,18 @@
+
 FROM python:3.12-slim
 
 WORKDIR /mlflow
 
+# Installation des dépendances avec les privilèges root
 RUN pip install --no-cache-dir "mlflow>=3,<4"
 
+# Création d'un utilisateur système non privilégié
+RUN groupadd --system mlflow \
+    && useradd --system --gid mlflow --home-dir /mlflow mlflow \
+    && chown -R mlflow:mlflow /mlflow
+
+# Exécution du serveur avec un utilisateur non-root
+USER mlflow
+
 EXPOSE 5000
+

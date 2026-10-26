@@ -211,22 +211,16 @@ describe('SiteDetail — diagnostic', () => {
 
     expect(screen.getByText('405,8')).toBeInTheDocument()
     expect(screen.getByText('247,4')).toBeInTheDocument()
-    expect(screen.getByText('0,909')).toBeInTheDocument()
     expect(screen.getByText('7,8')).toBeInTheDocument()
   })
 
-  it('signale un facteur de puissance sous le seuil de facturation', () => {
-    // Sous 0,9, le fournisseur facture la puissance réactive : c'est la seule
-    // grandeur de ce bloc qui appelle une action.
+  it('n’affiche pas le facteur de puissance', () => {
+    // Retiré volontairement : sans seuil contractuel connu, le chiffre nu
+    // n'apprend rien à qui lit l'écran.
     afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.82 }) })
 
-    expect(screen.getByText(/puissance réactive facturée/)).toBeInTheDocument()
-  })
-
-  it('ne signale rien quand le facteur de puissance est correct', () => {
-    afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.95 }) })
-
-    expect(screen.queryByText(/puissance réactive facturée/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Facteur de puissance')).not.toBeInTheDocument()
+    expect(screen.queryByText('0,820')).not.toBeInTheDocument()
   })
 
   it('explique pourquoi des mesures manquent', () => {
@@ -271,7 +265,7 @@ describe('SiteDetail — diagnostic', () => {
   })
 
   it('met un tiret sur une grandeur absente', () => {
-    afficher([site()], 'SITE001', { SITE001: detail({ voltageV: null, powerFactor: null }) })
+    afficher([site()], 'SITE001', { SITE001: detail({ voltageV: null, currentA: null }) })
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
   })
@@ -314,10 +308,43 @@ describe('SiteDetail — consommation périmée', () => {
     expect(screen.getByText('Dernière valeur connue')).toBeInTheDocument()
   })
 
+  it('date aussi le chiffre que le résumé porte encore', () => {
+    // Même situation que ci-dessus, mais la mémoire sait de quand il date :
+    // « dernière valeur connue » sans heure ne dit pas si on peut s'y fier.
+    afficher(
+      [site({ currentKw: 844, lastKnownKw: 844, lastKnownAt: '2026-10-26T11:54:00+00:00' })],
+      'SITE001',
+      { SITE001: detail({ dataQuality: 'degraded', nullReasons: ['consumption_sensor_failure'] }) },
+    )
+
+    expect(screen.getByText('Relevé de 12h54')).toBeInTheDocument()
+  })
+
   it('n’ajoute rien quand la consommation est mesurée', () => {
     afficher([site({ currentKw: 138 })], 'SITE001', { SITE001: detail() })
 
     expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
+  })
+
+  it('ressort la dernière valeur mémorisée quand le site s’est tu', () => {
+    // Sans elle, l'écran n'a plus aucun chiffre à montrer alors que le site
+    // consommait deux heures plus tôt.
+    afficher(
+      [site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: '2026-10-26T11:54:00+00:00' })],
+      'SITE001',
+      { SITE001: detail({ dataQuality: 'critical' }) },
+    )
+
+    expect(screen.getByText('470')).toBeInTheDocument()
+    // Le 26 octobre, la France est repassée à l'heure d'hiver : 11:54 UTC
+    // vaut 12h54, pas 13h54.
+    expect(screen.getByText('Relevé de 12h54')).toBeInTheDocument()
+  })
+
+  it('se passe de l’heure quand la mémoire n’en porte pas', () => {
+    afficher([site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: null })], 'SITE001', {})
+
+    expect(screen.getByText('Dernière valeur connue')).toBeInTheDocument()
   })
 
   it('n’annonce pas de dernière valeur quand il n’y en a aucune', () => {
@@ -325,6 +352,16 @@ describe('SiteDetail — consommation périmée', () => {
     afficher([site({ currentKw: null })], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
 
     expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Relevé de/)).not.toBeInTheDocument()
+  })
+
+  it('préfère la mesure de l’instant à la mémoire', () => {
+    // La mémoire ne sert qu'en l'absence de mesure : un site qui transmet
+    // affiche ce qu'il transmet.
+    afficher([site({ currentKw: 138, lastKnownKw: 999 })], 'SITE001', { SITE001: detail() })
+
+    expect(screen.getByText('138')).toBeInTheDocument()
+    expect(screen.queryByText('999')).not.toBeInTheDocument()
   })
 
   it('n’ajoute rien quand le détail manque', () => {

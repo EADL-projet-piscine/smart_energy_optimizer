@@ -28,6 +28,14 @@ export type Site = {
   type: string
   readingLabel: string
   currentKw: number | null
+  /** Dernière consommation réellement mesurée, et l'instant où elle a été reçue.
+   *
+   * Optionnelles, et non simplement nulles : elles ne viennent pas du résumé de
+   * l'API source mais de l'enveloppe posée par l'API métier. Un back qui ne les
+   * fournit pas reste valide, et l'écran doit fonctionner sans elles.
+   */
+  lastKnownKw?: number | null
+  lastKnownAt?: string | null
   forecast2hKw: number | null
   thresholdKw: number | null
   receivedCount: number | null

@@ -7,7 +7,14 @@ import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Caption, Subtitle } from '../components/ui/Text'
 import { Toast } from '../components/ui/Toast'
-import { formatKw, formatNumber, qualityLabel, qualityShort, sensorLabel } from '../services/format'
+import {
+  formatKw,
+  formatNumber,
+  formatTime,
+  qualityLabel,
+  qualityShort,
+  sensorLabel,
+} from '../services/format'
 import type { Alert, SiteDetail as Detail, DetailsBySite, SeriesPoint, Site } from '../services/model'
 
 type Props = {
@@ -30,9 +37,6 @@ function qualityTone(quality: string | null): 'ok' | 'ambre' | 'alert' {
   return 'ambre'
 }
 
-/** En dessous de ce seuil, le fournisseur facture la puissance réactive. */
-const POWER_FACTOR_FLOOR = 0.9
-
 /** Code de panne du compteur qui mesure la consommation elle-même. */
 const CONSUMPTION_SENSOR = 'consumption_sensor_failure'
 
@@ -43,6 +47,31 @@ const CONSUMPTION_SENSOR = 'consumption_sensor_failure'
 function isConsumptionStale(detail: Detail | null): boolean {
   if (detail === null) return false
   return detail.dataQuality === 'critical' || detail.nullReasons.includes(CONSUMPTION_SENSOR)
+}
+
+type Reading = { value: number | null; note: string | undefined; stale: boolean }
+
+/** Ce que montre la case « Actuel », et ce qu'il faut en dire.
+ *
+ * Trois situations, dans cet ordre : le site s'est tu et on ressort la dernière
+ * valeur mémorisée ; le site transmet mais son compteur est tombé, donc le
+ * chiffre du résumé date ; ou tout va bien. Un tiret n'apparaît que lorsqu'on
+ * n'a jamais rien mesuré — c'est le seul cas où il n'y a réellement rien à dire.
+ */
+function currentReading(site: Site, detail: Detail | null): Reading {
+  const remembered = site.lastKnownKw ?? null
+  // Un chiffre périmé sans date n'apprend rien : le lecteur ne peut pas juger
+  // s'il peut encore s'y fier. L'heure vient de la mémoire du back, quelle que
+  // soit la raison pour laquelle la mesure ne vaut plus.
+  const note = site.lastKnownAt ? `Relevé de ${formatTime(site.lastKnownAt)}` : 'Dernière valeur connue'
+
+  if (site.currentKw === null) {
+    if (remembered === null) return { value: null, note: undefined, stale: false }
+    return { value: remembered, note, stale: true }
+  }
+  if (isConsumptionStale(detail)) return { value: site.currentKw, note, stale: true }
+
+  return { value: site.currentKw, note: undefined, stale: false }
 }
 
 /** Ce qu'affiche le bout d'une ligne : l'anomalie si elle existe, sinon la mesure.
@@ -79,12 +108,10 @@ function Chevron({ open }: { open: boolean }) {
 
 /** Grandeurs électriques du site, absentes du résumé du parc. */
 function Installation({ detail }: { detail: Detail }) {
-  const poorPowerFactor = detail.powerFactor !== null && detail.powerFactor < POWER_FACTOR_FLOOR
-
   return (
     <div>
       <Subtitle>État de l’installation</Subtitle>
-      <div className="grid grid-cols-2 gap-3 min-[981px]:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 min-[981px]:grid-cols-3">
         <Metric
           variant="inset"
           label="Tension"
@@ -96,13 +123,6 @@ function Installation({ detail }: { detail: Detail }) {
           label="Intensité"
           value={detail.currentA === null ? '—' : formatNumber(detail.currentA, 1)}
           unit={detail.currentA === null ? undefined : 'A'}
-        />
-        <Metric
-          variant="inset"
-          label="Facteur de puissance"
-          tone={poorPowerFactor ? 'ambre' : 'defaut'}
-          value={detail.powerFactor === null ? '—' : formatNumber(detail.powerFactor, 3)}
-          detail={poorPowerFactor ? 'Sous 0,9 : puissance réactive facturée' : undefined}
         />
         <Metric
           variant="inset"
@@ -152,7 +172,8 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // La qualité ne s'affiche que lorsqu'elle pose problème : « 24/24 » suivi de
   // « toutes les mesures sont disponibles » n'apprend rien au lecteur.
   const qualityIssue = detail && detail.dataQuality !== 'good' ? qualityLabel(detail.dataQuality) : null
-  const consumptionStale = site.currentKw !== null && isConsumptionStale(detail)
+  const reading = currentReading(site, detail)
+
   function scrollToActions() {
     document.getElementById(`actions-${site.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     setHighlighted(true)
@@ -209,10 +230,10 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             <Metric
               variant="inset"
               label="Actuel"
-              tone={consumptionStale ? 'ambre' : 'defaut'}
-              value={formatKw(site.currentKw)}
-              unit={site.currentKw === null ? undefined : 'kW'}
-              detail={consumptionStale ? 'Dernière valeur connue' : undefined}
+              tone={reading.stale ? 'ambre' : 'defaut'}
+              value={formatKw(reading.value)}
+              unit={reading.value === null ? undefined : 'kW'}
+              detail={reading.note}
             />
             <Metric
               variant="inset"
@@ -270,7 +291,9 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <List>
                   {detail.nullReasons.map((reason) => (
                     <Row key={reason} accent="ambre">
-                      <p className="m-0 text-[13px] leading-snug text-secondaire">{sensorLabel(reason)}</p>
+                      <p className="m-0 text-[13px] leading-snug text-secondaire">
+                        {sensorLabel(reason)}
+                      </p>
                     </Row>
                   ))}
                 </List>

@@ -13,7 +13,7 @@ from smart_energy_app.config import settings
 from smart_energy_app.consommation.historique import load_history
 from smart_energy_app.main import app
 
-# Deux sites, deux points chacun, dans le désordre chronologique.
+# Two sites, two points each, out of chronological order.
 READINGS = [
     {
         "site_id": "SITE002",
@@ -62,7 +62,7 @@ class FakeServer(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def fake_api(monkeypatch):
-    """Lance un serveur local qui imite /api/v1/readings, le temps du test."""
+    """Run a local server mimicking /api/v1/readings for the duration of the test."""
     server = HTTPServer(("127.0.0.1", 0), FakeServer)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -78,30 +78,30 @@ def fake_api(monkeypatch):
 
 
 def test_groups_by_site(fake_api):
-    historique = asyncio.run(load_history())
+    history = asyncio.run(load_history())
 
-    assert sorted(historique["sites"]) == ["SITE001", "SITE002"]
-    assert len(historique["sites"]["SITE001"]) == 2
+    assert sorted(history["sites"]) == ["SITE001", "SITE002"]
+    assert len(history["sites"]["SITE001"]) == 2
 
 
 def test_keeps_null_values(fake_api):
-    """Une mesure absente reste None : zéro serait une mesure, pas une absence."""
-    historique = asyncio.run(load_history())
+    """A missing reading stays None: zero would be a reading, not an absence."""
+    history = asyncio.run(load_history())
 
-    valeurs = [point["consumption_kw"] for point in historique["sites"]["SITE001"]]
-    assert None in valeurs
-    assert 0 not in valeurs
+    values = [point["consumption_kw"] for point in history["sites"]["SITE001"]]
+    assert None in values
+    assert 0 not in values
 
 
 def test_sorts_chronologically(fake_api):
-    historique = asyncio.run(load_history())
+    history = asyncio.run(load_history())
 
-    horodatages = [point["timestamp"] for point in historique["sites"]["SITE001"]]
-    assert horodatages == ["2026-10-21T10:00:00Z", "2026-10-21T11:00:00Z"]
+    timestamps = [point["timestamp"] for point in history["sites"]["SITE001"]]
+    assert timestamps == ["2026-10-21T10:00:00Z", "2026-10-21T11:00:00Z"]
 
 
 def test_window_is_naive_utc_in_the_past(fake_api):
-    """L'API source raisonne en UTC et refuse toute borne dans le futur."""
+    """The source API works in UTC and rejects any bound in the future."""
     asyncio.run(load_history())
 
     start = datetime.fromisoformat(fake_api.last_query["start_time"])
@@ -114,11 +114,11 @@ def test_window_is_naive_utc_in_the_past(fake_api):
 
 
 def test_limit_gives_hourly_step(fake_api):
-    """`limit` ne plafonne pas, il fixe le pas : heures × sites donne du horaire."""
+    """`limit` does not cap, it sets the step: hours x sites yields hourly points."""
     asyncio.run(load_history())
 
-    attendu = settings.history_hours * settings.history_site_count
-    assert int(fake_api.last_query["limit"]) == attendu
+    expected = settings.history_hours * settings.history_site_count
+    assert int(fake_api.last_query["limit"]) == expected
 
 
 def test_warns_on_short_series(fake_api, caplog):
@@ -135,11 +135,12 @@ def test_warns_on_missing_site(fake_api, monkeypatch, caplog):
     with caplog.at_level("WARNING"):
         asyncio.run(load_history())
 
+    # The source logs in French; matching its own wording is the point of the assertion.
     assert "2 sites reçus, 7 attendus" in caplog.text
 
 
 def test_route_502_when_source_refuses(fake_api):
-    """L'API a répondu mais a refusé : erreur franche, aucune donnée de repli."""
+    """The API answered but refused: a clear error, never fallback data."""
     fake_api.code = 500
 
     response = TestClient(app).get("/api/consommations/historique")

@@ -4,8 +4,8 @@ import { loadDetails } from '../../services/details'
 
 vi.mock('../../api/client', () => ({ fetchJson: vi.fn() }))
 
-/** Réponse type de l'endpoint, avec un seul site. */
-function reponse(data: Record<string, unknown>, stale = false) {
+/** Typical endpoint response, with a single site. */
+function envelope(data: Record<string, unknown>, stale = false) {
   return {
     sites: {
       SITE001: { data, fetched_at: '2026-10-25T13:15:16+00:00', stale },
@@ -13,7 +13,7 @@ function reponse(data: Record<string, unknown>, stale = false) {
   }
 }
 
-const MESURE = {
+const READING = {
   timestamp: '2026-10-25T13:15:16.361330',
   site_id: 'SITE001',
   site_type: 'office',
@@ -32,8 +32,8 @@ beforeEach(() => {
 })
 
 describe('loadDetails', () => {
-  it('interroge la route du détail des sites', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse(MESURE))
+  it('queries the site detail route', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope(READING))
     const signal = new AbortController().signal
 
     await loadDetails(signal)
@@ -41,8 +41,8 @@ describe('loadDetails', () => {
     expect(fetchJson).toHaveBeenCalledWith('/api/consommations/sites', signal)
   })
 
-  it('normalise les grandeurs de chaque site', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse(MESURE))
+  it('normalises each site readings', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope(READING))
 
     const details = await loadDetails()
 
@@ -57,61 +57,61 @@ describe('loadDetails', () => {
     })
   })
 
-  it('lit l’horodatage nu comme de l’UTC', async () => {
-    // La source date sans fuseau alors qu'il s'agit d'UTC, comme /stats/summary.
-    // Sans correction, le navigateur l'interprète en heure locale.
-    vi.mocked(fetchJson).mockResolvedValue(reponse(MESURE))
+  it('reads a bare timestamp as UTC', async () => {
+    // The source dates without a timezone even though it means UTC, like
+    // /stats/summary. Without the fix, the browser reads it as local time.
+    vi.mocked(fetchJson).mockResolvedValue(envelope(READING))
 
     const details = await loadDetails()
 
     expect(details.SITE001.at).toBe('2026-10-25T13:15:16.361330Z')
   })
 
-  it('garde un horodatage qui porte déjà son fuseau', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse({ ...MESURE, timestamp: '2026-10-25T13:15:16Z' }))
+  it('keeps a timestamp that already carries its timezone', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope({ ...READING, timestamp: '2026-10-25T13:15:16Z' }))
 
     const details = await loadDetails()
 
     expect(details.SITE001.at).toBe('2026-10-25T13:15:16Z')
   })
 
-  it('relaie les causes d’absence de mesure', async () => {
-    // C'est la raison d'être de cet endpoint : le résumé dit qu'une mesure
-    // manque, lui seul dit pourquoi.
+  it('relays the reasons why a reading is missing', async () => {
+    // This is what the endpoint is for: the summary says a reading is missing,
+    // only this one says why.
     vi.mocked(fetchJson).mockResolvedValue(
-      reponse({
-        ...MESURE,
+      envelope({
+        ...READING,
         data_quality: 'degraded',
-        null_reasons: ['sonde de tension HS', 'capteur hygrométrie muet'],
+        null_reasons: ['voltage_sensor_failure', 'humidity_sensor_mute'],
       }),
     )
 
     const details = await loadDetails()
 
     expect(details.SITE001.dataQuality).toBe('degraded')
-    expect(details.SITE001.nullReasons).toEqual(['sonde de tension HS', 'capteur hygrométrie muet'])
+    expect(details.SITE001.nullReasons).toEqual(['voltage_sensor_failure', 'humidity_sensor_mute'])
   })
 
-  it('ignore les causes qui ne sont pas des textes', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse({ ...MESURE, null_reasons: ['réseau', 42, null] }))
+  it('ignores reasons that are not strings', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope({ ...READING, null_reasons: ['network', 42, null] }))
 
     const details = await loadDetails()
 
-    expect(details.SITE001.nullReasons).toEqual(['réseau'])
+    expect(details.SITE001.nullReasons).toEqual(['network'])
   })
 
-  it('rend une liste vide quand les causes ne sont pas un tableau', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse({ ...MESURE, null_reasons: 'réseau' }))
+  it('returns an empty list when the reasons are not an array', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope({ ...READING, null_reasons: 'network' }))
 
     const details = await loadDetails()
 
     expect(details.SITE001.nullReasons).toEqual([])
   })
 
-  it('laisse une grandeur absente à null plutôt qu’à zéro', async () => {
-    // Zéro volt est une mesure, l'absence de mesure n'en est pas une.
+  it('leaves a missing reading at null rather than zero', async () => {
+    // Zero volts is a measurement; the absence of a measurement is not.
     vi.mocked(fetchJson).mockResolvedValue(
-      reponse({ ...MESURE, voltage_v: null, power_factor: 'NaN', temperature_celsius: undefined }),
+      envelope({ ...READING, voltage_v: null, power_factor: 'NaN', temperature_celsius: undefined }),
     )
 
     const details = await loadDetails()
@@ -121,35 +121,35 @@ describe('loadDetails', () => {
     expect(details.SITE001.temperatureC).toBeNull()
   })
 
-  it('conserve un zéro réel', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse({ ...MESURE, current_a: 0 }))
+  it('keeps a real zero', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope({ ...READING, current_a: 0 }))
 
     const details = await loadDetails()
 
     expect(details.SITE001.currentA).toBe(0)
   })
 
-  it('signale une mesure périmée', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse(MESURE, true))
+  it('flags a stale reading', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope(READING, true))
 
     const details = await loadDetails()
 
     expect(details.SITE001.stale).toBe(true)
   })
 
-  it('laisse une qualité inconnue telle quelle', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse({ ...MESURE, data_quality: 42 }))
+  it('leaves an unknown quality as is', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope({ ...READING, data_quality: 42 }))
 
     const details = await loadDetails()
 
     expect(details.SITE001.dataQuality).toBeNull()
   })
 
-  it('met de côté un site sans mesure exploitable', async () => {
-    // Un site en échec côté serveur ne doit pas faire tomber les autres.
+  it('sets aside a site with no usable reading', async () => {
+    // A site failing server-side must not bring the others down.
     vi.mocked(fetchJson).mockResolvedValue({
       sites: {
-        SITE001: { data: MESURE, stale: false },
+        SITE001: { data: READING, stale: false },
         SITE002: { data: null, stale: true },
       },
     })
@@ -159,25 +159,22 @@ describe('loadDetails', () => {
     expect(Object.keys(details)).toEqual(['SITE001'])
   })
 
-  it('laisse un horodatage illisible à null', async () => {
-    vi.mocked(fetchJson).mockResolvedValue(reponse({ ...MESURE, timestamp: 42 }))
+  it('leaves an unreadable timestamp at null', async () => {
+    vi.mocked(fetchJson).mockResolvedValue(envelope({ ...READING, timestamp: 42 }))
 
     const details = await loadDetails()
 
     expect(details.SITE001.at).toBeNull()
   })
 
-  it.each([null, 'inattendu', { data: [] }])(
-    'refuse une réponse qu’il ne sait pas lire : %j',
-    async (body) => {
-      vi.mocked(fetchJson).mockResolvedValue(body)
+  it.each([null, 'unexpected', { data: [] }])('rejects a response it cannot read: %j', async (body) => {
+    vi.mocked(fetchJson).mockResolvedValue(body)
 
-      await expect(loadDetails()).rejects.toThrow('Forme de réponse non reconnue')
-    },
-  )
+    await expect(loadDetails()).rejects.toThrow('Forme de réponse non reconnue')
+  })
 
-  it('laisse remonter l’échec de l’appel réseau', async () => {
-    // Pas de repli silencieux : l'appelant doit savoir que rien n'est arrivé.
+  it('lets a network failure bubble up', async () => {
+    // No silent fallback: the caller must know that nothing arrived.
     vi.mocked(fetchJson).mockRejectedValue(new Error('Statut 503'))
 
     await expect(loadDetails()).rejects.toThrow('Statut 503')

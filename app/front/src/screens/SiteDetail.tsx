@@ -164,8 +164,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // c'est le rapport à la consommation qui informe, et c'est aussi la grandeur
   // sur laquelle les alertes se déclenchent. Aucun seuil n'est jugé ici : le
   // bandeau s'en charge, et le dupliquer risquerait de le contredire.
-  const loadPct =
-    reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
+  const loadPct = reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
   const loadLabel = loadPct === null ? undefined : `${formatNumber(loadPct, 1)} % utilisés`
 
   return (
@@ -276,9 +275,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <List>
                   {detail.nullReasons.map((reason) => (
                     <Row key={reason} accent="ambre">
-                      <p className="m-0 text-[13px] leading-snug text-secondaire">
-                        {sensorLabel(reason)}
-                      </p>
+                      <p className="m-0 text-[13px] leading-snug text-secondaire">{sensorLabel(reason)}</p>
                     </Row>
                   ))}
                 </List>

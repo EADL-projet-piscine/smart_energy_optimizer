@@ -8,7 +8,7 @@ import { useSummary } from '../../services/useSummary'
 vi.mock('../../services/summary', () => ({ loadSummary: vi.fn() }))
 vi.mock('../../services/details', () => ({ loadDetails: vi.fn() }))
 
-function site(id: string, critique = false): Site {
+function site(id: string, critical = false): Site {
   return {
     id,
     name: id,
@@ -24,7 +24,7 @@ function site(id: string, critique = false): Site {
     series: [],
     peakAt: null,
     comment: null,
-    alerts: critique ? [{ id: `${id}-a`, severity: 'critique', title: 'Urgent', message: 'message' }] : [],
+    alerts: critical ? [{ id: `${id}-a`, severity: 'critique', title: 'Urgent', message: 'message' }] : [],
     recommendations: [],
   }
 }
@@ -53,14 +53,14 @@ function summary(sites: Site[] = [site('SITE001')]): ParkSummary {
   }
 }
 
-/** Horodatage ISO à `seconds` d'ici, comme le serveur l'annonce dans next_at. */
+/** ISO timestamp `seconds` from now, as the server announces it in next_at. */
 function inSeconds(seconds: number): string {
   return new Date(Date.now() + seconds * 1000).toISOString()
 }
 
 beforeEach(() => {
-  // shouldAdvanceTime laisse les promesses se résoudre pendant que le temps
-  // est simulé : sans lui, waitFor attendrait indéfiniment.
+  // shouldAdvanceTime lets promises settle while time is simulated: without
+  // it, waitFor would wait forever.
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: null })
   vi.mocked(loadDetails).mockResolvedValue({})
@@ -73,7 +73,7 @@ afterEach(() => {
 })
 
 describe('useSummary', () => {
-  it('expose le résumé et le détail reçus', async () => {
+  it('exposes the summary and the detail it received', async () => {
     vi.mocked(loadDetails).mockResolvedValue({
       SITE001: {
         at: '2026-10-25T13:00:00Z',
@@ -95,17 +95,17 @@ describe('useSummary', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('charge les deux dans le même cycle', async () => {
-    // Les deux endpoints décrivent le même instant du parc : les séparer
-    // rouvrirait un décalage d'un cycle entre un chiffre et son explication.
+  it('loads both within the same cycle', async () => {
+    // Both endpoints describe the same instant of the fleet: separating them
+    // would reopen a one-cycle gap between a figure and its explanation.
     renderHook(() => useSummary())
 
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(1))
     expect(loadDetails).toHaveBeenCalledTimes(1)
   })
 
-  it('garde le résumé quand le détail échoue', async () => {
-    // Le détail est un complément : son absence ne doit pas vider l'écran.
+  it('keeps the summary when the detail fails', async () => {
+    // The detail is a complement: its absence must not empty the screen.
     vi.mocked(loadDetails).mockRejectedValue(new Error('Statut 503'))
 
     const { result } = renderHook(() => useSummary())
@@ -115,7 +115,7 @@ describe('useSummary', () => {
     expect(result.current.error).toBeNull()
   })
 
-  it('signale l’erreur quand le résumé échoue', async () => {
+  it('reports the error when the summary fails', async () => {
     vi.mocked(loadSummary).mockRejectedValue(new Error('Statut 503'))
 
     const { result } = renderHook(() => useSummary())
@@ -124,18 +124,18 @@ describe('useSummary', () => {
     expect(result.current.summary).toBeNull()
   })
 
-  it('donne un message générique sur une erreur sans message', async () => {
-    vi.mocked(loadSummary).mockRejectedValue('panne')
+  it('gives a generic message on an error without one', async () => {
+    vi.mocked(loadSummary).mockRejectedValue('failure')
 
     const { result } = renderHook(() => useSummary())
 
     await waitFor(() => expect(result.current.error).toBe('API injoignable'))
   })
 
-  it('signale une erreur survenue pendant le traitement', async () => {
-    // Une réponse hors contrat fait lancer le traitement, pas le réseau.
-    // allSettled ne rejette jamais : sans le catch, ce rejet serait avalé et
-    // l'écran resterait muet.
+  it('reports an error raised during processing', async () => {
+    // A response outside the contract makes the processing throw, not the
+    // network. allSettled never rejects: without the catch, that rejection
+    // would be swallowed and the screen would stay silent.
     vi.mocked(loadSummary).mockResolvedValue(
       null as unknown as { summary: ParkSummary; nextAt: string | null },
     )
@@ -146,7 +146,7 @@ describe('useSummary', () => {
     expect(result.current.summary).toBeNull()
   })
 
-  it('sélectionne le site le plus critique au premier chargement', async () => {
+  it('selects the most critical site on first load', async () => {
     vi.mocked(loadSummary).mockResolvedValue({
       summary: summary([site('SITE001'), site('SITE002', true)]),
       nextAt: null,
@@ -157,13 +157,13 @@ describe('useSummary', () => {
     await waitFor(() => expect(result.current.siteId).toBe('SITE002'))
   })
 
-  it('retombe sur le premier site faute de critique', async () => {
+  it('falls back to the first site when none is critical', async () => {
     const { result } = renderHook(() => useSummary())
 
     await waitFor(() => expect(result.current.siteId).toBe('SITE001'))
   })
 
-  it('garde le site sélectionné tant qu’il existe', async () => {
+  it('keeps the selected site as long as it exists', async () => {
     vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: inSeconds(10) })
 
     const { result } = renderHook(() => useSummary())
@@ -175,9 +175,9 @@ describe('useSummary', () => {
     expect(result.current.siteId).toBe('SITE001')
   })
 
-  it('se cale sur l’heure annoncée par le serveur', async () => {
-    // Le serveur dit quand sa prochaine mesure arrive : le client la demande
-    // juste après, au lieu de sonder à l'aveugle.
+  it('paces itself on the time announced by the server', async () => {
+    // The server says when its next reading lands: the client asks right
+    // after, instead of polling blindly.
     vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: inSeconds(10) })
 
     renderHook(() => useSummary())
@@ -190,7 +190,7 @@ describe('useSummary', () => {
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(2))
   })
 
-  it('retombe sur une minute quand le serveur n’annonce rien', async () => {
+  it('falls back to one minute when the server announces nothing', async () => {
     renderHook(() => useSummary())
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(1))
 
@@ -199,8 +199,8 @@ describe('useSummary', () => {
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(2))
   })
 
-  it('respecte un délai minimum quand l’heure annoncée est déjà passée', async () => {
-    // Garde-fou contre une rafale d'appels si les horloges divergent.
+  it('honours a minimum delay when the announced time has already passed', async () => {
+    // A safeguard against a burst of calls if the clocks drift apart.
     vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: inSeconds(-300) })
 
     renderHook(() => useSummary())
@@ -213,8 +213,8 @@ describe('useSummary', () => {
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(2))
   })
 
-  it('retombe sur une minute quand l’heure annoncée est illisible', async () => {
-    vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: 'pas une date' })
+  it('falls back to one minute when the announced time is unreadable', async () => {
+    vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: 'not a date' })
 
     renderHook(() => useSummary())
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(1))
@@ -224,7 +224,7 @@ describe('useSummary', () => {
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(2))
   })
 
-  it('réessaie après un échec', async () => {
+  it('retries after a failure', async () => {
     vi.mocked(loadSummary).mockRejectedValue(new Error('Statut 503'))
 
     const { result } = renderHook(() => useSummary())
@@ -235,7 +235,7 @@ describe('useSummary', () => {
     await waitFor(() => expect(loadSummary).toHaveBeenCalledTimes(2))
   })
 
-  it('n’appelle plus rien après le démontage', async () => {
+  it('calls nothing more after unmount', async () => {
     vi.mocked(loadSummary).mockResolvedValue({ summary: summary(), nextAt: inSeconds(10) })
 
     const { unmount } = renderHook(() => useSummary())

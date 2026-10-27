@@ -3,20 +3,20 @@ import { describe, expect, it } from 'vitest'
 import { Caption, Figure, Label, SiteText, Subtitle } from '../../../components/ui/Text'
 
 describe('SiteText', () => {
-  it('met les identifiants de site en gras', () => {
+  it('sets site identifiers in bold', () => {
     render(<SiteText text="Le total exclut SITE004 et SITE006." />)
 
     expect(screen.getByText('SITE004').tagName).toBe('STRONG')
     expect(screen.getByText('SITE006').tagName).toBe('STRONG')
   })
 
-  it('laisse le reste du texte intact', () => {
+  it('leaves the rest of the text untouched', () => {
     const { container } = render(<SiteText text="Le total exclut SITE004 et SITE006." />)
 
     expect(container.textContent).toBe('Le total exclut SITE004 et SITE006.')
   })
 
-  it('n’alourdit pas un texte sans identifiant', () => {
+  it('does not weigh down a text without an identifier', () => {
     const { container } = render(<SiteText text="Tout va bien." />)
 
     expect(container.querySelector('strong')).toBeNull()
@@ -24,14 +24,14 @@ describe('SiteText', () => {
 })
 
 describe('Figure', () => {
-  it('affiche la valeur et son unité', () => {
+  it('displays the value and its unit', () => {
     render(<Figure value="2 847" unit="kW" />)
 
     expect(screen.getByText('2 847')).toBeInTheDocument()
     expect(screen.getByText('kW')).toBeInTheDocument()
   })
 
-  it('se passe d’unité quand il n’y en a pas', () => {
+  it('does without a unit when there is none', () => {
     render(<Figure value="—" />)
 
     expect(screen.getByText('—')).toBeInTheDocument()
@@ -39,7 +39,7 @@ describe('Figure', () => {
 })
 
 describe('Label, Caption, Subtitle', () => {
-  it('rendent leur contenu', () => {
+  it('render their content', () => {
     render(
       <>
         <Label>Couverture</Label>

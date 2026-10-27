@@ -2,23 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { badgeTone } from '../../../components/ui/Badge'
 
 describe('badgeTone', () => {
-  it('passe en ambre sur un relevé interrompu', () => {
+  it('turns amber on an interrupted reading', () => {
     expect(badgeTone('Relevé interrompu')).toBe('ambre')
   })
 
-  it('passe au vert sur un état nominal', () => {
+  it('turns green on a nominal state', () => {
     expect(badgeTone('Stable')).toBe('ok')
     expect(badgeTone('Nominal')).toBe('ok')
   })
 
-  it('alerte par défaut', () => {
-    // Un badge inconnu doit attirer l'œil plutôt que passer pour normal.
+  it('alerts by default', () => {
+    // An unknown badge must catch the eye rather than pass for normal.
     expect(badgeTone('Dépassement prévu')).toBe('alert')
     expect(badgeTone('Alerte critique')).toBe('alert')
     expect(badgeTone('Quelque chose d’inattendu')).toBe('alert')
   })
 
-  it('ignore la casse', () => {
+  it('ignores the case', () => {
     expect(badgeTone('RELEVÉ INTERROMPU')).toBe('ambre')
   })
 })

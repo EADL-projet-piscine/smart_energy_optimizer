@@ -3,17 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { SiteDetail } from '../../screens/SiteDetail'
 import type { Alert, SiteDetail as Detail, DetailsBySite, Site } from '../../services/model'
 
-// Le graphique est du ressort de Recharts : le remplacer isole ce qu'on teste
-// et évite les avertissements de dimensions nulles sous jsdom.
+// The chart belongs to Recharts: replacing it isolates what we test and
+// avoids the zero-dimension warnings under jsdom.
 vi.mock('../../components/ConsumptionChart', () => ({
-  ConsumptionChart: () => <div data-testid="graphique" />,
+  ConsumptionChart: () => <div data-testid="chart" />,
 }))
 
 function alert(severity: Alert['severity'], title: string): Alert {
   return { id: title, severity, title, message: `message de ${title}` }
 }
 
-function site(partiel: Partial<Site> = {}): Site {
+function site(overrides: Partial<Site> = {}): Site {
   return {
     id: 'SITE001',
     name: 'Bureau Paris',
@@ -31,11 +31,11 @@ function site(partiel: Partial<Site> = {}): Site {
     comment: null,
     alerts: [],
     recommendations: [],
-    ...partiel,
+    ...overrides,
   }
 }
 
-function detail(partiel: Partial<Detail> = {}): Detail {
+function detail(overrides: Partial<Detail> = {}): Detail {
   return {
     at: '2026-10-25T13:15:16Z',
     stale: false,
@@ -46,260 +46,261 @@ function detail(partiel: Partial<Detail> = {}): Detail {
     powerFactor: 0.909,
     temperatureC: 7.8,
     humidityPct: 39.3,
-    ...partiel,
+    ...overrides,
   }
 }
 
-function afficher(sites: Site[], siteId = sites[0]?.id ?? '', details: DetailsBySite = {}) {
+function renderDetail(sites: Site[], siteId = sites[0]?.id ?? '', details: DetailsBySite = {}) {
   const onSelect = vi.fn()
   render(<SiteDetail sites={sites} siteId={siteId} onSelect={onSelect} seriesBySite={{}} details={details} />)
   return onSelect
 }
 
-/** La ligne dépliable d'un site, repérée par son nom. */
-function ligne(nom: string) {
-  return screen.getByRole('button', { name: new RegExp(nom) })
+/** The expandable row of a site, located by its name. */
+function row(name: string) {
+  return screen.getByRole('button', { name: new RegExp(name) })
 }
 
 describe('SiteDetail', () => {
-  it('déplie le site demandé et laisse les autres fermés', () => {
-    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'B')
+  it('expands the requested site and leaves the others closed', () => {
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'B')
 
-    expect(ligne('Usine Lyon')).toHaveAttribute('aria-expanded', 'true')
-    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
+    expect(row('Usine Lyon')).toHaveAttribute('aria-expanded', 'true')
+    expect(row('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('liste tous les sites, y compris ceux qui sont repliés', () => {
-    // C'est la raison d'être du panneau dépliant : le nom de chaque site est
-    // lisible sans avoir à l'ouvrir.
-    afficher([
+  it('lists every site, including the collapsed ones', () => {
+    // This is what the expandable panel is for: each site name is readable
+    // without having to open it.
+    renderDetail([
       site({ id: 'A', name: 'Bureau Paris' }),
       site({ id: 'B', name: 'Usine Lyon' }),
       site({ id: 'C', name: 'Data Center Marseille' }),
     ])
 
-    expect(ligne('Bureau Paris')).toBeInTheDocument()
-    expect(ligne('Usine Lyon')).toBeInTheDocument()
-    expect(ligne('Data Center Marseille')).toBeInTheDocument()
+    expect(row('Bureau Paris')).toBeInTheDocument()
+    expect(row('Usine Lyon')).toBeInTheDocument()
+    expect(row('Data Center Marseille')).toBeInTheDocument()
   })
 
-  it('ouvre le premier site quand l’identifiant demandé n’existe pas', () => {
-    afficher([site({ id: 'A', name: 'Bureau Paris' })], 'INEXISTANT')
+  it('opens the first site when the requested identifier does not exist', () => {
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' })], 'INEXISTANT')
 
-    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'true')
+    expect(row('Bureau Paris')).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('prévient quand on choisit un autre site', () => {
-    const onSelect = afficher(
+  it('notifies when another site is chosen', () => {
+    const onSelect = renderDetail(
       [site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })],
       'A',
     )
 
-    fireEvent.click(ligne('Usine Lyon'))
+    fireEvent.click(row('Usine Lyon'))
 
     expect(onSelect).toHaveBeenCalledWith('B')
   })
 
-  it('garde les panneaux déjà ouverts quand on en ouvre un autre', () => {
-    // On compare souvent deux installations : refermer la première rendrait
-    // la comparaison impossible.
-    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A')
+  it('keeps the already open panels when another one is opened', () => {
+    // Two installations often get compared: closing the first would make the
+    // comparison impossible.
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A')
 
-    fireEvent.click(ligne('Usine Lyon'))
+    fireEvent.click(row('Usine Lyon'))
 
-    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'true')
-    expect(ligne('Usine Lyon')).toHaveAttribute('aria-expanded', 'true')
+    expect(row('Bureau Paris')).toHaveAttribute('aria-expanded', 'true')
+    expect(row('Usine Lyon')).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('replie le site ouvert quand on reclique dessus', () => {
-    afficher([site({ id: 'A', name: 'Bureau Paris' })], 'A')
+  it('collapses the open site when it is clicked again', () => {
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' })], 'A')
 
-    fireEvent.click(ligne('Bureau Paris'))
+    fireEvent.click(row('Bureau Paris'))
 
-    expect(ligne('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
+    expect(row('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Aucune recommandation pour ce site.')).not.toBeInTheDocument()
   })
 
-  it('montre le détail de chaque panneau ouvert, pas celui du dernier', () => {
-    // Le bug qu'on évite : un panneau qui afficherait les données du site
-    // sélectionné au lieu des siennes.
-    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
+  it('shows each open panel its own detail, not the last one', () => {
+    // The bug this avoids: a panel showing the data of the selected site
+    // instead of its own.
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
       A: detail({ voltageV: 405.8 }),
       B: detail({ voltageV: 231.4 }),
     })
 
-    fireEvent.click(ligne('Usine Lyon'))
+    fireEvent.click(row('Usine Lyon'))
 
     expect(screen.getByText('405,8')).toBeInTheDocument()
     expect(screen.getByText('231,4')).toBeInTheDocument()
   })
 
-  it('prévient quand le résumé ne contient aucun site', () => {
-    afficher([])
+  it('warns when the summary contains no site', () => {
+    renderDetail([])
 
     expect(screen.getByText(/Aucun site n’est disponible/)).toBeInTheDocument()
   })
 
-  it('affiche le badge du site', () => {
-    afficher([site({ badge: 'Dépassement prévu' })])
+  it('displays the site badge', () => {
+    renderDetail([site({ badge: 'Dépassement prévu' })])
 
     expect(screen.getByText('Dépassement prévu')).toBeInTheDocument()
   })
 
-  it('met un tiret sur les valeurs absentes', () => {
-    // Jamais de zéro : zéro est une mesure, l'absence de mesure n'en est pas une.
-    afficher([site({ currentKw: null, forecast2hKw: null, thresholdKw: null })])
+  it('puts a dash on missing values', () => {
+    // Never a zero: zero is a measurement, the absence of one is not.
+    renderDetail([site({ currentKw: null, forecast2hKw: null, thresholdKw: null })])
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)
   })
 
-  it('affiche la capacité et la part utilisée', () => {
-    // La capacité seule ne dit rien : c'est le rapport à la consommation qui
-    // informe, et c'est sur lui que les alertes se déclenchent.
-    afficher([site({ currentKw: 190, capacityKw: 200 })])
+  it('displays the capacity and the share in use', () => {
+    // Capacity alone says nothing: what informs is its ratio to consumption,
+    // and that is what the alerts trigger on.
+    renderDetail([site({ currentKw: 190, capacityKw: 200 })])
 
     expect(screen.getByText('200')).toBeInTheDocument()
     expect(screen.getByText('95,0 % utilisés')).toBeInTheDocument()
   })
 
-  it('n’annonce pas de part utilisée sans capacité', () => {
-    afficher([site({ currentKw: 190, capacityKw: null })])
+  it('announces no share in use without a capacity', () => {
+    renderDetail([site({ currentKw: 190, capacityKw: null })])
 
     expect(screen.queryByText(/% utilisés/)).not.toBeInTheDocument()
   })
 
-  it('n’annonce pas de part utilisée sans consommation', () => {
-    afficher([site({ currentKw: null, capacityKw: 200 })])
+  it('announces no share in use without a consumption', () => {
+    renderDetail([site({ currentKw: null, capacityKw: 200 })])
 
     expect(screen.queryByText(/% utilisés/)).not.toBeInTheDocument()
   })
 
-  it('affiche le compte de mesures reçues', () => {
-    afficher([site({ receivedCount: 14, expectedCount: 24 })])
+  it('displays the count of readings received', () => {
+    renderDetail([site({ receivedCount: 14, expectedCount: 24 })])
 
     expect(screen.getByText('14/24')).toBeInTheDocument()
   })
 
-  it('met un tiret quand le compte est inconnu', () => {
-    afficher([site({ receivedCount: null, expectedCount: null })])
+  it('puts a dash when the count is unknown', () => {
+    renderDetail([site({ receivedCount: null, expectedCount: null })])
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1)
   })
 })
 
-describe('SiteDetail — bout de ligne', () => {
-  it('affiche la mesure quand tout va bien', () => {
-    afficher([site({ currentKw: 165 })], 'SITE001', { SITE001: detail() })
+describe('SiteDetail — end of row', () => {
+  it('displays the reading when all is well', () => {
+    renderDetail([site({ currentKw: 165 })], 'SITE001', { SITE001: detail() })
 
-    expect(ligne('Bureau Paris')).toHaveTextContent('165 kW')
+    expect(row('Bureau Paris')).toHaveTextContent('165 kW')
   })
 
-  it('remplace la mesure par l’anomalie', () => {
-    // Un problème passe devant un chiffre : la liste sert d'abord à repérer
-    // le site qui demande une attention.
-    afficher([site()], 'SITE001', { SITE001: detail({ dataQuality: 'partial' }) })
+  it('replaces the reading with the anomaly', () => {
+    // A problem comes before a figure: the list is there first of all to spot
+    // the site that needs attention.
+    renderDetail([site()], 'SITE001', { SITE001: detail({ dataQuality: 'partial' }) })
 
-    expect(ligne('Bureau Paris')).toHaveTextContent('capteur en panne')
-    expect(ligne('Bureau Paris')).not.toHaveTextContent('100 kW')
+    expect(row('Bureau Paris')).toHaveTextContent('capteur en panne')
+    expect(row('Bureau Paris')).not.toHaveTextContent('100 kW')
   })
 
-  it('signale un site qui ne transmet plus', () => {
-    afficher([site({ isTransmitting: false })])
+  it('reports a site that no longer transmits', () => {
+    renderDetail([site({ isTransmitting: false })])
 
-    expect(ligne('Bureau Paris')).toHaveTextContent('relevé interrompu')
+    expect(row('Bureau Paris')).toHaveTextContent('relevé interrompu')
   })
 
-  it('met un tiret quand la mesure manque sans anomalie connue', () => {
-    afficher([site({ currentKw: null })])
+  it('puts a dash when the reading is missing with no known anomaly', () => {
+    renderDetail([site({ currentKw: null })])
 
-    expect(ligne('Bureau Paris')).toHaveTextContent('—')
+    expect(row('Bureau Paris')).toHaveTextContent('—')
   })
 
-  it('affiche l’état de chaque ligne, même repliée', () => {
-    // L'intérêt de la liste : repérer le site en panne sans l'ouvrir.
-    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
+  it('shows the state of every row, even collapsed', () => {
+    // The point of the list: spotting the failing site without opening it.
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
       B: detail({ dataQuality: 'critical' }),
     })
 
-    expect(ligne('Usine Lyon')).toHaveAttribute('aria-expanded', 'false')
-    expect(ligne('Usine Lyon')).toHaveTextContent('perte réseau')
+    expect(row('Usine Lyon')).toHaveAttribute('aria-expanded', 'false')
+    expect(row('Usine Lyon')).toHaveTextContent('perte réseau')
   })
 })
 
-describe('SiteDetail — diagnostic', () => {
-  it('affiche l’état de l’installation', () => {
-    afficher([site()], 'SITE001', { SITE001: detail() })
+describe('SiteDetail — diagnosis', () => {
+  it('displays the state of the installation', () => {
+    renderDetail([site()], 'SITE001', { SITE001: detail() })
 
     expect(screen.getByText('405,8')).toBeInTheDocument()
     expect(screen.getByText('247,4')).toBeInTheDocument()
     expect(screen.getByText('7,8')).toBeInTheDocument()
   })
 
-  it('n’affiche pas le facteur de puissance', () => {
-    // Retiré volontairement : sans seuil contractuel connu, le chiffre nu
-    // n'apprend rien à qui lit l'écran.
-    afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.82 }) })
+  it('does not display the power factor', () => {
+    // Removed deliberately: with no known contractual threshold, the bare
+    // figure teaches the reader nothing.
+    renderDetail([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.82 }) })
 
     expect(screen.queryByText('Facteur de puissance')).not.toBeInTheDocument()
     expect(screen.queryByText('0,820')).not.toBeInTheDocument()
   })
 
-  it('explique pourquoi des mesures manquent', () => {
-    // C'est l'objet du ticket : le résumé dit qu'il en manque, le détail dit
-    // pourquoi. Sans ça, l'écran affiche « 22/24 » et rien d'autre.
-    afficher([site({ receivedCount: 22, expectedCount: 24 })], 'SITE001', {
+  it('explains why readings are missing', () => {
+    // This is what the ticket is about: the summary says some are missing, the
+    // detail says why. Without it the screen shows "22/24" and nothing else.
+    renderDetail([site({ receivedCount: 22, expectedCount: 24 })], 'SITE001', {
       SITE001: detail({ dataQuality: 'partial' }),
     })
 
     expect(screen.getAllByText('Un capteur secondaire en panne').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('affiche un badge quand la qualité est dégradée', () => {
-    afficher([site()], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
+  it('displays a badge when the quality is degraded', () => {
+    renderDetail([site()], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
 
     expect(screen.getAllByText('Perte réseau : aucune mesure').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('n’affiche aucun badge quand tout va bien', () => {
-    // Inutile d'annoncer que tout fonctionne : le badge ne sert qu'à signaler.
-    afficher([site()], 'SITE001', { SITE001: detail({ dataQuality: 'good' }) })
+  it('displays no badge when all is well', () => {
+    // No need to announce that everything works: the badge is only there to
+    // flag something.
+    renderDetail([site()], 'SITE001', { SITE001: detail({ dataQuality: 'good' }) })
 
     expect(screen.queryByText('Toutes les mesures sont disponibles')).not.toBeInTheDocument()
   })
 
-  it('liste les capteurs indisponibles en clair', () => {
-    // L'API renvoie des codes : les afficher tels quels donnerait des noms de
-    // variables à un lecteur métier.
-    afficher([site()], 'SITE001', {
+  it('lists the unavailable sensors in plain words', () => {
+    // The API returns codes: showing them as is would hand variable names to
+    // a business reader.
+    renderDetail([site()], 'SITE001', {
       SITE001: detail({ dataQuality: 'degraded', nullReasons: ['humidity_sensor_failure'] }),
     })
 
     expect(screen.getByText('Sonde d’humidité en panne')).toBeInTheDocument()
   })
 
-  it('affiche un code de panne inconnu plutôt que rien', () => {
-    afficher([site()], 'SITE001', {
-      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['code_inedit'] }),
+  it('displays an unknown failure code rather than nothing', () => {
+    renderDetail([site()], 'SITE001', {
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['unknown_code'] }),
     })
 
-    expect(screen.getByText('code_inedit')).toBeInTheDocument()
+    expect(screen.getByText('unknown_code')).toBeInTheDocument()
   })
 
-  it('met un tiret sur une grandeur absente', () => {
-    afficher([site()], 'SITE001', { SITE001: detail({ voltageV: null, currentA: null }) })
+  it('puts a dash on a missing reading', () => {
+    renderDetail([site()], 'SITE001', { SITE001: detail({ voltageV: null, currentA: null }) })
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('n’affiche pas le bloc quand le détail manque', () => {
-    // Le détail vient d'un autre endpoint : son absence ne doit rien casser.
-    afficher([site()], 'SITE001', {})
+  it('does not display the block when the detail is missing', () => {
+    // The detail comes from another endpoint: its absence must break nothing.
+    renderDetail([site()], 'SITE001', {})
 
     expect(screen.queryByText('État de l’installation')).not.toBeInTheDocument()
   })
 
-  it('ne montre pas le détail d’un site replié', () => {
-    afficher([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
+  it('does not show the detail of a collapsed site', () => {
+    renderDetail([site({ id: 'A', name: 'Bureau Paris' }), site({ id: 'B', name: 'Usine Lyon' })], 'A', {
       A: detail(),
       B: detail({ voltageV: 231.4 }),
     })
@@ -309,54 +310,54 @@ describe('SiteDetail — diagnostic', () => {
   })
 })
 
-describe('SiteDetail — dernière valeur connue', () => {
-  // Le chiffre n'est marqué comme daté que lorsqu'il sort de la mémoire du
-  // back. L'état des capteurs ne périme rien : le détail et le résumé sont
-  // deux endpoints décorrélés.
+describe('SiteDetail — last known value', () => {
+  // The figure is only marked as dated once it comes out of the back end's
+  // memory. Sensor state expires nothing: the detail and the summary are two
+  // uncorrelated endpoints.
 
-  it('ressort la dernière valeur mémorisée quand le site s’est tu', () => {
-    // Sans elle, l'écran n'a plus aucun chiffre à montrer alors que le site
-    // consommait deux heures plus tôt.
-    afficher(
+  it('brings back the last remembered value when the site has gone silent', () => {
+    // Without it the screen has no figure left to show, even though the site
+    // was consuming two hours earlier.
+    renderDetail(
       [site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: '2026-10-26T11:54:00+00:00' })],
       'SITE001',
       { SITE001: detail({ dataQuality: 'critical' }) },
     )
 
     expect(screen.getByText('470')).toBeInTheDocument()
-    // Le 26 octobre, la France est repassée à l'heure d'hiver : 11:54 UTC
-    // vaut 12h54, pas 13h54.
+    // On 26 October France went back to winter time: 11:54 UTC is 12h54,
+    // not 13h54.
     expect(screen.getByText('Dernier relevé datant de 12h54')).toBeInTheDocument()
   })
 
-  it('se passe de l’heure quand la mémoire n’en porte pas', () => {
-    afficher([site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: null })], 'SITE001', {})
+  it('does without the time when the memory carries none', () => {
+    renderDetail([site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: null })], 'SITE001', {})
 
     expect(screen.getByText('Dernière valeur connue')).toBeInTheDocument()
   })
 
-  it('n’annonce pas de dernière valeur quand il n’y en a aucune', () => {
-    // « — » suivi de « dernière valeur connue » ne veut rien dire.
-    afficher([site({ currentKw: null })], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
+  it('announces no last value when there is none', () => {
+    // "—" followed by "last known value" means nothing.
+    renderDetail([site({ currentKw: null })], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
 
     expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
     expect(screen.queryByText(/Dernier relevé/)).not.toBeInTheDocument()
   })
 
-  it('préfère la mesure de l’instant à la mémoire', () => {
-    // La mémoire ne sert qu'en l'absence de mesure : un site qui transmet
-    // affiche ce qu'il transmet.
-    afficher([site({ currentKw: 138, lastKnownKw: 999 })], 'SITE001', { SITE001: detail() })
+  it('prefers the reading of the moment over the memory', () => {
+    // The memory only serves in the absence of a reading: a site that
+    // transmits displays what it transmits.
+    renderDetail([site({ currentKw: 138, lastKnownKw: 999 })], 'SITE001', { SITE001: detail() })
 
     expect(screen.getByText('138')).toBeInTheDocument()
     expect(screen.queryByText('999')).not.toBeInTheDocument()
   })
 
-  it('ne périme pas un chiffre du cycle courant sur la foi des capteurs', () => {
-    // Le piège qu'on évite : annoncer « relevé de 14h43 » alors que la
-    // collecte date de 14h43. Le compteur est signalé en panne par le détail,
-    // mais le résumé a bien fourni un chiffre à ce cycle.
-    afficher(
+  it('does not expire a figure of the current cycle on the strength of the sensors', () => {
+    // The trap this avoids: announcing "reading from 14h43" when the
+    // collection itself dates from 14h43. The meter is reported as failing by
+    // the detail, but the summary did provide a figure for this cycle.
+    renderDetail(
       [site({ currentKw: 904, lastKnownKw: 904, lastKnownAt: '2026-10-26T11:54:00+00:00' })],
       'SITE001',
       { SITE001: detail({ dataQuality: 'degraded', nullReasons: ['consumption_sensor_failure'] }) },
@@ -368,37 +369,37 @@ describe('SiteDetail — dernière valeur connue', () => {
   })
 })
 
-describe('SiteDetail — alertes', () => {
-  it('met l’alerte la plus grave dans le bandeau', () => {
-    // La plus grave passe devant, quel que soit l'ordre d'arrivée.
-    afficher([site({ alerts: [alert('moyenne', 'Tiède'), alert('critique', 'Urgent')] })])
+describe('SiteDetail — alerts', () => {
+  it('puts the most severe alert in the banner', () => {
+    // The most severe comes first, whatever the order of arrival.
+    renderDetail([site({ alerts: [alert('moyenne', 'Tiède'), alert('critique', 'Urgent')] })])
 
     expect(screen.getByRole('status')).toHaveTextContent('Urgent')
   })
 
-  it('retient la première alerte faute de critique', () => {
-    afficher([site({ alerts: [alert('moyenne', 'Tiède'), alert('info', 'Pour info')] })])
+  it('keeps the first alert when none is critical', () => {
+    renderDetail([site({ alerts: [alert('moyenne', 'Tiède'), alert('info', 'Pour info')] })])
 
     expect(screen.getByRole('status')).toHaveTextContent('Tiède')
   })
 
-  it('liste les autres alertes sous le graphique', () => {
-    afficher([site({ alerts: [alert('critique', 'Urgent'), alert('moyenne', 'Tiède')] })])
+  it('lists the other alerts below the chart', () => {
+    renderDetail([site({ alerts: [alert('critique', 'Urgent'), alert('moyenne', 'Tiède')] })])
 
     expect(screen.getByRole('status')).toHaveTextContent('Urgent')
     expect(screen.getByText('Tiède')).toBeInTheDocument()
   })
 
-  it('n’affiche aucun bandeau sans alerte', () => {
-    afficher([site()])
+  it('displays no banner without an alert', () => {
+    renderDetail([site()])
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  it('donne son bandeau à chaque panneau ouvert', () => {
-    // Chaque ligne porte ses propres données : deux panneaux ouverts montrent
-    // chacun son alerte, pas deux fois la même.
-    afficher(
+  it('gives each open panel its own banner', () => {
+    // Every row carries its own data: two open panels each show their own
+    // alert, not the same one twice.
+    renderDetail(
       [
         site({ id: 'A', name: 'Bureau Paris', alerts: [alert('critique', 'Urgent A')] }),
         site({ id: 'B', name: 'Usine Lyon', alerts: [alert('critique', 'Urgent B')] }),
@@ -406,18 +407,18 @@ describe('SiteDetail — alertes', () => {
       'A',
     )
 
-    fireEvent.click(ligne('Usine Lyon'))
+    fireEvent.click(row('Usine Lyon'))
 
-    const bandeaux = screen.getAllByRole('status')
-    expect(bandeaux).toHaveLength(2)
-    expect(bandeaux[0]).toHaveTextContent('Urgent A')
-    expect(bandeaux[1]).toHaveTextContent('Urgent B')
+    const banners = screen.getAllByRole('status')
+    expect(banners).toHaveLength(2)
+    expect(banners[0]).toHaveTextContent('Urgent A')
+    expect(banners[1]).toHaveTextContent('Urgent B')
   })
 })
 
-describe('SiteDetail — recommandations', () => {
-  it('affiche les recommandations numérotées avec leur gain', () => {
-    afficher([
+describe('SiteDetail — recommendations', () => {
+  it('displays the numbered recommendations with their saving', () => {
+    renderDetail([
       site({
         recommendations: [{ id: 'r1', title: 'Décaler le four', detail: 'Après 21 h', saving: '−180 €' }],
       }),
@@ -428,16 +429,16 @@ describe('SiteDetail — recommandations', () => {
     expect(screen.getByText('1')).toBeInTheDocument()
   })
 
-  it('omet le gain quand il n’y en a pas', () => {
-    afficher([
+  it('omits the saving when there is none', () => {
+    renderDetail([
       site({ recommendations: [{ id: 'r1', title: 'Vérifier', detail: 'La passerelle', saving: null }] }),
     ])
 
     expect(screen.getByText('Vérifier')).toBeInTheDocument()
   })
 
-  it('le dit quand il n’y en a aucune', () => {
-    afficher([site()])
+  it('says so when there is none at all', () => {
+    renderDetail([site()])
 
     expect(screen.getByText('Aucune recommandation pour ce site.')).toBeInTheDocument()
   })

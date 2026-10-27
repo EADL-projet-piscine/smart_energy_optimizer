@@ -6,6 +6,11 @@ output "public_ip" {
   value = azurerm_public_ip.public_ip.ip_address
 }
 
+# Adresse du dashboard en production : la valeur de SITE_DOMAIN dans le .env de la VM.
+output "fqdn" {
+  value = azurerm_public_ip.public_ip.fqdn
+}
+
 output "vm_name" {
   value = azurerm_linux_virtual_machine.applicatif-vm.name
 }

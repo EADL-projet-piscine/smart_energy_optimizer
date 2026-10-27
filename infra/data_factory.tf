@@ -1,8 +1,8 @@
 # Crée une Data Factory
 resource "azurerm_data_factory" "adf" {
-  name                = "adf-${var.student_id}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                   = "adf-${var.student_id}"
+  location               = azurerm_resource_group.rg.location
+  resource_group_name    = azurerm_resource_group.rg.name
   public_network_enabled = false
 
   identity {
@@ -28,12 +28,12 @@ resource "azurerm_data_factory_linked_custom_service" "source_rest" {
   type            = "RestService"
 
   type_properties_json = jsonencode({
-    url = "https://api-mock.charlieandre.fr/"
+    url                               = "https://api-mock.charlieandre.fr/"
     enableServerCertificateValidation = true
-    authenticationType = "Basic"
-    userName = var.api_username
+    authenticationType                = "Basic"
+    userName                          = var.api_username
     password = {
-      type = "SecureString"
+      type  = "SecureString"
       value = var.api_password
     }
   })
@@ -65,8 +65,8 @@ resource "azurerm_data_factory_linked_custom_service" "destination_blob" {
   type            = "AzureBlobStorage"
 
   type_properties_json = jsonencode({
-    serviceEndpoint = "https://${azurerm_storage_account.sa.name}.blob.core.windows.net/"
-    accountKind     = "StorageV2"
+    serviceEndpoint    = "https://${azurerm_storage_account.sa.name}.blob.core.windows.net/"
+    accountKind        = "StorageV2"
     authenticationType = "ManagedIdentity"
   })
 
@@ -91,10 +91,10 @@ resource "azurerm_data_factory_custom_dataset" "destination_json" {
 
   type_properties_json = jsonencode({
     location = {
-      type      = "AzureBlobStorageLocation"
-      container = "landing"
+      type       = "AzureBlobStorageLocation"
+      container  = "landing"
       folderPath = "api"
-      fileName  = "@concat('readings', '_', dataset().site_id, '_', formatDateTime(utcNow(), 'yyyy-MM-dd_HH-mm-ss'), '.json')"
+      fileName   = "@concat('readings', '_', dataset().site_id, '_', formatDateTime(utcNow(), 'yyyy-MM-dd_HH-mm-ss'), '.json')"
     }
     encodingName = "UTF-8"
   })
@@ -116,21 +116,21 @@ resource "azurerm_data_factory_pipeline" "copy_rest_to_blob" {
 
         items = {
           value = "@createArray('SITE001', 'SITE002', 'SITE003', 'SITE004', 'SITE005', 'SITE006', 'SITE007')"
-          type = "Expression"
+          type  = "Expression"
         }
 
         activities = [
           {
-            name = "CopySiteData"
-            type = "Copy"
+            name      = "CopySiteData"
+            type      = "Copy"
             dependsOn = []
 
             policy = {
-              timeout = "0.12:00:00"
-              retry = 2
+              timeout                = "0.12:00:00"
+              retry                  = 2
               retryIntervalInSeconds = 30
-              secureInput = true
-              secureOutput = true
+              secureInput            = true
+              secureOutput           = true
             }
 
             userProperties = []

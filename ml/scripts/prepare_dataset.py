@@ -49,7 +49,7 @@ def prepare_dataset(
     collect_readings(start_dt, end_dt, RAW_DIR, refresh)
 
     LOGGER.info("Étape 2/4 : agrégation horaire")
-    df = build_hourly_dataset(start_dt, end_dt, RAW_DIR)
+    df = build_hourly_dataset(start_dt, end_dt)
 
     LOGGER.info("Étape 3/4 : validation du contrat")
     validate_hourly_readings(df)

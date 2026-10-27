@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import stat
 from datetime import datetime
 from pathlib import Path
 
@@ -9,7 +11,11 @@ LOGGER = logging.getLogger(__name__)
 
 EXPECTED_READINGS_PER_HOUR = 12
 MIN_VALID_READINGS = 9
+
 SITE_IDS = tuple(f"SITE{i:03d}" for i in range(1, 8))
+
+# Chemin fixe : ml/data/raw/
+RAW_DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "raw"
 
 OUTPUT_COLUMNS = [
     "site_id",
@@ -26,7 +32,7 @@ def find_raw_files(
     raw_dir: Path,
     days: pd.DatetimeIndex,
 ) -> list[Path]:
-    """Recherche les fichiers JSON des sites autorisés."""
+    """Recherche uniquement les fichiers des sites autorisés."""
 
     base_dir = Path(raw_dir).resolve(strict=True)
     files = []
@@ -60,10 +66,46 @@ def find_raw_files(
     return sorted(files)
 
 
+def load_raw_json(
+    file_path: Path,
+    raw_dir: Path,
+) -> dict:
+    """Charge un fichier JSON autorisé sans suivre le lien final."""
+
+    base_dir = Path(raw_dir).resolve(strict=True)
+    target = file_path.resolve(strict=True)
+
+    if not target.is_relative_to(base_dir):
+        raise ValueError(f"Fichier situé hors du répertoire autorisé : {file_path}")
+
+    flags = os.O_RDONLY
+
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+
+    fd = os.open(file_path, flags)
+
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(f"Le chemin ne correspond pas à un fichier régulier : {file_path}")
+
+        with os.fdopen(fd, encoding="utf-8") as file:
+            fd = -1
+            payload = json.load(file)
+
+        if not isinstance(payload, dict):
+            raise TypeError(f"Structure JSON invalide : {file_path}")
+
+        return payload
+
+    finally:
+        if fd != -1:
+            os.close(fd)
+
+
 def build_hourly_dataset(
     start: datetime,
     end: datetime,
-    raw_dir: Path,
 ) -> pd.DataFrame:
     """Construit le dataset horaire depuis les fichiers JSON EnerVision."""
 
@@ -79,24 +121,22 @@ def build_hourly_dataset(
     if start_utc != start_utc.floor("h") or end_utc != end_utc.floor("h"):
         raise ValueError("Les bornes doivent être alignées sur des heures entières.")
 
-    raw_dir = Path(raw_dir)
-
+    # Recherche de tous les jours intersectant [start, end).
     days = pd.date_range(
         start=start_utc.normalize(),
         end=(end_utc - pd.Timedelta(nanoseconds=1)).normalize(),
         freq="D",
     )
 
-    files = find_raw_files(raw_dir, days)
+    files = find_raw_files(RAW_DATA_DIR, days)
 
     if not files:
-        raise FileNotFoundError(f"Aucun fichier JSON EnerVision trouvé dans {raw_dir}")
+        raise FileNotFoundError(f"Aucun fichier JSON EnerVision trouvé dans {RAW_DATA_DIR}")
 
     records = []
 
     for file_path in files:
-        with file_path.open(encoding="utf-8") as file:
-            payload = json.load(file)
+        payload = load_raw_json(file_path, RAW_DATA_DIR)
 
         for reading in payload["readings"]:
             records.append(
@@ -118,7 +158,11 @@ def build_hourly_dataset(
         format="ISO8601",
         utc=True,
     )
-    df["consumption_kw"] = pd.to_numeric(df["consumption_kw"], errors="coerce")
+
+    df["consumption_kw"] = pd.to_numeric(
+        df["consumption_kw"],
+        errors="coerce",
+    )
 
     # Conserver uniquement la période demandée.
     df = df.loc[(df["timestamp"] >= start_utc) & (df["timestamp"] < end_utc)].copy()
@@ -126,7 +170,7 @@ def build_hourly_dataset(
     if df.empty:
         raise ValueError("Aucune mesure sur la période demandée.")
 
-    # Vérifier qu'un relevé n'est pas présent plusieurs fois.
+    # Vérifier les doublons avant l'agrégation.
     if df.duplicated(["site_id", "timestamp"]).any():
         raise ValueError("Doublons détectés dans les mesures EnerVision.")
 

@@ -29,6 +29,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://enervision_app:enervision_app@db:5432/enervision
       ENERVISION_API_URL: https://api-mock.charlieandre.fr
+    env_file:
+      - path: ./app/back/.env
+        required: false
     ports:
       - "8000:8000"
     depends_on:
@@ -44,6 +47,9 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       MLFLOW_EXPERIMENT_NAME: smart-energy-forecasting
       DATABASE_URL: postgresql+psycopg://enervision_ml:enervision_ml@db:5432/enervision
+    env_file:
+      - path: ./ml/.env
+        required: false
     ports:
       - "8001:8000"
     depends_on:
@@ -69,6 +75,12 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+  front:
+    build:
+      context: ./app/front
+    ports:
+      - "80:80"
 
 volumes:
   pgdata:

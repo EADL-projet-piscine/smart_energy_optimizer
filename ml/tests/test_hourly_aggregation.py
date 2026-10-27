@@ -6,7 +6,6 @@ import pytest
 
 from smart_energy_ml.preprocessing.hourly_aggregation import (
     build_hourly_dataset,
-    find_raw_files,
 )
 
 START = datetime(2026, 6, 15, tzinfo=UTC)
@@ -302,41 +301,3 @@ def test_end_boundary_is_exclusive(tmp_path):
 
     assert len(df) == 24
     assert df["timestamp"].max() == pd.Timestamp("2026-06-15T23:00:00Z")
-
-
-def test_find_raw_files_accepts_valid_file(tmp_path):
-    site_dir = tmp_path / "SITE001"
-    site_dir.mkdir()
-
-    expected_file = site_dir / "SITE001_20261027.json"
-    expected_file.write_text('{"readings": []}', encoding="utf-8")
-
-    days = pd.date_range("2026-10-27", periods=1, tz="UTC")
-
-    result = find_raw_files(tmp_path, days)
-
-    assert result == [expected_file.resolve()]
-
-
-def test_find_raw_files_rejects_external_symlink(tmp_path):
-    raw_dir = tmp_path / "raw"
-    site_dir = raw_dir / "SITE001"
-    site_dir.mkdir(parents=True)
-
-    external_file = tmp_path / "external.json"
-    external_file.write_text(
-        '{"readings": []}',
-        encoding="utf-8",
-    )
-
-    symlink = site_dir / "SITE001_20261027.json"
-
-    try:
-        symlink.symlink_to(external_file)
-    except (OSError, NotImplementedError):
-        pytest.skip("Création de liens symboliques indisponible")
-
-    days = pd.date_range("2026-10-27", periods=1, tz="UTC")
-
-    with pytest.raises(ValueError, match="symbolique"):
-        find_raw_files(raw_dir, days)

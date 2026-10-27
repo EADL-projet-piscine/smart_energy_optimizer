@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchJson } from '../../api/client'
+import { fetchJson, HttpError, UNAUTHORIZED_EVENT } from '../../api/client'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -66,6 +66,53 @@ describe('fetchJson', () => {
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'Service indisponible' }, 503))
 
     await expect(fetchJson('/health')).rejects.toThrow('Statut 503')
+  })
+
+  it('sends the session cookie with every call', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}))
+
+    await fetchJson('/api/consommations')
+
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'same-origin' })
+  })
+
+  it('sends a JSON body when one is given', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
+
+    await expect(
+      fetchJson('/api/auth/login', undefined, 'POST', { email: 'a@b.fr', password: 'secret' }),
+    ).resolves.toBeNull()
+
+    const init = fetchMock.mock.calls[0][1]
+    expect(init).toMatchObject({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'a@b.fr', password: 'secret' }),
+    })
+  })
+
+  it('announces a 401 and rejects with its status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'Authentification requise.' }, 401))
+    const listener = vi.fn()
+    window.addEventListener(UNAUTHORIZED_EVENT, listener)
+
+    const outcome = await fetchJson('/api/consommations').catch((cause: unknown) => cause)
+
+    window.removeEventListener(UNAUTHORIZED_EVENT, listener)
+    expect(outcome).toBeInstanceOf(HttpError)
+    expect((outcome as HttpError).status).toBe(401)
+    expect(listener).toHaveBeenCalledOnce()
+  })
+
+  it('does not announce other errors as a lost session', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}, 403))
+    const listener = vi.fn()
+    window.addEventListener(UNAUTHORIZED_EVENT, listener)
+
+    await expect(fetchJson('/api/consommations/sites/SITE009')).rejects.toThrow('Statut 403')
+
+    window.removeEventListener(UNAUTHORIZED_EVENT, listener)
+    expect(listener).not.toHaveBeenCalled()
   })
 
   it('gives up after three seconds', async () => {

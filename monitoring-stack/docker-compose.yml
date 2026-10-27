@@ -55,6 +55,7 @@ services:
       AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID}
     volumes:
       - "./grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "./grafana/dashboards:/etc/grafana/dashboards:ro" # les tableaux de bord en JSON
       - "grafana-data:/var/lib/grafana"
     ports:
       - "127.0.0.1:3000:3000" # accessible uniquement depuis la VM (ou le tunnel)

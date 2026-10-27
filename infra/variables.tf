@@ -37,3 +37,20 @@ variable "api_password" {
   type        = string
   description = "Le mot de passe pour se connecter à l'API Mock"
 }
+
+variable "grafana_admin_password" {
+  description = "Mot de passe du compte admin de Grafana - utile pour l'initialisation de Grafana"
+  type        = string
+  sensitive   = true # Terraform ne l'affichera jamais dans le terminal
+}
+
+variable "docker_version" {
+  description = "Version de Docker Engine à installer sur la VM (ex : 28.5.1)"
+  type        = string
+  default     = "29.0.1"
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.docker_version))
+    error_message = "La version doit avoir la forme X.Y.Z, par exemple 28.5.1 (sans le \"v\")."
+  }
+}

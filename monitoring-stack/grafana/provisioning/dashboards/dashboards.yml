@@ -1,0 +1,13 @@
+# Dit à Grafana de charger automatiquement, au démarrage, tous les
+# tableaux de bord JSON du dossier /etc/grafana/dashboards
+apiVersion: 1
+
+providers:
+  - name: smart-energy
+    folder: Smart Energy        # le dossier où ils apparaissent dans Grafana
+    type: file
+    disableDeletion: true       # on ne peut pas les supprimer depuis l'interface
+    allowUiUpdates: true        # on peut les modifier pour tester (sans les sauvegarder dans le code)
+    updateIntervalSeconds: 60
+    options:
+      path: /etc/grafana/dashboards

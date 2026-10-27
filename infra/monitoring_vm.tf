@@ -31,10 +31,20 @@ locals {
   # Le script final, avec les fichiers insérés dedans (encodés en base64)
   install_script = replace(templatefile("${path.module}/scripts/install_monitoring.sh.tftpl", {
     admin_username     = var.admin_username
+    docker_version     = var.docker_version
     docker_compose_b64 = base64encode(replace(file("${local.stack_dir}/docker-compose.yml"), "\r", ""))
     prometheus_b64     = base64encode(replace(file("${local.stack_dir}/prometheus/prometheus.yml"), "\r", ""))
     datasources_b64    = base64encode(replace(file("${local.stack_dir}/grafana/provisioning/datasources/datasources.yml"), "\r", ""))
     env_b64            = base64encode(replace(local.stack_env, "\r", ""))
+
+    # Les tableaux de bord Grafana
+    dashboards_conf_b64 = base64encode(replace(file("${local.stack_dir}/grafana/provisioning/dashboards/dashboards.yml"), "\r", ""))
+    # Le tableau de bord Azure doit connaître l'identifiant du workspace :
+    # Terraform remplace le repère __WORKSPACE_ID__ par la vraie valeur.
+    dashboard_azure_b64 = base64encode(replace(replace(
+      file("${local.stack_dir}/grafana/dashboards/smart-energy-azure.json"),
+      "__WORKSPACE_ID__", azurerm_log_analytics_workspace.law.id
+    ), "\r", ""))
   }), "\r", "")
 }
 
@@ -58,19 +68,4 @@ resource "azurerm_virtual_machine_extension" "monitoring_stack" {
   tags = {
     user = var.student_id
   }
-}
-
-# ---------------------------------------------------------------------
-# Variable à ajouter dans terraform.tfvars :
-#   grafana_admin_password = "un-mot-de-passe-solide"
-# ---------------------------------------------------------------------
-variable "grafana_admin_password" {
-  description = "Mot de passe du compte admin de Grafana"
-  type        = string
-  sensitive   = true # Terraform ne l'affichera jamais dans le terminal
-}
-
-# La commande à lancer sur votre PC pour ouvrir Grafana
-output "grafana_tunnel" {
-  value = "ssh -L 3000:localhost:3000 ${var.admin_username}@${azurerm_public_ip.public_ip.ip_address}  puis ouvrir http://localhost:3000"
 }

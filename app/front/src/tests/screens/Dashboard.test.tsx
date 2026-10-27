@@ -47,13 +47,13 @@ beforeEach(() => {
 })
 
 describe('Dashboard', () => {
-  it('affiche la consommation reçue', () => {
+  it('displays the consumption it received', () => {
     render(<Dashboard />)
 
     expect(screen.getByText('2 847')).toBeInTheDocument()
   })
 
-  it('annonce le chargement tant que rien n’est arrivé', () => {
+  it('announces loading as long as nothing has arrived', () => {
     mockHooks(null, null)
 
     render(<Dashboard />)
@@ -61,9 +61,9 @@ describe('Dashboard', () => {
     expect(screen.getByText(/Lecture du résumé/)).toBeInTheDocument()
   })
 
-  it('n’affiche aucun chiffre quand l’API ne répond pas', () => {
-    // Règle du projet : jamais de données inventées. Un dashboard qui a l'air
-    // de fonctionner alors que rien ne tourne derrière est pire qu'une erreur.
+  it('displays no figure when the API does not answer', () => {
+    // Project rule: never invented data. A dashboard that looks like it works
+    // while nothing runs behind it is worse than an error.
     mockHooks(null, 'Statut 503')
 
     render(<Dashboard />)
@@ -72,9 +72,9 @@ describe('Dashboard', () => {
     expect(screen.queryByText('2 847')).not.toBeInTheDocument()
   })
 
-  it('signale que les données ne sont plus rafraîchies', () => {
-    // L'API est tombée mais le dernier résumé reste affiché : il faut le dire,
-    // sinon des chiffres figés passent pour des chiffres à jour.
+  it('reports that the data is no longer being refreshed', () => {
+    // The API is down but the last summary stays on screen: it has to be said,
+    // otherwise frozen figures pass for current ones.
     mockHooks(SUMMARY, 'Statut 503')
 
     render(<Dashboard />)
@@ -83,7 +83,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('2 847')).toBeInTheDocument()
   })
 
-  it('prévient quand l’historique est indisponible', () => {
+  it('warns when the history is unavailable', () => {
     vi.mocked(useHistory).mockReturnValue({ history: null, error: 'Statut 502' })
 
     render(<Dashboard />)
@@ -91,8 +91,8 @@ describe('Dashboard', () => {
     expect(screen.getByText(/Historique indisponible/)).toBeInTheDocument()
   })
 
-  it('affiche le parc même sans détail des sites', () => {
-    // Le détail est un complément : le résumé doit s'afficher sans lui.
+  it('displays the fleet even without the site details', () => {
+    // The detail is a complement: the summary must render without it.
     mockHooks(SUMMARY, null, {})
 
     render(<Dashboard />)

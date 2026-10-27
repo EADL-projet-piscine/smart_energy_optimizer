@@ -17,19 +17,21 @@ import {
 } from '../../services/format'
 import type { ParkSummary, SeriesPoint, Site } from '../../services/model'
 
-// Ces tests supposent TZ=Europe/Paris, fixé par le script npm : sans cela, ils
-// passeraient sur une machine française et échoueraient en CI, qui tourne en UTC.
+// These tests assume TZ=Europe/Paris, set by the npm script: without it they
+// would pass on a French machine and fail in CI, which runs in UTC.
 
-/** fr-FR sépare les milliers par une espace insécable étroite selon la version d'ICU. */
-function normaliser(valeur: string): string {
-  return valeur.replace(/[  ]/g, ' ')
+/** fr-FR separates thousands with a no-break space whose code point depends on
+ * the ICU version: U+00A0 on some, the narrow U+202F on others. Spelling them
+ * out keeps this readable — as literals they are two invisible characters. */
+function normalize(value: string): string {
+  return value.replace(/[  ]/g, ' ')
 }
 
-function point(heure: number, measuredKw: number | null, forecastKw: number | null = null): SeriesPoint {
-  return { at: `2026-10-22T${String(heure).padStart(2, '0')}:00:00Z`, measuredKw, forecastKw }
+function point(hour: number, measuredKw: number | null, forecastKw: number | null = null): SeriesPoint {
+  return { at: `2026-10-22T${String(hour).padStart(2, '0')}:00:00Z`, measuredKw, forecastKw }
 }
 
-function site(partiel: Partial<Site> = {}): Site {
+function site(overrides: Partial<Site> = {}): Site {
   return {
     id: 'SITE001',
     name: 'Bureau Paris',
@@ -47,11 +49,11 @@ function site(partiel: Partial<Site> = {}): Site {
     comment: null,
     alerts: [],
     recommendations: [],
-    ...partiel,
+    ...overrides,
   }
 }
 
-function summary(partiel: Partial<ParkSummary> = {}): ParkSummary {
+function summary(overrides: Partial<ParkSummary> = {}): ParkSummary {
   return {
     siteCount: 0,
     lastCollectedAt: '',
@@ -72,141 +74,141 @@ function summary(partiel: Partial<ParkSummary> = {}): ParkSummary {
     comment: null,
     sites: [],
     source: 'api',
-    ...partiel,
+    ...overrides,
   }
 }
 
-// ─────────────────────────────── Fuseaux et heures ───────────────────────────
+// ─────────────────────────────── Timezones and hours ─────────────────────────
 
 describe('toIsoUtc', () => {
-  it('ajoute le fuseau manquant', () => {
-    // /stats/summary date sans fuseau alors qu'il s'agit d'UTC.
+  it('adds the missing timezone', () => {
+    // /stats/summary dates without a timezone even though it means UTC.
     expect(toIsoUtc('2026-10-22T07:05:19.904319')).toBe('2026-10-22T07:05:19.904319Z')
   })
 
-  it('laisse intact un horodatage déjà daté', () => {
+  it('leaves an already dated timestamp untouched', () => {
     expect(toIsoUtc('2026-10-22T07:05:19Z')).toBe('2026-10-22T07:05:19Z')
     expect(toIsoUtc('2026-10-22T09:05:19+02:00')).toBe('2026-10-22T09:05:19+02:00')
   })
 })
 
 describe('formatCollectedAt', () => {
-  it('lit un horodatage nu comme de l’UTC', () => {
-    // Sans toIsoUtc, JavaScript l'interpréterait comme de l'heure locale et
-    // afficherait 07:05 au lieu de 09:05 : deux heures d'écart silencieuses.
+  it('reads a bare timestamp as UTC', () => {
+    // Without toIsoUtc, JavaScript would read it as local time and display
+    // 07:05 instead of 09:05: a silent two-hour gap.
     expect(formatCollectedAt('2026-10-22T07:05:19')).toBe('09:05')
   })
 
-  it('laisse passer une heure déjà formatée', () => {
+  it('lets an already formatted time through', () => {
     expect(formatCollectedAt('21:00')).toBe('21:00')
   })
 
-  it('rend la valeur brute quand elle n’est pas une date', () => {
-    expect(formatCollectedAt('bientôt')).toBe('bientôt')
+  it('returns the raw value when it is not a date', () => {
+    expect(formatCollectedAt('soon')).toBe('soon')
   })
 })
 
 describe('formatHour', () => {
-  it('rend l’heure entamée, sans arrondir', () => {
-    // Les points de l'historique tombent à 09h32, 10h32… c'est « le relevé
-    // de 9h », pas celui de 10h.
+  it('returns the hour under way, without rounding', () => {
+    // History points land at 09:32, 10:32… that is "the 9 o'clock reading",
+    // not the 10 o'clock one.
     expect(formatHour('2026-10-22T07:32:00Z')).toBe('09h00')
     expect(formatHour('2026-10-22T07:57:00Z')).toBe('09h00')
   })
 
-  it('ne fait jamais paraître une mesure plus récente qu’elle n’est', () => {
+  it('never makes a reading look more recent than it is', () => {
     expect(formatHour('2026-10-22T07:01:00Z')).toBe('09h00')
     expect(formatHour('2026-10-22T07:59:00Z')).toBe('09h00')
   })
 })
 
 describe('formatTime', () => {
-  it('garde la minute exacte', () => {
+  it('keeps the exact minute', () => {
     expect(formatTime('2026-10-22T11:04:00Z')).toBe('13h04')
   })
 
-  it('n’arrondit pas', () => {
+  it('does not round', () => {
     expect(formatTime('2026-10-22T11:57:00Z')).toBe('13h57')
   })
 })
 
 describe('hourOf', () => {
-  it('rend l’heure locale', () => {
+  it('returns the local hour', () => {
     expect(hourOf('2026-10-22T07:32:00Z')).toBe(9)
   })
 
-  it('rend 0 sur une valeur illisible', () => {
-    expect(hourOf('pas une date')).toBe(0)
+  it('returns 0 on an unreadable value', () => {
+    expect(hourOf('not a date')).toBe(0)
   })
 })
 
-// ─────────────────────────────── Formatage ───────────────────────────────────
+// ─────────────────────────────── Formatting ──────────────────────────────────
 
 describe('formatNumber', () => {
-  it('sépare les milliers à la française', () => {
-    expect(normaliser(formatNumber(2847))).toBe('2 847')
+  it('separates thousands the French way', () => {
+    expect(normalize(formatNumber(2847))).toBe('2 847')
   })
 
-  it('respecte le nombre de décimales demandé', () => {
+  it('honours the requested number of decimals', () => {
     expect(formatNumber(1.84, 1)).toBe('1,8')
     expect(formatNumber(1.84)).toBe('2')
   })
 })
 
 describe('formatKw', () => {
-  it('rend un tiret sur une valeur absente', () => {
-    // Zéro serait une mesure ; l'absence de mesure n'en est pas une.
+  it('returns a dash on a missing value', () => {
+    // Zero would be a measurement; the absence of a measurement is not.
     expect(formatKw(null)).toBe('—')
     expect(formatKw(0)).toBe('0')
   })
 })
 
 describe('sitesLabel', () => {
-  it('écrit les petits effectifs en toutes lettres', () => {
+  it('spells out small counts', () => {
     expect(sitesLabel(0)).toBe('Aucun site')
     expect(sitesLabel(7)).toBe('Sept sites')
   })
 
-  it('repasse aux chiffres au-delà de dix', () => {
+  it('switches back to digits beyond ten', () => {
     expect(sitesLabel(12)).toBe('12 sites')
   })
 })
 
 describe('alertsLabel', () => {
-  it('accorde le pluriel', () => {
+  it('agrees the plural', () => {
     expect(alertsLabel(1, 2)).toBe('1 critique · 2 moyennes')
     expect(alertsLabel(2, 1)).toBe('2 critiques · 1 moyenne')
   })
 })
 
-// ─────────────────────────────── Séries ──────────────────────────────────────
+// ─────────────────────────────── Series ──────────────────────────────────────
 
 describe('lastMeasuredIndex', () => {
-  it('trouve le dernier point mesuré', () => {
+  it('finds the last measured point', () => {
     expect(lastMeasuredIndex([point(8, 10), point(9, 20), point(10, null)])).toBe(1)
   })
 
-  it('rend -1 sans aucune mesure', () => {
+  it('returns -1 when nothing was measured', () => {
     expect(lastMeasuredIndex([point(8, null)])).toBe(-1)
     expect(lastMeasuredIndex([])).toBe(-1)
   })
 })
 
 describe('forecastPeak', () => {
-  it('trouve la prévision la plus haute', () => {
-    const serie = [point(8, null, 100), point(9, null, 300), point(10, null, 200)]
+  it('finds the highest forecast', () => {
+    const series = [point(8, null, 100), point(9, null, 300), point(10, null, 200)]
 
-    expect(forecastPeak(serie)?.value).toBe(300)
+    expect(forecastPeak(series)?.value).toBe(300)
   })
 
-  it('ignore les points déjà mesurés', () => {
-    // Une pointe passée n'intéresse personne : on veut celle à venir.
-    const serie = [point(8, 10, 900), point(9, null, 300), point(10, null, 200)]
+  it('ignores points already measured', () => {
+    // A past peak interests nobody: what matters is the one still ahead.
+    const series = [point(8, 10, 900), point(9, null, 300), point(10, null, 200)]
 
-    expect(forecastPeak(serie, 0)?.value).toBe(300)
+    expect(forecastPeak(series, 0)?.value).toBe(300)
   })
 
-  it('rend null sans aucune prévision', () => {
+  it('returns null when there is no forecast at all', () => {
     expect(forecastPeak([point(8, 10)])).toBeNull()
   })
 })
@@ -214,9 +216,9 @@ describe('forecastPeak', () => {
 // ─────────────────────────────── Sites ───────────────────────────────────────
 
 describe('completeSite — badge', () => {
-  it('signale un relevé interrompu avant tout le reste', () => {
-    // Un site muet ne peut pas annoncer de dépassement : la panne prime.
-    const resultat = completeSite(
+  it('reports an interrupted reading before anything else', () => {
+    // A silent site cannot announce an overload: the outage comes first.
+    const result = completeSite(
       site({
         isTransmitting: false,
         thresholdKw: 100,
@@ -225,114 +227,114 @@ describe('completeSite — badge', () => {
       }),
     )
 
-    expect(resultat.badge).toBe('Relevé interrompu')
+    expect(result.badge).toBe('Relevé interrompu')
   })
 
-  it('annonce un dépassement prévu', () => {
+  it('announces a forecast overload', () => {
     expect(completeSite(site({ thresholdKw: 100, forecast2hKw: 150 })).badge).toBe('Dépassement prévu')
   })
 
-  it('ne crie pas au dépassement sous le seuil', () => {
+  it('does not cry overload below the threshold', () => {
     expect(completeSite(site({ thresholdKw: 100, forecast2hKw: 90 })).badge).toBeNull()
   })
 
-  it('remonte une alerte critique faute de dépassement', () => {
-    const resultat = completeSite(
+  it('surfaces a critical alert when there is no overload', () => {
+    const result = completeSite(
       site({ alerts: [{ id: 'a', severity: 'critique', title: 'x', message: 'y' }] }),
     )
 
-    expect(resultat.badge).toBe('Alerte critique')
+    expect(result.badge).toBe('Alerte critique')
   })
 
-  it('ignore une alerte moyenne', () => {
-    const resultat = completeSite(
+  it('ignores a medium alert', () => {
+    const result = completeSite(
       site({ alerts: [{ id: 'a', severity: 'moyenne', title: 'x', message: 'y' }] }),
     )
 
-    expect(resultat.badge).toBeNull()
+    expect(result.badge).toBeNull()
   })
 
-  it('respecte un badge déjà fourni par l’API', () => {
+  it('honours a badge already provided by the API', () => {
     expect(completeSite(site({ badge: 'Maintenance', isTransmitting: false })).badge).toBe('Maintenance')
   })
 })
 
-describe('completeSite — commentaire', () => {
-  it('explique l’exclusion d’un site muet', () => {
-    const resultat = completeSite(site({ id: 'SITE004', isTransmitting: false }))
+describe('completeSite — comment', () => {
+  it('explains why a silent site is excluded', () => {
+    const result = completeSite(site({ id: 'SITE004', isTransmitting: false }))
 
-    expect(resultat.comment).toContain('SITE004')
-    expect(resultat.comment).toContain('exclu du total du parc')
+    expect(result.comment).toContain('SITE004')
+    expect(result.comment).toContain('exclu du total du parc')
   })
 
-  it('annonce le franchissement du seuil avec son heure', () => {
-    const resultat = completeSite(site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 900)] }))
+  it('announces the threshold crossing with its time', () => {
+    const result = completeSite(site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 900)] }))
 
-    expect(resultat.comment).toContain('franchi')
-    expect(resultat.comment).toContain('900')
+    expect(result.comment).toContain('franchi')
+    expect(result.comment).toContain('900')
   })
 
-  it('rassure quand la pointe reste sous le seuil', () => {
-    const resultat = completeSite(site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 300)] }))
+  it('reassures when the peak stays below the threshold', () => {
+    const result = completeSite(site({ thresholdKw: 500, series: [point(8, 100), point(9, null, 300)] }))
 
-    expect(resultat.comment).toContain('reste sous le seuil')
+    expect(result.comment).toContain('reste sous le seuil')
   })
 
-  it('respecte un commentaire déjà fourni', () => {
+  it('honours a comment already provided', () => {
     expect(completeSite(site({ comment: 'Déjà dit', isTransmitting: false })).comment).toBe('Déjà dit')
   })
 })
 
-describe('completeSite — prévision à deux heures', () => {
-  it('prend le point situé deux pas après la dernière mesure', () => {
-    const serie = [point(8, 100), point(9, null, 200), point(10, null, 300)]
+describe('completeSite — two-hour forecast', () => {
+  it('takes the point two steps after the last reading', () => {
+    const series = [point(8, 100), point(9, null, 200), point(10, null, 300)]
 
-    expect(completeSite(site({ series: serie })).forecast2hKw).toBe(300)
+    expect(completeSite(site({ series })).forecast2hKw).toBe(300)
   })
 
-  it('respecte la valeur fournie par l’API', () => {
-    const serie = [point(8, 100), point(9, null, 200), point(10, null, 300)]
+  it('honours the value provided by the API', () => {
+    const series = [point(8, 100), point(9, null, 200), point(10, null, 300)]
 
-    expect(completeSite(site({ series: serie, forecast2hKw: 42 })).forecast2hKw).toBe(42)
+    expect(completeSite(site({ series, forecast2hKw: 42 })).forecast2hKw).toBe(42)
   })
 
-  it('reste null quand la série est trop courte', () => {
+  it('stays null when the series is too short', () => {
     expect(completeSite(site({ series: [point(8, 100)] })).forecast2hKw).toBeNull()
   })
 })
 
-// ─────────────────────────────── Parc ────────────────────────────────────────
+// ─────────────────────────────── Fleet ───────────────────────────────────────
 
 describe('buildSummary', () => {
-  const troisSites = [site({ id: 'A' }), site({ id: 'B' }), site({ id: 'C', isTransmitting: false })]
+  const threeSites = [site({ id: 'A' }), site({ id: 'B' }), site({ id: 'C', isTransmitting: false })]
 
-  it('compte les sites qui transmettent', () => {
-    const resultat = buildSummary(summary({ sites: troisSites }))
+  it('counts the transmitting sites', () => {
+    const result = buildSummary(summary({ sites: threeSites }))
 
-    expect(resultat.siteCount).toBe(3)
-    expect(resultat.transmittingCount).toBe(2)
+    expect(result.siteCount).toBe(3)
+    expect(result.transmittingCount).toBe(2)
   })
 
-  it('déduit la couverture', () => {
-    expect(buildSummary(summary({ sites: troisSites })).coveragePct).toBe(67)
+  it('derives the coverage', () => {
+    expect(buildSummary(summary({ sites: threeSites })).coveragePct).toBe(67)
   })
 
-  it('respecte une couverture fournie par l’API', () => {
+  it('honours a coverage provided by the API', () => {
     expect(buildSummary(summary({ coveragePct: 42, sites: [site()] })).coveragePct).toBe(42)
   })
 
-  it('exclut les sites muets du total', () => {
-    expect(buildSummary(summary({ sites: troisSites })).excludedSites).toEqual(['C'])
+  it('excludes silent sites from the total', () => {
+    expect(buildSummary(summary({ sites: threeSites })).excludedSites).toEqual(['C'])
   })
 
-  it('respecte une liste d’exclusion fournie par l’API', () => {
-    const resultat = buildSummary(summary({ excludedSites: ['Z'], sites: troisSites }))
+  it('honours an exclusion list provided by the API', () => {
+    const result = buildSummary(summary({ excludedSites: ['Z'], sites: threeSites }))
 
-    expect(resultat.excludedSites).toEqual(['Z'])
+    expect(result.excludedSites).toEqual(['Z'])
   })
 
-  it('agrège les alertes des sites par sévérité', () => {
-    const resultat = buildSummary(
+  it('aggregates site alerts by severity', () => {
+    const result = buildSummary(
       summary({
         sites: [
           site({
@@ -347,20 +349,20 @@ describe('buildSummary', () => {
       }),
     )
 
-    expect(resultat.totalAlerts).toBe(3)
-    expect(resultat.criticalAlerts).toBe(1)
-    expect(resultat.mediumAlerts).toBe(2)
+    expect(result.totalAlerts).toBe(3)
+    expect(result.criticalAlerts).toBe(1)
+    expect(result.mediumAlerts).toBe(2)
   })
 
-  it('garde les compteurs de l’API quand aucun site ne porte d’alerte', () => {
-    const resultat = buildSummary(summary({ totalAlerts: 5, criticalAlerts: 2, sites: [site()] }))
+  it('keeps the API counters when no site carries an alert', () => {
+    const result = buildSummary(summary({ totalAlerts: 5, criticalAlerts: 2, sites: [site()] }))
 
-    expect(resultat.totalAlerts).toBe(5)
-    expect(resultat.criticalAlerts).toBe(2)
+    expect(result.totalAlerts).toBe(5)
+    expect(result.criticalAlerts).toBe(2)
   })
 
-  it('désigne le principal contributeur d’un dépassement', () => {
-    const resultat = buildSummary(
+  it('names the main contributor to an overload', () => {
+    const result = buildSummary(
       summary({
         thresholdKw: 500,
         series: [point(8, 100), point(9, null, 900)],
@@ -370,12 +372,12 @@ describe('buildSummary', () => {
       }),
     )
 
-    expect(resultat.comment).toContain('SITE002')
-    expect(resultat.comment).toContain('principal contributeur')
+    expect(result.comment).toContain('SITE002')
+    expect(result.comment).toContain('principal contributeur')
   })
 
-  it('ne désigne personne quand le seuil est respecté', () => {
-    const resultat = buildSummary(
+  it('names nobody when the threshold is respected', () => {
+    const result = buildSummary(
       summary({
         thresholdKw: 500,
         series: [point(8, 100), point(9, null, 300)],
@@ -385,29 +387,29 @@ describe('buildSummary', () => {
       }),
     )
 
-    expect(resultat.comment).not.toContain('principal contributeur')
+    expect(result.comment).not.toContain('principal contributeur')
   })
 
-  it('n’invente rien sur un parc vide', () => {
-    const resultat = buildSummary(summary())
+  it('invents nothing on an empty fleet', () => {
+    const result = buildSummary(summary())
 
-    expect(resultat.sites).toEqual([])
-    expect(resultat.coveragePct).toBeNull()
-    expect(resultat.comment).toBeNull()
+    expect(result.sites).toEqual([])
+    expect(result.coveragePct).toBeNull()
+    expect(result.comment).toBeNull()
   })
 })
 
-// ─────────────────────────────── Capteurs ────────────────────────────────────
+// ─────────────────────────────── Sensors ─────────────────────────────────────
 
 describe('sensorLabel', () => {
-  it('traduit les codes relevés sur l’API source', () => {
+  it('translates the codes observed on the source API', () => {
     expect(sensorLabel('network_loss')).toBe('Lien réseau interrompu')
     expect(sensorLabel('consumption_sensor_failure')).toBe('Compteur de consommation en panne')
   })
 
-  it('rend le code brut quand il est inconnu', () => {
-    // La liste n'est pas contractuelle : un code inédit doit rester lisible
-    // pour le diagnostic plutôt que de faire disparaître la ligne.
-    expect(sensorLabel('code_inedit')).toBe('code_inedit')
+  it('returns the raw code when it is unknown', () => {
+    // The list is not a contract: an unseen code must stay readable for
+    // diagnosis rather than make the line disappear.
+    expect(sensorLabel('unknown_code')).toBe('unknown_code')
   })
 })

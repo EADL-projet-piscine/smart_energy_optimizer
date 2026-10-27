@@ -106,6 +106,7 @@ jobs:
               - 'ml/Dockerfile.mlflow'
               - 'docker-compose*.yml'
               - 'tests/perf/**'
+              - 'app/front/**'
             deploy:
               - 'app/back/**'
               - 'db/**'
@@ -115,6 +116,7 @@ jobs:
               - 'ml/Dockerfile.mlflow'
               - 'docker-compose.yml'
               - 'docker-compose.deploy.yml'
+              - 'app/front/**'
 
   # Back-end tests against a real PostgreSQL database. Coverage scope and 80 % threshold:
   # app/back/pyproject.toml.
@@ -548,10 +550,12 @@ jobs:
       - name: Load images
         run: |
           for archive in /tmp/images/*.tar; do docker load -i "$archive"; done
-          echo "BACK_IMAGE=${BACK_IMAGE,,}" >> "$GITHUB_ENV"
-          echo "ML_IMAGE=${ML_IMAGE,,}" >> "$GITHUB_ENV"
-          echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}" >> "$GITHUB_ENV"
-          echo "FRONT_IMAGE=${FRONT_IMAGE,,}" >> "$GITHUB_ENV"
+          {
+            echo "BACK_IMAGE=${BACK_IMAGE,,}"
+            echo "ML_IMAGE=${ML_IMAGE,,}"
+            echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}"
+            echo "FRONT_IMAGE=${FRONT_IMAGE,,}"
+          } >> "$GITHUB_ENV"
 
       - name: Start stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
@@ -592,14 +596,18 @@ jobs:
           path: perf-results/
           retention-days: 14
 
-  # Publishes the complete runtime image set to GHCR after a deployable change on main.
-  # The deploy workflow refuses to deploy a commit whose image set is incomplete.
+  # Publishes the complete runtime image set to GHCR after a deployable change on main, once
+  # every other job of the run has passed, Sonar included: a published image set is always a
+  # validated version, and the deploy workflow deploys the newest one.
   publish:
-    needs: [changes, perf]
+    needs: [changes, perf, sonar-back, sonar-ml, sonar-front]
     timeout-minutes: 15
     if: >-
       !cancelled() &&
       needs.perf.result == 'success' &&
+      (needs.sonar-back.result == 'success' || needs.sonar-back.result == 'skipped') &&
+      (needs.sonar-ml.result == 'success' || needs.sonar-ml.result == 'skipped') &&
+      (needs.sonar-front.result == 'success' || needs.sonar-front.result == 'skipped') &&
       needs.changes.outputs.deploy == 'true' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
@@ -628,7 +636,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push image
-        run: |
-          docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:latest"
-          docker push "$IMAGE:${{ github.sha }}"
-          docker push "$IMAGE:latest"
+        run: docker push "$IMAGE:${{ github.sha }}"

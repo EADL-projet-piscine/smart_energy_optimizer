@@ -455,9 +455,9 @@ run :
 | `tests-ml` | Si `ml/` (code, tests, scripts, `pyproject.toml`, `Dockerfile`) ou `pyproject.toml` changent : `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
 | `tests-front` | Si `app/front/` change : Node 22 et `TZ=Europe/Paris`, `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
 | `sonar-back`, `sonar-ml`, `sonar-front` | Analyse SonarQube du composant dont les tests viennent de tourner, avec leur couverture ; échoue si le _quality gate_ est rouge (voir ci-dessous) |
-| `build` | Si du code déployable ou l'environnement de test change : construit les images `back`, `ml` et `mlflow`, les scanne avec Trivy |
+| `build` | Si du code déployable ou l'environnement de test change : construit les images `back`, `ml`, `mlflow` et `front`, les scanne avec Trivy |
 | `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
-| `publish` | Sur `main` seulement, après un changement déployable : publie les trois images sur GHCR |
+| `publish` | Sur `main` seulement, après un changement déployable et si tous les autres jobs sont verts (Sonar compris) : publie les quatre images sur GHCR |
 
 **Ce qui lance quoi.** Les tests d'un composant sont _ignorés_ quand aucun de
 ses fichiers n'a changé : un job ignoré ne fait pas échouer la CI. Un test en
@@ -467,9 +467,11 @@ changement de CI soit toujours testé ; un lancement manuel aussi (sauf
 `publish`, réservé aux merges dans `main`).
 
 Les étapes se suivent : `lint`, `scan` et les tests lancés → `build` → `perf`
-→ `publish`. Une image n'est donc publiée qu'après avoir passé les tests, le
-scan de sécurité et le test de charge. Un commit de `main` qui ne change rien
-de déployable (documentation, front, tests) ne publie aucune image.
+→ `publish`, qui attend aussi les analyses Sonar. Une image n'est donc publiée
+qu'après avoir passé tous les contrôles du commit : un jeu d'images publié est
+toujours une version validée (voir _Déploiement_ plus bas). Un commit de `main`
+qui ne change rien de déployable (documentation, tests ML, scripts) ne publie
+aucune image.
 
 Un nouveau push sur une pull request annule l'exécution précédente de cette
 pull request ; les exécutions sur `main` ne sont jamais annulées.
@@ -487,11 +489,12 @@ Rapports publiés en artefacts sur chaque run (onglet _Actions_ → run →
 _Artifacts_) : `back-coverage` et `ml-coverage` (HTML + XML),
 `front-coverage` (HTML) et `k6-results` (résumé JSON du test de charge).
 
-Les images publiées sont étiquetées avec le SHA du commit et `latest` :
+Les images publiées sont étiquetées avec le SHA de leur commit, sans `latest` :
 
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/back
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/mlflow
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/front
 
 GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
 pull request dont la CI est rouge.**
@@ -507,8 +510,9 @@ Trois jobs analysent chacun un composant, dans son propre projet SonarQube :
 `sonar-back` (`app/back/src`), `sonar-ml` (`ml/src`) et `sonar-front`
 (`app/front/src`). Un composant n'est analysé que lorsque ses fichiers
 changent. Le périmètre et les exclusions sont dans `sonar-project.properties`
-et dans les arguments de chaque job. Ces jobs ne bloquent pas `build` : une
-panne de Sonar n'empêche pas de construire les images.
+et dans les arguments de chaque job. Ces jobs ne bloquent ni `build` ni
+`perf`, mais `publish` les attend : un commit dont l'analyse échoue (_quality
+gate_ rouge ou panne de Sonar) n'est ni publié ni déployé.
 
 **`infra/` n'est plus analysé par Sonar** : les inclusions de chaque job se
 limitent au code source de son composant. Le Terraform reste contrôlé par
@@ -544,6 +548,31 @@ et échoue s'il est rouge. Le _quality gate_ par défaut (« Sonar way », régl
 dans Sonar) porte sur le **nouveau code** : couverture, duplication et nouveaux
 bugs ou failles. Pour ne pas bloquer, retirer cet argument dans `ci.yml` :
 l'analyse reste publiée et commentée sur la pull request.
+
+### Déploiement
+
+Le workflow `.github/workflows/deploy.yml` déploie sur la VM Azure (runner
+auto-hébergé) après chaque run réussi de la CI sur `main`, ou à la demande
+(_Run workflow_, depuis `main` uniquement). Le job `resolve` choisit la
+version, le job `deploy` l'installe avec `docker compose` et les images de
+GHCR.
+
+**La version déployée est la plus récente de `main` dont les quatre images sont
+publiées**, pas forcément le commit qui a déclenché le run : `resolve` remonte
+les 50 derniers commits de `main` (les merges, pas les commits des branches
+mergées). Une image n'étant publiée qu'après tous les contrôles, c'est la
+dernière version validée. Ainsi :
+
+- relancer un ancien run de la CI, ou deux runs de `main` qui se terminent
+  dans le désordre, ne remettent jamais une ancienne version en production ;
+- un commit sans changement déployable ne redéploie rien : si la version
+  choisie tourne déjà, le run l'indique (message _notice_) et s'arrête là ;
+- un lancement manuel redéploie la dernière version validée, même si elle
+  tourne déjà (par exemple après une modification du `.env` de la VM) ; il
+  échoue si aucune version n'est disponible.
+
+Seuls les runs qui déploient apparaissent dans l'environnement GitHub
+`production`.
 
 ## Configuration
 

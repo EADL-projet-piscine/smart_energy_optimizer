@@ -10,7 +10,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-// Ne se termine jamais seul : ne rejette que lorsque le signal de la requête est interrompu.
+// Never settles on its own: it only rejects once the request signal is aborted.
 function hangingFetch(_url: string | URL | Request, init?: RequestInit): Promise<Response> {
   return new Promise<Response>((_resolve, reject) => {
     init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
@@ -29,7 +29,7 @@ afterEach(() => {
 })
 
 describe('fetchJson', () => {
-  it('demande du JSON à l’URL de base configurée', async () => {
+  it('asks for JSON at the configured base URL', async () => {
     vi.stubEnv('VITE_API_URL', 'http://api.test/')
     fetchMock.mockResolvedValue(jsonResponse({ status: 'ok' }))
 
@@ -39,7 +39,8 @@ describe('fetchJson', () => {
     expect(url).toBe('http://api.test/health')
     expect(init).toMatchObject({ method: 'GET', headers: { Accept: 'application/json' } })
   })
-  it('appelle un chemin relatif quand aucune URL de base n’est configurée', async () => {
+
+  it('calls a relative path when no base URL is configured', async () => {
     vi.stubEnv('VITE_API_URL', '')
     fetchMock.mockResolvedValue(jsonResponse([]))
 
@@ -50,9 +51,9 @@ describe('fetchJson', () => {
     expect(init).toMatchObject({ method: 'POST' })
   })
 
-  it('appelle un chemin relatif quand VITE_API_URL n’est pas définie du tout', async () => {
-    // Cas par défaut en développement : aucune variable, donc aucun préfixe,
-    // et l'appel passe par le proxy de Vite. Distinct de la chaîne vide.
+  it('calls a relative path when VITE_API_URL is not defined at all', async () => {
+    // The default in development: no variable, therefore no prefix, and the
+    // call goes through the Vite proxy. Distinct from the empty string.
     vi.stubEnv('VITE_API_URL', undefined)
     fetchMock.mockResolvedValue(jsonResponse({}))
 
@@ -61,13 +62,13 @@ describe('fetchJson', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/consommations')
   })
 
-  it('rejette un statut d’erreur', async () => {
+  it('rejects an error status', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'Service indisponible' }, 503))
 
     await expect(fetchJson('/health')).rejects.toThrow('Statut 503')
   })
 
-  it('abandonne au bout de trois secondes', async () => {
+  it('gives up after three seconds', async () => {
     vi.useFakeTimers()
     fetchMock.mockImplementation(hangingFetch)
 
@@ -77,7 +78,7 @@ describe('fetchJson', () => {
     await outcome
   })
 
-  it('s’arrête quand l’appelant annule', async () => {
+  it('stops when the caller aborts', async () => {
     fetchMock.mockImplementation(hangingFetch)
     const caller = new AbortController()
 

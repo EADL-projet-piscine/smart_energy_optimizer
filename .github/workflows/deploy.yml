@@ -16,8 +16,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy application
+  # Chooses the newest commit of main whose complete image set was published, which is not
+  # always the commit that triggered this run. CI publishes images only once every check of
+  # a deployable commit has passed, so this commit is the newest validated version:
+  # re-running an old CI run, or CI runs on main that finish out of order, never put an
+  # older version back in production.
+  resolve:
+    name: Choose the version to deploy
     if: >-
       (
         github.event_name == 'workflow_dispatch' &&
@@ -29,19 +34,23 @@ jobs:
         github.event.workflow_run.event == 'push'
       )
     runs-on: self-hosted
-    environment: production
+    env:
+      # Number of commits of main searched for a complete image set.
+      SEARCH_DEPTH: 50
+    outputs:
+      commit: ${{ steps.newest.outputs.commit }}
+      deploy: ${{ steps.running.outputs.deploy }}
 
     steps:
-      - name: Checkout deployed commit
+      # In a subfolder: the database mounts db/init and db/migrations from the workspace, so
+      # the files of the running version stay in place until a deployment replaces them.
+      - name: Checkout main
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          ref: >-
-            ${{
-              github.event_name == 'workflow_run' &&
-              github.event.workflow_run.head_sha ||
-              github.sha
-            }}
+          ref: main
+          path: main-history
+          fetch-depth: ${{ env.SEARCH_DEPTH }}
 
       - name: Login to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -50,67 +59,127 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check that a complete image set was published
-        id: image-set
+      - name: Find the newest complete image set
+        id: newest
+        working-directory: main-history
         env:
           REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
-          IMAGE_TAG: >-
-            ${{
-              github.event_name == 'workflow_run' &&
-              github.event.workflow_run.head_sha ||
-              github.sha
-            }}
         shell: bash
         run: |
           set -euo pipefail
 
           IMAGE_PREFIX="ghcr.io/$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
-          missing=()
-          published=0
 
-          for service in back ml mlflow; do
-            image="${IMAGE_PREFIX}/${service}:${IMAGE_TAG}"
-            if inspection=$(docker manifest inspect "$image" 2>&1); then
-              published=$((published + 1))
-            elif grep -Eqi 'manifest unknown|no such manifest|not found' <<< "$inspection"; then
-              missing+=("$service")
-            else
-              echo "::error::Unable to inspect ${image}: ${inspection}"
-              exit 1
+          # Succeeds when the image exists, fails when the registry does not know it. Any other
+          # error stops the job: an authentication failure must not look like a missing image.
+          image_exists() {
+            local inspection
+            if inspection=$(docker manifest inspect "$1" 2>&1); then
+              return 0
             fi
+            if grep -Eqi 'manifest unknown|no such manifest|not found' <<< "$inspection"; then
+              return 1
+            fi
+            echo "::error::Unable to inspect $1: ${inspection}"
+            exit 1
+          }
+
+          # The first-parent history lists the commits pushed to main, merge commits included,
+          # but not the commits of the merged branches, which never have images.
+          for commit in $(git rev-list --first-parent --max-count="$SEARCH_DEPTH" HEAD); do
+            complete=true
+            for service in back ml mlflow front; do
+              if ! image_exists "${IMAGE_PREFIX}/${service}:${commit}"; then
+                complete=false
+                break
+              fi
+            done
+            if [[ "$complete" == true ]]; then
+              echo "Newest complete image set: ${commit}"
+              # A manual run is expected to deploy the head of main: say why it does not.
+              if [[ "$EVENT_NAME" == 'workflow_dispatch' && "$commit" != "$(git rev-parse HEAD)" ]]; then
+                echo "::warning::The head of main ($(git rev-parse HEAD)) has no complete image set: its CI run may still be publishing, or it changes nothing deployable. Deploying ${commit} instead."
+              fi
+              echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "No complete image set for ${commit}"
           done
 
-          if (( published == 0 )); then
-            # CI publishes images only for a commit that changes something deployable.
-            # After a CI run that is expected; a manual run asked for a deployment, so
-            # it must not report success when there is nothing to deploy.
-            if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
-              echo "::error::No images were published for ${IMAGE_TAG}: the latest commit of main changes nothing deployable. Nothing was deployed."
-              exit 1
-            fi
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No deployable images were published for ${IMAGE_TAG}; deployment skipped."
+          # A manual run asked for a deployment: it must not report success when there is
+          # nothing to deploy.
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "::error::No complete image set among the last ${SEARCH_DEPTH} commits of main: if a CI run of main is in progress, wait for its publish job. Nothing was deployed."
+            exit 1
+          fi
+          echo "::notice::No complete image set among the last ${SEARCH_DEPTH} commits of main; nothing to deploy."
+
+      - name: Skip a version that is already running
+        id: running
+        if: steps.newest.outputs.commit != ''
+        env:
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT: ${{ steps.newest.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A manual run redeploys even a running version, e.g. to apply a change to the
+          # .env file of the VM.
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if (( ${#missing[@]} > 0 )); then
-            echo "::error::Incomplete image set for ${IMAGE_TAG}; missing: ${missing[*]}"
-            exit 1
+          IMAGE_PREFIX="ghcr.io/$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          # Compose names the project after the folder of the compose files: the workspace.
+          PROJECT=$(basename "$GITHUB_WORKSPACE" | tr '[:upper:]' '[:lower:]')
+
+          running=true
+          for service in back ml mlflow front; do
+            image=$(docker ps \
+              --filter "label=com.docker.compose.project=${PROJECT}" \
+              --filter "label=com.docker.compose.service=${service}" \
+              --format '{{.Image}}')
+            if [[ "$image" != "${IMAGE_PREFIX}/${service}:${COMMIT}" ]]; then
+              running=false
+            fi
+          done
+
+          if [[ "$running" == true ]]; then
+            echo "::notice::${COMMIT} is already running; nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "deploy=true" >> "$GITHUB_OUTPUT"
+  deploy:
+    name: Deploy application
+    needs: resolve
+    if: needs.resolve.outputs.deploy == 'true'
+    runs-on: self-hosted
+    environment: production
+
+    steps:
+      - name: Checkout the version to deploy
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.commit }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull and deploy
-        if: steps.image-set.outputs.deploy == 'true'
         env:
           REPOSITORY: ${{ github.repository }}
-          IMAGE_TAG: >-
-            ${{
-              github.event_name == 'workflow_run' &&
-              github.event.workflow_run.head_sha ||
-              github.sha
-            }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.commit }}
         shell: bash
         run: |
           set -euo pipefail
@@ -149,3 +218,5 @@ jobs:
             -f docker-compose.deploy.yml \
             --env-file "$PROD_ENV" \
             ps
+
+          echo "Deployed ${IMAGE_TAG}, the newest complete image set of main." >> "$GITHUB_STEP_SUMMARY"

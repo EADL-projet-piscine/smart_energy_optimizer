@@ -72,7 +72,15 @@ def build_hourly_dataset(
                 }
             )
 
-    df = pd.DataFrame.from_records(records)
+    df = pd.DataFrame(
+        records,
+        columns=[
+            "site_id",
+            "site_type",
+            "timestamp",
+            "consumption_kw",
+        ],
+    )
 
     if df.empty:
         raise ValueError("Aucune mesure trouvée dans les fichiers JSON.")

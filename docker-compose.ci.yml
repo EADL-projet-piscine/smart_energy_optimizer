@@ -18,6 +18,9 @@ services:
   mlflow:
     image: ${MLFLOW_IMAGE:?MLFLOW_IMAGE is not set}
 
+  front:
+    image: ${FRONT_IMAGE:?FRONT_IMAGE is not set}
+
   # Serves a sample /api/v1/stats/summary response (tests/perf/enervision-mock).
   enervision-mock:
     image: nginx:1.30.6-alpine

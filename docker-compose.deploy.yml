@@ -19,6 +19,10 @@ services:
     image: ${MLFLOW_IMAGE:?MLFLOW_IMAGE is not set}
     restart: unless-stopped
 
+  front:
+    image: ${FRONT_IMAGE:?FRONT_IMAGE is not set}
+    restart: unless-stopped
+
   db:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}

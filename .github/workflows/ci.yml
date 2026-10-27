@@ -480,6 +480,10 @@ jobs:
             context: ml
             dockerfile: Dockerfile.mlflow
 
+          - service: front
+            context: app/front
+            dockerfile: Dockerfile
+
     steps:
       - uses: actions/checkout@v5
 
@@ -531,6 +535,7 @@ jobs:
       BACK_IMAGE: ghcr.io/${{ github.repository }}/back:${{ github.sha }}
       ML_IMAGE: ghcr.io/${{ github.repository }}/ml:${{ github.sha }}
       MLFLOW_IMAGE: ghcr.io/${{ github.repository }}/mlflow:${{ github.sha }}
+      FRONT_IMAGE: ghcr.io/${{ github.repository }}/front:${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
 
@@ -543,11 +548,10 @@ jobs:
       - name: Load images
         run: |
           for archive in /tmp/images/*.tar; do docker load -i "$archive"; done
-          {
-            echo "BACK_IMAGE=${BACK_IMAGE,,}"
-            echo "ML_IMAGE=${ML_IMAGE,,}"
-            echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}"
-          } >> "$GITHUB_ENV"
+          echo "BACK_IMAGE=${BACK_IMAGE,,}" >> "$GITHUB_ENV"
+          echo "ML_IMAGE=${ML_IMAGE,,}" >> "$GITHUB_ENV"
+          echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}" >> "$GITHUB_ENV"
+          echo "FRONT_IMAGE=${FRONT_IMAGE,,}" >> "$GITHUB_ENV"
 
       - name: Start stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --no-build
@@ -605,7 +609,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [back, ml, mlflow]
+        service: [back, ml, mlflow, front]
     steps:
       - uses: actions/download-artifact@v8
         with:

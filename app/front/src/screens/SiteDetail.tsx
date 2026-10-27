@@ -81,7 +81,7 @@ function Chevron({ open }: { open: boolean }) {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className={cn('size-3.5 shrink-0', open ? 'text-orange' : 'text-discret')}
+      className={cn('size-3.5 shrink-0', open ? 'text-accent' : 'text-discret')}
     >
       <path
         d={open ? 'M6 9l6 6 6-6' : 'M9 6l6 6-6 6'}
@@ -164,7 +164,8 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // c'est le rapport à la consommation qui informe, et c'est aussi la grandeur
   // sur laquelle les alertes se déclenchent. Aucun seuil n'est jugé ici : le
   // bandeau s'en charge, et le dupliquer risquerait de le contredire.
-  const loadPct = reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
+  const loadPct =
+    reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
   const loadLabel = loadPct === null ? undefined : `${formatNumber(loadPct, 1)} % utilisés`
 
   return (
@@ -182,7 +183,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
           onClick={onToggle}
           className={cn(
             'flex w-full items-center gap-3 border-0 px-3.5 py-3 text-left font-[inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lien',
-            open ? 'bg-[rgba(255,122,26,0.14)]' : 'bg-transparent hover:bg-onglet',
+            open ? 'bg-accent-doux' : 'bg-transparent hover:bg-onglet',
           )}
         >
           <Chevron open={open} />
@@ -275,7 +276,9 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <List>
                   {detail.nullReasons.map((reason) => (
                     <Row key={reason} accent="ambre">
-                      <p className="m-0 text-[13px] leading-snug text-secondaire">{sensorLabel(reason)}</p>
+                      <p className="m-0 text-[13px] leading-snug text-secondaire">
+                        {sensorLabel(reason)}
+                      </p>
                     </Row>
                   ))}
                 </List>

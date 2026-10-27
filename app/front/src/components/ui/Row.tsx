@@ -22,7 +22,7 @@ export function Row({ children, accent }: { children: ReactNode; accent?: 'dange
 
 export function Bullet({ children }: { children: ReactNode }) {
   return (
-    <span className="grid size-[26px] place-items-center rounded-lg bg-[rgba(255,122,26,0.16)] text-[13px] font-bold text-orange">
+    <span className="grid size-[26px] place-items-center rounded-lg bg-accent-doux text-[13px] font-bold text-accent">
       {children}
     </span>
   )

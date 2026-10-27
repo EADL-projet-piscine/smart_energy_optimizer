@@ -6,6 +6,7 @@ import httpx
 
 from smart_energy_app.config import settings
 from smart_energy_app.consommation.client import fetch_summary
+from smart_energy_app.consommation.last_readings import last_readings
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,9 @@ async def refresh() -> bool:
 
     state.data = data
     state.fetched_at = datetime.now(UTC)
+    # Mémoriser après avoir daté : la dernière valeur connue d'un site porte
+    # l'instant où elle a été reçue, et non celui du cycle en cours.
+    last_readings.remember(data, state.fetched_at)
     logger.info(
         "Mesure courante rafraîchie en %.0f ms (%d sites)",
         (time.monotonic() - started) * 1000,

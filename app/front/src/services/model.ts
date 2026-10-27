@@ -28,7 +28,18 @@ export type Site = {
   type: string
   readingLabel: string
   currentKw: number | null
+  /** Dernière consommation réellement mesurée, et l'instant où elle a été reçue.
+   *
+   * Optionnelles, et non simplement nulles : elles ne viennent pas du résumé de
+   * l'API source mais de l'enveloppe posée par l'API métier. Un back qui ne les
+   * fournit pas reste valide, et l'écran doit fonctionner sans elles.
+   */
+  lastKnownKw?: number | null
+  lastKnownAt?: string | null
   forecast2hKw: number | null
+  /** Capacité de l'installation, en kW. C'est une limite technique, pas un
+   * engagement contractuel : l'API source n'expose aucun seuil contractuel. */
+  capacityKw?: number | null
   thresholdKw: number | null
   receivedCount: number | null
   expectedCount: number | null
@@ -54,6 +65,8 @@ export type ParkSummary = {
   dailyCostEur: number | null
   co2Tons: number | null
   excludedSites: string[]
+  /** Capacité cumulée du parc, en kW. Limite technique, pas engagement. */
+  capacityKw?: number | null
   thresholdKw: number | null
   peakKw: number | null
   peakAt: string | null

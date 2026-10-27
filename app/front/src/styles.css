@@ -15,7 +15,8 @@
   --color-hausse: var(--hausse);
   --color-danger: var(--danger);
   --color-ambre: var(--ambre);
-  --color-orange: var(--orange);
+  --color-accent: var(--accent);
+  --color-accent-doux: var(--accent-doux);
   --color-mesure: var(--mesure);
   --color-prevision: var(--prevision);
   --color-seuil: var(--seuil);
@@ -31,6 +32,11 @@
   --shadow-eleve: var(--ombre);
 }
 
+/* Chaque thème porte sa propre dominante : orangée sur fond nuit, bleue sur
+   fond clair. Tout ce qui signale — ambre, rouge, vert — reste signalétique
+   dans les deux, mais les teintes sont ajustées : une couleur pensée pour un
+   fond sombre perd son contraste sur du blanc. */
+
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -45,7 +51,8 @@
   --hausse: #3ddc97;
   --danger: #ff6d7d;
   --ambre: #f5a524;
-  --orange: #ff7a1a;
+  --accent: #ff7a1a;
+  --accent-doux: rgba(255, 122, 26, 0.14);
   --mesure: #d6ef4e;
   --prevision: #6aabff;
   --seuil: #ef5d5d;
@@ -58,6 +65,7 @@
   --banniere-texte: #f1e0b8;
   --toast: #1a2338;
   --lien: #5b9dff;
+  --halo: rgba(90, 140, 70, 0.08);
   --ombre: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
 
@@ -71,6 +79,15 @@
   --discret: #66758c;
   --bordure: rgba(16, 24, 40, 0.08);
   --bordure-forte: rgba(16, 24, 40, 0.14);
+  --hausse: #047857;
+  --danger: #dc2626;
+  --ambre: #b45309;
+  --accent: #0284c7;
+  --accent-doux: rgba(2, 132, 199, 0.12);
+  --mesure: #0ea5e9;
+  /* Violet et non bleu : la prévision doit rester distincte de la mesure. */
+  --prevision: #7c3aed;
+  --seuil: #b45309;
   --grille: rgba(16, 24, 40, 0.08);
   --piste: rgba(16, 24, 40, 0.08);
   --pilule: #ffffff;
@@ -79,13 +96,15 @@
   --banniere-bord: #f0d48a;
   --banniere-texte: #6d5010;
   --toast: #ffffff;
+  --lien: #0b63ce;
+  --halo: rgba(2, 132, 199, 0.07);
   --ombre: 0 12px 32px rgba(16, 24, 40, 0.1);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(900px 420px at 0% -10%, rgba(90, 140, 70, 0.08), transparent 55%), var(--fond);
+  background: radial-gradient(900px 420px at 0% -10%, var(--halo), transparent 55%), var(--fond);
   color: var(--encre);
   font-family: var(--font-sans);
   font-synthesis: none;

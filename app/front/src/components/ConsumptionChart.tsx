@@ -13,7 +13,9 @@ import type { SeriesPoint } from '../services/model'
 
 type Props = {
   series: SeriesPoint[]
-  thresholdKw: number | null
+  /** Capacité de l'installation, tracée en ligne de repère. C'est une limite
+   * technique : l'API source n'expose aucun seuil contractuel. */
+  capacityKw: number | null
   showPeakValue?: boolean
   compact?: boolean
 }
@@ -49,7 +51,7 @@ function ChartTooltip({ active, payload, lastTime }: TooltipProps & { lastTime: 
   )
 }
 
-export function ConsumptionChart({ series, thresholdKw, showPeakValue = false, compact = false }: Props) {
+export function ConsumptionChart({ series, capacityKw, showPeakValue = false, compact = false }: Props) {
   if (series.length === 0) {
     return <p className="mt-1.5 text-[13px] text-discret">Aucune mesure disponible sur la période.</p>
   }
@@ -109,16 +111,16 @@ export function ConsumptionChart({ series, thresholdKw, showPeakValue = false, c
             cursor={{ stroke: 'var(--discret)', strokeOpacity: 0.45, strokeWidth: 1 }}
           />
 
-          {thresholdKw !== null && (
+          {capacityKw !== null && (
             <ReferenceLine
-              y={thresholdKw}
-              stroke="var(--seuil)"
+              y={capacityKw}
+              stroke="var(--ambre)"
               strokeDasharray="6 6"
               strokeWidth={1.6}
               label={{
-                value: `${formatNumber(thresholdKw)} kW`,
+                value: `${formatNumber(capacityKw)} kW`,
                 position: 'insideTopRight',
-                className: 'fill-seuil text-[13px] font-bold',
+                className: 'fill-ambre text-[13px] font-bold',
               }}
             />
           )}

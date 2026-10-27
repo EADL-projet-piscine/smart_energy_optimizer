@@ -4,9 +4,11 @@ from datetime import timedelta
 import httpx
 from fastapi import APIRouter, HTTPException
 
+from smart_energy_app.alertes.capacite import capacity_alerts
 from smart_energy_app.config import settings
 from smart_energy_app.consommation.details import state as details_state
 from smart_energy_app.consommation.historique import load_history
+from smart_energy_app.consommation.last_readings import last_readings
 from smart_energy_app.consommation.service import state
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,12 @@ def consumption_summary() -> dict:
         "fetched_at": state.fetched_at.isoformat(),
         "next_at": next_at.isoformat(),
         "stale": state.is_stale(),
+        # À côté de la mesure courante, jamais à sa place : le client doit
+        # pouvoir distinguer une mesure de l'instant d'un souvenir.
+        "last_readings": last_readings.as_payload(),
+        # Calculées depuis la charge constatée, contrairement à celles de
+        # l'API source qui en sont décorrélées.
+        "alertes": capacity_alerts.as_payload(),
     }
 
 

@@ -153,6 +153,27 @@ describe('SiteDetail', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)
   })
 
+  it('affiche la capacité et la part utilisée', () => {
+    // La capacité seule ne dit rien : c'est le rapport à la consommation qui
+    // informe, et c'est sur lui que les alertes se déclenchent.
+    afficher([site({ currentKw: 190, capacityKw: 200 })])
+
+    expect(screen.getByText('200')).toBeInTheDocument()
+    expect(screen.getByText('95,0 % utilisés')).toBeInTheDocument()
+  })
+
+  it('n’annonce pas de part utilisée sans capacité', () => {
+    afficher([site({ currentKw: 190, capacityKw: null })])
+
+    expect(screen.queryByText(/% utilisés/)).not.toBeInTheDocument()
+  })
+
+  it('n’annonce pas de part utilisée sans consommation', () => {
+    afficher([site({ currentKw: null, capacityKw: 200 })])
+
+    expect(screen.queryByText(/% utilisés/)).not.toBeInTheDocument()
+  })
+
   it('affiche le compte de mesures reçues', () => {
     afficher([site({ receivedCount: 14, expectedCount: 24 })])
 
@@ -211,22 +232,16 @@ describe('SiteDetail — diagnostic', () => {
 
     expect(screen.getByText('405,8')).toBeInTheDocument()
     expect(screen.getByText('247,4')).toBeInTheDocument()
-    expect(screen.getByText('0,909')).toBeInTheDocument()
     expect(screen.getByText('7,8')).toBeInTheDocument()
   })
 
-  it('signale un facteur de puissance sous le seuil de facturation', () => {
-    // Sous 0,9, le fournisseur facture la puissance réactive : c'est la seule
-    // grandeur de ce bloc qui appelle une action.
+  it('n’affiche pas le facteur de puissance', () => {
+    // Retiré volontairement : sans seuil contractuel connu, le chiffre nu
+    // n'apprend rien à qui lit l'écran.
     afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.82 }) })
 
-    expect(screen.getByText(/puissance réactive facturée/)).toBeInTheDocument()
-  })
-
-  it('ne signale rien quand le facteur de puissance est correct', () => {
-    afficher([site()], 'SITE001', { SITE001: detail({ powerFactor: 0.95 }) })
-
-    expect(screen.queryByText(/puissance réactive facturée/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Facteur de puissance')).not.toBeInTheDocument()
+    expect(screen.queryByText('0,820')).not.toBeInTheDocument()
   })
 
   it('explique pourquoi des mesures manquent', () => {
@@ -252,16 +267,26 @@ describe('SiteDetail — diagnostic', () => {
     expect(screen.queryByText('Toutes les mesures sont disponibles')).not.toBeInTheDocument()
   })
 
-  it('liste les capteurs indisponibles', () => {
+  it('liste les capteurs indisponibles en clair', () => {
+    // L'API renvoie des codes : les afficher tels quels donnerait des noms de
+    // variables à un lecteur métier.
     afficher([site()], 'SITE001', {
-      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['sonde de tension HS'] }),
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['humidity_sensor_failure'] }),
     })
 
-    expect(screen.getByText('sonde de tension HS')).toBeInTheDocument()
+    expect(screen.getByText('Sonde d’humidité en panne')).toBeInTheDocument()
+  })
+
+  it('affiche un code de panne inconnu plutôt que rien', () => {
+    afficher([site()], 'SITE001', {
+      SITE001: detail({ dataQuality: 'degraded', nullReasons: ['code_inedit'] }),
+    })
+
+    expect(screen.getByText('code_inedit')).toBeInTheDocument()
   })
 
   it('met un tiret sur une grandeur absente', () => {
-    afficher([site()], 'SITE001', { SITE001: detail({ voltageV: null, powerFactor: null }) })
+    afficher([site()], 'SITE001', { SITE001: detail({ voltageV: null, currentA: null }) })
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
   })
@@ -284,8 +309,67 @@ describe('SiteDetail — diagnostic', () => {
   })
 })
 
+describe('SiteDetail — dernière valeur connue', () => {
+  // Le chiffre n'est marqué comme daté que lorsqu'il sort de la mémoire du
+  // back. L'état des capteurs ne périme rien : le détail et le résumé sont
+  // deux endpoints décorrélés.
+
+  it('ressort la dernière valeur mémorisée quand le site s’est tu', () => {
+    // Sans elle, l'écran n'a plus aucun chiffre à montrer alors que le site
+    // consommait deux heures plus tôt.
+    afficher(
+      [site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: '2026-10-26T11:54:00+00:00' })],
+      'SITE001',
+      { SITE001: detail({ dataQuality: 'critical' }) },
+    )
+
+    expect(screen.getByText('470')).toBeInTheDocument()
+    // Le 26 octobre, la France est repassée à l'heure d'hiver : 11:54 UTC
+    // vaut 12h54, pas 13h54.
+    expect(screen.getByText('Dernier relevé datant de 12h54')).toBeInTheDocument()
+  })
+
+  it('se passe de l’heure quand la mémoire n’en porte pas', () => {
+    afficher([site({ currentKw: null, lastKnownKw: 470.4, lastKnownAt: null })], 'SITE001', {})
+
+    expect(screen.getByText('Dernière valeur connue')).toBeInTheDocument()
+  })
+
+  it('n’annonce pas de dernière valeur quand il n’y en a aucune', () => {
+    // « — » suivi de « dernière valeur connue » ne veut rien dire.
+    afficher([site({ currentKw: null })], 'SITE001', { SITE001: detail({ dataQuality: 'critical' }) })
+
+    expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Dernier relevé/)).not.toBeInTheDocument()
+  })
+
+  it('préfère la mesure de l’instant à la mémoire', () => {
+    // La mémoire ne sert qu'en l'absence de mesure : un site qui transmet
+    // affiche ce qu'il transmet.
+    afficher([site({ currentKw: 138, lastKnownKw: 999 })], 'SITE001', { SITE001: detail() })
+
+    expect(screen.getByText('138')).toBeInTheDocument()
+    expect(screen.queryByText('999')).not.toBeInTheDocument()
+  })
+
+  it('ne périme pas un chiffre du cycle courant sur la foi des capteurs', () => {
+    // Le piège qu'on évite : annoncer « relevé de 14h43 » alors que la
+    // collecte date de 14h43. Le compteur est signalé en panne par le détail,
+    // mais le résumé a bien fourni un chiffre à ce cycle.
+    afficher(
+      [site({ currentKw: 904, lastKnownKw: 904, lastKnownAt: '2026-10-26T11:54:00+00:00' })],
+      'SITE001',
+      { SITE001: detail({ dataQuality: 'degraded', nullReasons: ['consumption_sensor_failure'] }) },
+    )
+
+    expect(screen.getByText('904')).toBeInTheDocument()
+    expect(screen.queryByText(/Dernier relevé/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Dernière valeur connue')).not.toBeInTheDocument()
+  })
+})
+
 describe('SiteDetail — alertes', () => {
-  it('met l’alerte critique en avant dans le toast', () => {
+  it('met l’alerte la plus grave dans le bandeau', () => {
     // La plus grave passe devant, quel que soit l'ordre d'arrivée.
     afficher([site({ alerts: [alert('moyenne', 'Tiède'), alert('critique', 'Urgent')] })])
 
@@ -305,24 +389,15 @@ describe('SiteDetail — alertes', () => {
     expect(screen.getByText('Tiède')).toBeInTheDocument()
   })
 
-  it('remet l’alerte dans la liste quand on ferme le toast', () => {
-    // Fermer le toast ne doit pas faire disparaître l'information.
-    afficher([site({ alerts: [alert('critique', 'Urgent')] })])
-
-    fireEvent.click(screen.getByRole('button', { name: /Fermer/ }))
-
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.getByText('Urgent')).toBeInTheDocument()
-  })
-
-  it('n’affiche aucun toast sans alerte', () => {
+  it('n’affiche aucun bandeau sans alerte', () => {
     afficher([site()])
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  it('garde le toast de chaque site indépendant', () => {
-    // Chaque ligne porte son propre état : fermer l'un ne ferme pas l'autre.
+  it('donne son bandeau à chaque panneau ouvert', () => {
+    // Chaque ligne porte ses propres données : deux panneaux ouverts montrent
+    // chacun son alerte, pas deux fois la même.
     afficher(
       [
         site({ id: 'A', name: 'Bureau Paris', alerts: [alert('critique', 'Urgent A')] }),
@@ -330,11 +405,13 @@ describe('SiteDetail — alertes', () => {
       ],
       'A',
     )
+
     fireEvent.click(ligne('Usine Lyon'))
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Fermer/ })[0])
-
-    expect(screen.getByRole('status')).toHaveTextContent('Urgent B')
+    const bandeaux = screen.getAllByRole('status')
+    expect(bandeaux).toHaveLength(2)
+    expect(bandeaux[0]).toHaveTextContent('Urgent A')
+    expect(bandeaux[1]).toHaveTextContent('Urgent B')
   })
 })
 

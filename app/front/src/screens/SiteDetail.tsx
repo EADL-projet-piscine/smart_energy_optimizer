@@ -1,13 +1,20 @@
 import { useMemo, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
 import { Badge, badgeTone } from '../components/ui/Badge'
+import { Banner } from '../components/ui/Banner'
 import { Card } from '../components/ui/Card'
 import { cn } from '../components/ui/cn'
 import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Caption, Subtitle } from '../components/ui/Text'
-import { Toast } from '../components/ui/Toast'
-import { formatKw, formatNumber, qualityLabel, qualityShort } from '../services/format'
+import {
+  formatKw,
+  formatNumber,
+  formatTime,
+  qualityLabel,
+  qualityShort,
+  sensorLabel,
+} from '../services/format'
 import type { Alert, SiteDetail as Detail, DetailsBySite, SeriesPoint, Site } from '../services/model'
 
 type Props = {
@@ -30,8 +37,31 @@ function qualityTone(quality: string | null): 'ok' | 'ambre' | 'alert' {
   return 'ambre'
 }
 
-/** En dessous de ce seuil, le fournisseur facture la puissance réactive. */
-const POWER_FACTOR_FLOOR = 0.9
+type Reading = { value: number | null; note: string | undefined; stale: boolean }
+
+/** Ce que montre la case « Actuel », et ce qu'il faut en dire.
+ *
+ * Un chiffre n'est marqué comme daté que lorsqu'il sort réellement de la
+ * mémoire. L'état des capteurs, lui, ne périme rien : le détail et le résumé
+ * sont deux endpoints décorrélés, et le badge du panneau dit déjà qu'un
+ * capteur est tombé. Le tiret ne reste que si l'on n'a jamais rien mesuré.
+ */
+function currentReading(site: Site): Reading {
+  if (site.currentKw !== null) return { value: site.currentKw, note: undefined, stale: false }
+
+  const remembered = site.lastKnownKw ?? null
+  if (remembered === null) return { value: null, note: undefined, stale: false }
+
+  return {
+    value: remembered,
+    // Un chiffre daté sans son heure n'apprend rien : le lecteur ne peut pas
+    // juger s'il peut encore s'y fier.
+    note: site.lastKnownAt
+      ? `Dernier relevé datant de ${formatTime(site.lastKnownAt)}`
+      : 'Dernière valeur connue',
+    stale: true,
+  }
+}
 
 /** Ce qu'affiche le bout d'une ligne : l'anomalie si elle existe, sinon la mesure.
  *
@@ -51,7 +81,7 @@ function Chevron({ open }: { open: boolean }) {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className={cn('size-3.5 shrink-0', open ? 'text-orange' : 'text-discret')}
+      className={cn('size-3.5 shrink-0', open ? 'text-accent' : 'text-discret')}
     >
       <path
         d={open ? 'M6 9l6 6 6-6' : 'M9 6l6 6-6 6'}
@@ -67,12 +97,10 @@ function Chevron({ open }: { open: boolean }) {
 
 /** Grandeurs électriques du site, absentes du résumé du parc. */
 function Installation({ detail }: { detail: Detail }) {
-  const poorPowerFactor = detail.powerFactor !== null && detail.powerFactor < POWER_FACTOR_FLOOR
-
   return (
     <div>
       <Subtitle>État de l’installation</Subtitle>
-      <div className="grid grid-cols-2 gap-3 min-[981px]:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 min-[981px]:grid-cols-3">
         <Metric
           variant="inset"
           label="Tension"
@@ -84,13 +112,6 @@ function Installation({ detail }: { detail: Detail }) {
           label="Intensité"
           value={detail.currentA === null ? '—' : formatNumber(detail.currentA, 1)}
           unit={detail.currentA === null ? undefined : 'A'}
-        />
-        <Metric
-          variant="inset"
-          label="Facteur de puissance"
-          tone={poorPowerFactor ? 'ambre' : 'defaut'}
-          value={detail.powerFactor === null ? '—' : formatNumber(detail.powerFactor, 3)}
-          detail={poorPowerFactor ? 'Sous 0,9 : puissance réactive facturée' : undefined}
         />
         <Metric
           variant="inset"
@@ -120,11 +141,8 @@ type RowProps = {
  * ouverts à la fois sans que l'un affiche le contenu de l'autre.
  */
 function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
-  const [toastClosed, setToastClosed] = useState(false)
-  const [highlighted, setHighlighted] = useState(false)
-
   const main = mainAlert(site)
-  const others = site.alerts.filter((alert) => alert !== main || toastClosed)
+  const others = site.alerts.filter((alert) => alert !== main)
   const status = rowStatus(site, detail)
   const forecastExceeds =
     site.thresholdKw !== null && site.forecast2hKw !== null && site.forecast2hKw > site.thresholdKw
@@ -140,12 +158,15 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // La qualité ne s'affiche que lorsqu'elle pose problème : « 24/24 » suivi de
   // « toutes les mesures sont disponibles » n'apprend rien au lecteur.
   const qualityIssue = detail && detail.dataQuality !== 'good' ? qualityLabel(detail.dataQuality) : null
+  const reading = currentReading(site)
 
-  function scrollToActions() {
-    document.getElementById(`actions-${site.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    setHighlighted(true)
-    window.setTimeout(() => setHighlighted(false), 1800)
-  }
+  // Part de la capacité réellement utilisée. Une capacité seule ne dit rien ;
+  // c'est le rapport à la consommation qui informe, et c'est aussi la grandeur
+  // sur laquelle les alertes se déclenchent. Aucun seuil n'est jugé ici : le
+  // bandeau s'en charge, et le dupliquer risquerait de le contredire.
+  const loadPct =
+    reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
+  const loadLabel = loadPct === null ? undefined : `${formatNumber(loadPct, 1)} % utilisés`
 
   return (
     <div
@@ -162,7 +183,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
           onClick={onToggle}
           className={cn(
             'flex w-full items-center gap-3 border-0 px-3.5 py-3 text-left font-[inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lien',
-            open ? 'bg-[rgba(255,122,26,0.14)]' : 'bg-transparent hover:bg-onglet',
+            open ? 'bg-accent-doux' : 'bg-transparent hover:bg-onglet',
           )}
         >
           <Chevron open={open} />
@@ -197,8 +218,10 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             <Metric
               variant="inset"
               label="Actuel"
-              value={formatKw(site.currentKw)}
-              unit={site.currentKw === null ? undefined : 'kW'}
+              tone={reading.stale ? 'ambre' : 'defaut'}
+              value={formatKw(reading.value)}
+              unit={reading.value === null ? undefined : 'kW'}
+              detail={reading.note}
             />
             <Metric
               variant="inset"
@@ -209,9 +232,13 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             />
             <Metric
               variant="inset"
-              label="Seuil contractuel"
-              value={formatKw(site.thresholdKw)}
-              unit={site.thresholdKw === null ? undefined : 'kW'}
+              // « Capacité » et non « Seuil contractuel » : l'API n'expose que
+              // la limite technique de l'installation. Afficher une capacité
+              // sous un nom contractuel ferait passer l'une pour l'autre.
+              label="Capacité"
+              value={formatKw(site.capacityKw ?? null)}
+              unit={site.capacityKw == null ? undefined : 'kW'}
+              detail={loadLabel}
             />
             <Metric
               variant="inset"
@@ -227,27 +254,20 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             />
           </div>
 
-          <div className="relative mt-2">
-            <ConsumptionChart series={series} thresholdKw={site.thresholdKw} compact />
-            {main && !toastClosed && (
-              <Toast
-                severity={main.severity}
-                title={main.title}
-                message={main.message}
-                onClose={() => setToastClosed(true)}
-                onDetail={scrollToActions}
-              />
-            )}
+          {/* Au-dessus du graphique, et non par-dessus : une alerte posée sur
+              la courbe cache précisément ce qu'elle commente. */}
+          {main && (
+            <Banner tone={main.severity === 'critique' ? 'danger' : 'ambre'}>
+              <strong className="font-[650]">{main.title}</strong>&nbsp;: {main.message}
+            </Banner>
+          )}
+
+          <div className="mt-2">
+            <ConsumptionChart series={series} capacityKw={site.capacityKw ?? null} compact />
           </div>
           {site.comment && <Caption>{site.comment}</Caption>}
 
-          <div
-            id={`actions-${site.id}`}
-            className={cn(
-              'mt-2 grid gap-4 pt-2',
-              highlighted && 'rounded-xl shadow-[0_0_0_2px_rgba(91,157,255,0.45)]',
-            )}
-          >
+          <div className="mt-2 grid gap-4 pt-2">
             {detail && <Installation detail={detail} />}
 
             {detail && detail.nullReasons.length > 0 && (
@@ -256,7 +276,9 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <List>
                   {detail.nullReasons.map((reason) => (
                     <Row key={reason} accent="ambre">
-                      <p className="m-0 text-[13px] leading-snug text-secondaire">{reason}</p>
+                      <p className="m-0 text-[13px] leading-snug text-secondaire">
+                        {sensorLabel(reason)}
+                      </p>
                     </Row>
                   ))}
                 </List>

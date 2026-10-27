@@ -35,7 +35,7 @@ monter un composant pour tester une addition.
 src/
 ├── api/client.ts          Appel HTTP unique, délai d'expiration, erreurs
 ├── components/            Composants réutilisables
-│   ├── ui/                Briques génériques : Card, Metric, Tabs, Toast…
+│   ├── ui/                Briques génériques : Card, Metric, Banner, Badge…
 │   ├── Icons.tsx          Icônes SVG
 │   └── ConsumptionChart.tsx
 ├── screens/               Écrans : Dashboard, SiteDetail
@@ -103,7 +103,7 @@ regarde pas qui est la bonne. Voir la section suivante.
 
 | Service | Endpoint | Ce qu'il apporte |
 |---|---|---|
-| `summary.ts` | `GET /api/consommations` | le parc : totaux, consommation de chaque site, alertes, recommandations |
+| `summary.ts` | `GET /api/consommations` | le parc : totaux, consommation et capacité de chaque site, alertes |
 | `details.ts` | `GET /api/consommations/sites` | par site : qualité de la mesure, causes d'absence, grandeurs électriques |
 | `history.ts` | `GET /api/consommations/historique` | les 24 dernières heures, par site et pour le parc |
 
@@ -112,8 +112,34 @@ regarde pas qui est la bonne. Voir la section suivante.
 l'écran vient **toujours du résumé**, parce que le total du parc en est
 dérivé et qu'une valeur prise à un autre instant ferait que la somme des
 sites ne tombe plus juste. Du détail viennent `dataQuality`, `nullReasons`,
-la tension, l'intensité, le facteur de puissance, la température et
-l'humidité — que le résumé ne contient pas.
+la tension, l'intensité, la température et l'humidité — que le résumé ne
+contient pas.
+
+**Le détail n'est pas une autorité sur la fraîcheur du résumé.** Les deux
+endpoints sont décorrélés : quand le résumé porte un chiffre, il vient du
+cycle courant et il est à jour, même si le détail signale au même moment une
+panne du compteur. Avoir conclu l'inverse a produit un écran qui annonçait
+« relevé de 14h43 » alors que la collecte datait de 14h43.
+
+### Ce qui voyage dans l'enveloppe
+
+`/api/consommations` renvoie le résumé de la source dans `data`, et à côté
+deux champs que l'API métier calcule elle-même :
+
+| Champ | Attaché par | Devient |
+|---|---|---|
+| `last_readings` | `attachLastReadings` | `site.lastKnownKw`, `site.lastKnownAt` |
+| `alertes` | `attachCapacityAlerts` | des entrées de `site.alerts` |
+
+`normalizeSummary` ne voit que `data` : ces deux champs vivent à l'extérieur
+et s'attachent donc **après** la normalisation, dans `summary.ts`. C'est
+aussi pour cela que `lastKnownKw` et `lastKnownAt` sont **optionnels** dans
+`Site`, et non simplement nuls : un back qui ne les fournit pas reste
+valide, et l'écran doit fonctionner sans eux.
+
+`attachCapacityAlerts` repasse par `buildSummary` : les compteurs du bandeau
+et les badges se déduisent des alertes des sites, qui viennent de changer.
+Sans cela, l'écran continuerait d'annoncer zéro alerte.
 
 Le détail est un **complément** : s'il échoue, l'écran perd son bloc
 « État de l'installation » et garde tout le reste. C'est pour cela que
@@ -131,8 +157,15 @@ La convention de nommage des endpoints est décrite dans
 ## Graphiques
 
 Les graphiques utilisent **Recharts**. Les couleurs passent par les
-variables CSS du thème (`var(--mesure)`, `var(--seuil)`) pour que le mode
+variables CSS du thème (`var(--mesure)`, `var(--ambre)`) pour que le mode
 clair et le mode sombre fonctionnent sans JavaScript.
+
+La ligne de repère trace la **capacité du site**, en ambre, la même couleur
+que le bandeau d'alerte : les deux désignent la même limite, ils doivent se
+répondre à l'œil. Elle n'est pas tracée sur le graphique du parc — la somme
+des sept capacités est une limite théorique, jamais atteinte simultanément,
+et le total affiché exclut les sites muets : comparer les deux ne compare
+rien.
 
 `connectNulls` reste à `false` : une mesure absente doit couper la courbe.
 
@@ -167,6 +200,80 @@ L'historique est au pas horaire : le rafraîchir plus souvent ne montrerait
 rien de neuf, et la source régénère ses valeurs à chaque appel — la courbe
 sauterait.
 
+## Le détail par site
+
+Le détail est une **liste de panneaux dépliants**, un site par ligne,
+repliée par défaut. Trois règles en découlent.
+
+**Chaque ligne porte ses propres données et son propre état.** Le composant
+de ligne reçoit son site et calcule ce qu'il affiche. Un composant parent
+qui rendrait le contenu à la place des lignes afficherait le même site dans
+tous les panneaux ouverts — c'est le bug qu'a révélé l'ouverture multiple.
+
+**L'état d'ouverture est local, jamais dérivé de la sélection courante.**
+La sélection est remise à jour par le rafraîchissement automatique ; si
+l'ouverture en dépendait, un panneau fermé par le lecteur se rouvrirait de
+lui-même au cycle suivant. Tant que le lecteur n'a rien touché, l'ouverture
+suit ce que désigne le parent ; au premier clic, elle lui appartient.
+
+**Déplier ne déclenche aucun appel.** Les sept détails sont déjà chargés.
+
+### Ce qu'affiche la case « Actuel »
+
+Un chiffre n'est marqué comme daté que lorsqu'il **sort réellement de la
+mémoire du back**, c'est-à-dire quand le résumé ne porte plus rien. Il est
+alors affiché en ambre avec son heure : « Dernier relevé datant de 14h46 ».
+Un tiret ne reste que si l'on n'a jamais rien mesuré.
+
+### Les alertes
+
+L'alerte la plus grave s'affiche dans un bandeau **au-dessus** du
+graphique, jamais par-dessus : une alerte posée sur la courbe cache
+précisément ce qu'elle commente. Les autres alertes du site sont listées
+sous le graphique.
+
+Le bandeau prend la couleur de la gravité — ambre pour une alerte moyenne,
+rouge pour une critique — et le compteur du bandeau de tête suit la même
+règle : neutre à zéro, ambre s'il n'y a que des alertes moyennes, rouge
+seulement s'il existe une critique. Un compteur rouge en permanence
+n'apprend rien et banalise les vraies urgences.
+
+### Ce qui n'est pas affiché, et pourquoi
+
+Deux champs ont été retirés volontairement. Le **facteur de puissance**,
+parce qu'aucun seuil contractuel n'est connu et qu'un chiffre nu n'apprend
+rien à qui lit l'écran. Le **coût du jour**, parce que l'API ne le fournit
+pas et que le remplir exigerait d'inventer un tarif au kWh.
+
+La règle est la même dans les deux cas : mieux vaut trois cartes justes que
+quatre dont une vide. Une carte qui affiche `—` sur les sept sites fait
+conclure à un lecteur que l'application ne marche pas.
+
+Reste « Prévu +2 h » et « Mesures reçues », qui affichent encore `—` : la
+première attend que le modèle soit branché, la seconde un calcul depuis
+l'historique. Les deux ont leur ticket.
+
+## Thème clair et thème sombre
+
+Le thème est porté par des variables CSS redéfinies sous
+`:root[data-theme="light"]`. **Aucune couleur n'est écrite en dur dans un
+composant** : une classe comme `bg-[rgba(255,122,26,0.14)]` ne suivrait pas
+le thème, et c'est exactement ce qui empêchait l'application d'en changer
+vraiment.
+
+| Variable | Rôle |
+|---|---|
+| `--accent` | La couleur de marque : chevron ouvert, puces numérotées |
+| `--accent-doux` | Son aplat translucide, pour le fond d'un panneau ouvert |
+| `--mesure` | La courbe de consommation |
+| `--ambre`, `--danger` | Les signaux, jamais décoratifs |
+| `--halo` | Le dégradé du fond de page |
+
+Les couleurs de signal sont **ajustées par thème**, pas héritées : une
+teinte pensée pour un fond sombre perd son contraste sur du blanc. Et elles
+restent ambre et rouge dans les deux thèmes — on repère une alerte parce
+qu'elle jure avec le reste, pas parce qu'elle s'y fond.
+
 ## Qualité de code
 
 **Biome** lint et formate le front, comme ruff le fait pour le back : un
@@ -190,22 +297,7 @@ sans rien apporter.
 
 Une directive `biome-ignore` **doit porter une justification**. Sans raison
 écrite, c'est une règle désactivée au hasard ; avec, c'est une décision que
-le relecteur peut discuter. Il y en a deux aujourd'hui :
-
-**`SiteDetail.tsx` — `useExhaustiveDependencies`.** Biome signale `site?.id`
-comme dépendance superflue, puisque le corps du `useEffect` ne la lit pas :
-
-```tsx
-// biome-ignore lint/correctness/useExhaustiveDependencies: déclencheur, pas une valeur lue
-useEffect(() => {
-  setToastClosed(false)
-  setHighlighted(false)
-}, [site?.id])
-```
-
-Elle sert de déclencheur : changer de site doit rouvrir le toast. Appliquer
-la correction automatique laisserait un toast fermé sur SITE002 fermé sur
-SITE003.
+le relecteur peut discuter. Il en reste une aujourd'hui :
 
 **`Text.tsx` — `noArrayIndexKey`.** La règle est juste en général : un index
 de tableau fait une mauvaise clé React quand la liste peut être réordonnée.
@@ -239,9 +331,7 @@ src/tests/
 │   ├── ConsumptionChart.test.tsx
 │   └── ui/
 │       ├── Badge.test.ts
-│       ├── Tabs.test.tsx
-│       ├── Text.test.tsx
-│       └── Toast.test.tsx
+│       └── Text.test.tsx
 ├── screens/
 │   ├── Dashboard.test.tsx
 │   └── SiteDetail.test.tsx
@@ -272,9 +362,17 @@ UTC.
 Un test gagne à garder une décision plutôt qu'à vérifier une évidence. Les
 plus utiles de cette suite vérifient qu'aucun chiffre ne s'affiche quand
 l'API ne répond pas, qu'un site muet ne compte pas pour zéro dans le total
-du parc, qu'un horodatage sans fuseau est bien lu comme de l'UTC, et qu'un
-détail de site indisponible n'efface pas le résumé — quatre erreurs qui ont
+du parc, qu'un horodatage sans fuseau est bien lu comme de l'UTC, qu'un
+détail de site indisponible n'efface pas le résumé, et qu'un chiffre du
+cycle courant n'est pas annoncé comme périmé — cinq erreurs qui ont
 réellement coûté du temps, ou qui auraient pu.
+
+> Un test vert ne dit pas que la couverture a augmenté, et une couverture
+> stable ne dit pas qu'un test est inutile. Huit tests ajoutés sur
+> `SiteDetail` n'ont pas bougé le pourcentage d'un dixième : les lignes
+> étaient déjà *exécutées* par d'autres tests, mais rien ne vérifiait ce
+> qu'elles affichaient. Un pourcentage mesure le passage, pas la
+> vérification.
 
 ### Tester un hook
 

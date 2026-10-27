@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeSummary } from '../../services/normalize'
+import { attachCapacityAlerts, attachLastReadings, normalizeSummary } from '../../services/normalize'
 
 // Même forme qu'une vraie réponse de /api/v1/stats/summary de l'API EnerVision.
 const ENERVISION_SUMMARY = {
@@ -278,5 +278,139 @@ describe('normalizeSummary — séries datées', () => {
     })
 
     expect(result?.series).toEqual([{ at: '2026-10-21T09:00:00Z', measuredKw: 100, forecastKw: null }])
+  })
+})
+
+// ─────────────────────────── Enveloppe de l'API métier ───────────────────────
+
+// Ces deux fonctions s'appliquent après la normalisation : les dernières
+// mesures connues et les alertes de capacité voyagent dans l'enveloppe posée
+// par l'API métier, à côté du résumé, et non dedans.
+
+/** Résumé minimal à deux sites, dont l'un s'est tu. */
+function resume() {
+  const summary = normalizeSummary({
+    sites: [
+      { site_id: 'SITE001', current_consumption_kw: null },
+      { site_id: 'SITE007', current_consumption_kw: 907, capacity_kw: 950 },
+    ],
+  })
+  if (!summary) throw new Error('résumé non reconnu')
+  return summary
+}
+
+describe('attachLastReadings', () => {
+  it('attache la dernière mesure connue au bon site', () => {
+    const result = attachLastReadings(resume(), {
+      SITE001: { consumption_kw: 176.4, at: '2026-10-26T11:54:00+00:00' },
+    })
+
+    expect(result.sites[0].lastKnownKw).toBe(176.4)
+    expect(result.sites[0].lastKnownAt).toBe('2026-10-26T11:54:00+00:00')
+    expect(result.sites[1].lastKnownKw).toBeUndefined()
+  })
+
+  it('accepte une enveloppe qui n’en porte pas', () => {
+    // Un back antérieur à ce ticket ne fournit pas la clé : l'écran doit
+    // continuer de fonctionner.
+    expect(attachLastReadings(resume(), undefined).sites[0].lastKnownKw).toBeUndefined()
+  })
+
+  it('ignore une entrée illisible', () => {
+    const result = attachLastReadings(resume(), { SITE001: 'pas un objet' })
+
+    expect(result.sites[0].lastKnownKw).toBeUndefined()
+  })
+
+  it('ignore un identifiant qui ne désigne aucun site', () => {
+    const result = attachLastReadings(resume(), { SITE999: { consumption_kw: 1 } })
+
+    expect(result.sites.every((site) => site.lastKnownKw === undefined)).toBe(true)
+  })
+})
+
+describe('attachCapacityAlerts', () => {
+  const ALERTE = {
+    site_id: 'SITE007',
+    severity: 'moyenne',
+    message: 'Le site approche de sa capacité',
+    raised_at: '2026-10-26T13:50:01+00:00',
+    load_percent: 95.5,
+    capacity_kw: 950,
+  }
+
+  it('attache l’alerte au bon site', () => {
+    const result = attachCapacityAlerts(resume(), [ALERTE])
+
+    expect(result.sites[0].alerts).toHaveLength(0)
+    expect(result.sites[1].alerts).toHaveLength(1)
+    expect(result.sites[1].alerts[0].title).toBe('Capacité bientôt atteinte')
+  })
+
+  it('titre autrement une alerte critique', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, severity: 'critique' }])
+
+    expect(result.sites[1].alerts[0].title).toBe('Capacité dépassée')
+  })
+
+  it('retombe sur un titre neutre pour une gravité inattendue', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, severity: 'bizarre' }])
+
+    expect(result.sites[1].alerts[0].title).toBe('Capacité')
+  })
+
+  it('explique ce qui justifie l’alerte', () => {
+    const result = attachCapacityAlerts(resume(), [ALERTE])
+
+    expect(result.sites[1].alerts[0].message).toContain('95,5 % de 950 kW')
+    expect(result.sites[1].alerts[0].message).toContain('alerte levée à 14h50')
+  })
+
+  it('se passe de la capacité quand elle manque', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, capacity_kw: null }])
+
+    expect(result.sites[1].alerts[0].message).toContain('95,5 % de charge')
+  })
+
+  it('garde le message du serveur faute de chiffres', () => {
+    const result = attachCapacityAlerts(resume(), [
+      { site_id: 'SITE007', severity: 'moyenne', message: 'Le site approche de sa capacité' },
+    ])
+
+    expect(result.sites[1].alerts[0].message).toBe('Le site approche de sa capacité')
+  })
+
+  it('met à jour les compteurs du bandeau', () => {
+    // Ils se déduisent des alertes des sites : sans repasser par buildSummary,
+    // le bandeau continuerait d'annoncer zéro.
+    const result = attachCapacityAlerts(resume(), [ALERTE])
+
+    expect(result.totalAlerts).toBe(1)
+    expect(result.mediumAlerts).toBe(1)
+  })
+
+  it('n’ajoute jamais deux fois la même alerte', () => {
+    // L'identifiant porte l'horodatage de levée : deux cycles successifs sur
+    // la même alerte ne doivent pas la dupliquer.
+    const result = attachCapacityAlerts(attachCapacityAlerts(resume(), [ALERTE]), [ALERTE])
+
+    expect(result.sites[1].alerts).toHaveLength(1)
+  })
+
+  it('accepte une enveloppe sans alerte', () => {
+    expect(attachCapacityAlerts(resume(), []).sites[1].alerts).toHaveLength(0)
+    expect(attachCapacityAlerts(resume(), undefined).sites[1].alerts).toHaveLength(0)
+  })
+
+  it('ignore une entrée illisible ou sans site', () => {
+    const result = attachCapacityAlerts(resume(), ['x', { message: 'sans site' }])
+
+    expect(result.sites.every((site) => site.alerts.length === 0)).toBe(true)
+  })
+
+  it('ignore un identifiant qui ne désigne aucun site', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, site_id: 'SITE999' }])
+
+    expect(result.sites.every((site) => site.alerts.length === 0)).toBe(true)
   })
 })

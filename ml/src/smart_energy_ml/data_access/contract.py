@@ -26,9 +26,7 @@ def validate_hourly_readings(df: pd.DataFrame) -> None:
     missing_columns = set(REQUIRED_COLUMNS) - set(df.columns)
 
     if missing_columns:
-        raise DataContractError(
-            f"Colonnes obligatoires manquantes : {sorted(missing_columns)}"
-        )
+        raise DataContractError(f"Colonnes obligatoires manquantes : {sorted(missing_columns)}")
 
     if df.empty:
         raise DataContractError("Le dataset horaire est vide.")
@@ -36,8 +34,7 @@ def validate_hourly_readings(df: pd.DataFrame) -> None:
     if df[list(REQUIRED_COLUMNS)].isna().any().any():
         # consumption_kw est nullable : on l'exclut de ce contrôle.
         required_non_nullable = [
-            column for column in REQUIRED_COLUMNS
-            if column != "consumption_kw"
+            column for column in REQUIRED_COLUMNS if column != "consumption_kw"
         ]
 
         if df[required_non_nullable].isna().any().any():
@@ -51,14 +48,10 @@ def validate_hourly_readings(df: pd.DataFrame) -> None:
         )
 
     if str(df["timestamp"].dt.tz) != "UTC":
-        raise DataContractError(
-            "Les timestamps doivent être normalisés en UTC."
-        )
+        raise DataContractError("Les timestamps doivent être normalisés en UTC.")
 
     if not df["timestamp"].dt.floor("h").equals(df["timestamp"]):
-        raise DataContractError(
-            "Les timestamps doivent correspondre au début de chaque heure."
-        )
+        raise DataContractError("Les timestamps doivent correspondre au début de chaque heure.")
 
     if df.duplicated(subset=["site_id", "timestamp"]).any():
         raise DataContractError(
@@ -66,56 +59,32 @@ def validate_hourly_readings(df: pd.DataFrame) -> None:
         )
 
     if (df["total_readings"] != EXPECTED_READINGS_PER_HOUR).any():
-        raise DataContractError(
-            "Chaque heure doit correspondre à 12 readings attendus."
-        )
+        raise DataContractError("Chaque heure doit correspondre à 12 readings attendus.")
 
-    if (
-        (df["valid_readings"] < 0)
-        | (df["valid_readings"] > EXPECTED_READINGS_PER_HOUR)
-    ).any():
-        raise DataContractError(
-            "Le nombre de readings valides est incohérent."
-        )
+    if ((df["valid_readings"] < 0) | (df["valid_readings"] > EXPECTED_READINGS_PER_HOUR)).any():
+        raise DataContractError("Le nombre de readings valides est incohérent.")
 
-    expected_coverage = (
-        df["valid_readings"] / df["total_readings"] * 100
-    )
+    expected_coverage = df["valid_readings"] / df["total_readings"] * 100
 
-    if not (
-        (df["coverage_pct"] - expected_coverage).abs() < 0.01
-    ).all():
-        raise DataContractError(
-            "Les taux de couverture sont incohérents."
-        )
+    if not ((df["coverage_pct"] - expected_coverage).abs() < 0.01).all():
+        raise DataContractError("Les taux de couverture sont incohérents.")
 
     valid_hours = df["valid_readings"] >= MIN_VALID_READINGS
 
     if df.loc[~valid_hours, "consumption_kw"].notna().any():
-        raise DataContractError(
-            "Une heure insuffisamment couverte possède une consommation."
-        )
+        raise DataContractError("Une heure insuffisamment couverte possède une consommation.")
 
     if df.loc[valid_hours, "consumption_kw"].isna().any():
-        raise DataContractError(
-            "Une heure suffisamment couverte ne possède pas de consommation."
-        )
+        raise DataContractError("Une heure suffisamment couverte ne possède pas de consommation.")
 
     if (df["consumption_kw"].dropna() < 0).any():
-        raise DataContractError(
-            "La consommation horaire ne peut pas être négative."
-        )
+        raise DataContractError("La consommation horaire ne peut pas être négative.")
 
     sorted_df = df.sort_values(["site_id", "timestamp"])
 
     hourly_differences = sorted_df.groupby("site_id")["timestamp"].diff()
 
-    discontinuities = (
-        hourly_differences.notna()
-        & hourly_differences.ne(pd.Timedelta(hours=1))
-    )
+    discontinuities = hourly_differences.notna() & hourly_differences.ne(pd.Timedelta(hours=1))
 
     if discontinuities.any():
-        raise DataContractError(
-            "Des heures sont manquantes dans la série temporelle d'un site."
-        )
+        raise DataContractError("Des heures sont manquantes dans la série temporelle d'un site.")

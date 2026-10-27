@@ -1,4 +1,3 @@
-
 import json
 import logging
 from datetime import datetime
@@ -51,17 +50,11 @@ def build_hourly_dataset(
     )
 
     files = sorted(
-        file_path
-        for day in days
-        for file_path in raw_dir.glob(
-            f"SITE*/SITE*_{day:%Y%m%d}.json"
-        )
+        file_path for day in days for file_path in raw_dir.glob(f"SITE*/SITE*_{day:%Y%m%d}.json")
     )
 
     if not files:
-        raise FileNotFoundError(
-            f"Aucun fichier JSON EnerVision trouvé dans {raw_dir}"
-        )
+        raise FileNotFoundError(f"Aucun fichier JSON EnerVision trouvé dans {raw_dir}")
 
     records = []
 
@@ -89,15 +82,10 @@ def build_hourly_dataset(
         format="ISO8601",
         utc=True,
     )
-    df["consumption_kw"] = pd.to_numeric(
-        df["consumption_kw"], errors="coerce"
-    )
+    df["consumption_kw"] = pd.to_numeric(df["consumption_kw"], errors="coerce")
 
     # Conserver uniquement la période demandée.
-    df = df.loc[
-        (df["timestamp"] >= start_utc)
-        & (df["timestamp"] < end_utc)
-    ].copy()
+    df = df.loc[(df["timestamp"] >= start_utc) & (df["timestamp"] < end_utc)].copy()
 
     if df.empty:
         raise ValueError("Aucune mesure sur la période demandée.")
@@ -110,15 +98,12 @@ def build_hourly_dataset(
     df["timestamp"] = df["timestamp"].dt.floor("h")
 
     # Calcul de la moyenne et du nombre de valeurs exploitables.
-    hourly = (
-        df.groupby(
-            ["site_id", "site_type", "timestamp"],
-            as_index=False,
-        )
-        .agg(
-            consumption_kw=("consumption_kw", "mean"),
-            valid_readings=("consumption_kw", "count"),
-        )
+    hourly = df.groupby(
+        ["site_id", "site_type", "timestamp"],
+        as_index=False,
+    ).agg(
+        consumption_kw=("consumption_kw", "mean"),
+        valid_readings=("consumption_kw", "count"),
     )
 
     # Reconstituer toutes les heures pour chaque site.
@@ -139,11 +124,7 @@ def build_hourly_dataset(
         names=["site_id", "timestamp"],
     )
 
-    hourly = (
-        hourly.set_index(["site_id", "timestamp"])
-        .reindex(full_index)
-        .reset_index()
-    )
+    hourly = hourly.set_index(["site_id", "timestamp"]).reindex(full_index).reset_index()
 
     hourly = hourly.drop(columns=["site_type"]).merge(
         site_types,
@@ -155,15 +136,9 @@ def build_hourly_dataset(
     # Une heure représente 12 emplacements de mesure.
     hourly["total_readings"] = EXPECTED_READINGS_PER_HOUR
 
-    hourly["valid_readings"] = (
-        hourly["valid_readings"].fillna(0).astype(int)
-    )
+    hourly["valid_readings"] = hourly["valid_readings"].fillna(0).astype(int)
 
-    hourly["coverage_pct"] = (
-        hourly["valid_readings"]
-        / EXPECTED_READINGS_PER_HOUR
-        * 100
-    )
+    hourly["coverage_pct"] = hourly["valid_readings"] / EXPECTED_READINGS_PER_HOUR * 100
 
     # Seuil de couverture minimal : 75 %.
     hourly.loc[
@@ -171,11 +146,7 @@ def build_hourly_dataset(
         "consumption_kw",
     ] = float("nan")
 
-    hourly = (
-        hourly[OUTPUT_COLUMNS]
-        .sort_values(["site_id", "timestamp"])
-        .reset_index(drop=True)
-    )
+    hourly = hourly[OUTPUT_COLUMNS].sort_values(["site_id", "timestamp"]).reset_index(drop=True)
 
     LOGGER.info(
         "Agrégation terminée : %s heures, %s consommations manquantes",

@@ -1,6 +1,4 @@
-
 import logging
-from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -39,26 +37,18 @@ def load_inference_data(
     origin = pd.Timestamp(forecast_origin)
 
     if origin.tzinfo is None:
-        raise ValueError(
-            "L'origine de prévision doit contenir un fuseau horaire."
-        )
+        raise ValueError("L'origine de prévision doit contenir un fuseau horaire.")
 
     origin = origin.tz_convert("UTC")
 
     if origin.hour != 23 or origin.minute != 0:
-        raise ValueError(
-            "L'origine quotidienne doit être fixée à 23 h UTC."
-        )
+        raise ValueError("L'origine quotidienne doit être fixée à 23 h UTC.")
 
     if origin.second != 0 or origin.microsecond != 0:
-        raise ValueError(
-            "L'origine doit correspondre au début d'une heure."
-        )
+        raise ValueError("L'origine doit correspondre au début d'une heure.")
 
     if history_days < 8:
-        raise ValueError(
-            "L'historique doit couvrir au moins huit jours."
-        )
+        raise ValueError("L'historique doit couvrir au moins huit jours.")
 
     # Fin exclusive : minuit UTC après l'origine.
     end = origin + pd.Timedelta(hours=1)

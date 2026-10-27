@@ -1,7 +1,6 @@
-
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from smart_energy_ml.ingestion.enervision_client import EnerVisionClient
@@ -23,44 +22,22 @@ def validate_period(
     """
 
     if start.tzinfo is None or end.tzinfo is None:
-        raise ValueError(
-            "Les dates doivent être timezone-aware."
-        )
+        raise ValueError("Les dates doivent être timezone-aware.")
 
     if start.utcoffset() != timedelta(0):
-        raise ValueError(
-            "La date de début doit être exprimée en UTC."
-        )
+        raise ValueError("La date de début doit être exprimée en UTC.")
 
     if end.utcoffset() != timedelta(0):
-        raise ValueError(
-            "La date de fin doit être exprimée en UTC."
-        )
+        raise ValueError("La date de fin doit être exprimée en UTC.")
 
     if start >= end:
-        raise ValueError(
-            "La date de début doit précéder la date de fin."
-        )
+        raise ValueError("La date de début doit précéder la date de fin.")
 
-    if (
-        start.hour != 0
-        or start.minute != 0
-        or start.second != 0
-        or start.microsecond != 0
-    ):
-        raise ValueError(
-            "La date de début doit correspondre à minuit UTC."
-        )
+    if start.hour != 0 or start.minute != 0 or start.second != 0 or start.microsecond != 0:
+        raise ValueError("La date de début doit correspondre à minuit UTC.")
 
-    if (
-        end.hour != 0
-        or end.minute != 0
-        or end.second != 0
-        or end.microsecond != 0
-    ):
-        raise ValueError(
-            "La date de fin doit correspondre à minuit UTC."
-        )
+    if end.hour != 0 or end.minute != 0 or end.second != 0 or end.microsecond != 0:
+        raise ValueError("La date de fin doit correspondre à minuit UTC.")
 
 
 def collect_readings(
@@ -96,8 +73,8 @@ def collect_readings(
     validate_period(start, end)
 
     # Normalisation explicite en UTC.
-    start = start.astimezone(timezone.utc)
-    end = end.astimezone(timezone.utc)
+    start = start.astimezone(UTC)
+    end = end.astimezone(UTC)
 
     raw_dir.mkdir(
         parents=True,
@@ -120,13 +97,9 @@ def collect_readings(
                     end,
                 )
 
-                filename = (
-                    f"{site_id}_{current.strftime('%Y%m%d')}.json"
-                )
+                filename = f"{site_id}_{current.strftime('%Y%m%d')}.json"
 
-                output_path = (
-                    raw_dir / site_id / filename
-                )
+                output_path = raw_dir / site_id / filename
 
                 output_path.parent.mkdir(
                     parents=True,
@@ -135,13 +108,7 @@ def collect_readings(
 
                 is_last_day = period_end == end
 
-                should_refresh = (
-                    refresh
-                    or (
-                        refresh_last_day
-                        and is_last_day
-                    )
-                )
+                should_refresh = refresh or (refresh_last_day and is_last_day)
 
                 # Réutilisation du cache pour les journées
                 # déjà collectées, sauf actualisation demandée.
@@ -170,8 +137,7 @@ def collect_readings(
 
                 if not readings:
                     raise ValueError(
-                        f"Aucune mesure EnerVision pour "
-                        f"{site_id} le {current.date()}."
+                        f"Aucune mesure EnerVision pour {site_id} le {current.date()}."
                     )
 
                 payload = {
@@ -204,6 +170,4 @@ def collect_readings(
 
                 current = period_end
 
-    LOGGER.info(
-        "Collecte EnerVision terminée."
-    )
+    LOGGER.info("Collecte EnerVision terminée.")

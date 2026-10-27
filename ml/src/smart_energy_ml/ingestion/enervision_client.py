@@ -1,8 +1,8 @@
-
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from types import TracebackType
 from typing import Any, Self
 
 import httpx
@@ -28,11 +28,7 @@ class EnerVisionClient:
         username = os.getenv("ENERVISION_API_USERNAME")
         password = os.getenv("ENERVISION_API_PASSWORD")
 
-        auth = (
-            httpx.BasicAuth(username, password)
-            if username and password
-            else None
-        )
+        auth = httpx.BasicAuth(username, password) if username and password else None
 
         self.client = httpx.Client(
             base_url=self.base_url,
@@ -50,9 +46,7 @@ class EnerVisionClient:
         """Récupère les mesures énergétiques."""
 
         if not 1 <= limit <= 1000:
-            raise ValueError(
-                "limit doit être compris entre 1 et 1000"
-            )
+            raise ValueError("limit doit être compris entre 1 et 1000")
 
         params: dict[str, Any] = {"limit": limit}
 
@@ -83,9 +77,7 @@ class EnerVisionClient:
         data = response.json()
 
         if not isinstance(data, list):
-            raise TypeError(
-                "Réponse inattendue : une liste JSON était attendue"
-            )
+            raise TypeError("Réponse inattendue : une liste JSON était attendue")
 
         return data
 
@@ -98,9 +90,7 @@ class EnerVisionClient:
         data = response.json()
 
         if not isinstance(data, list):
-            raise TypeError(
-                "Réponse inattendue : une liste JSON était attendue"
-            )
+            raise TypeError("Réponse inattendue : une liste JSON était attendue")
 
         return data
 
@@ -114,6 +104,6 @@ class EnerVisionClient:
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
-        traceback: Any,
+        traceback: TracebackType | None,
     ) -> None:
         self.close()

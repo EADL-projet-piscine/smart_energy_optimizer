@@ -54,10 +54,7 @@ def prepare_dataset(
     LOGGER.info("Étape 3/4 : validation du contrat")
     validate_hourly_readings(df)
 
-    output_path = (
-        PROCESSED_DIR
-        / f"readings_hourly_{start:%Y%m%d}_{end:%Y%m%d}.parquet"
-    )
+    output_path = PROCESSED_DIR / f"readings_hourly_{start:%Y%m%d}_{end:%Y%m%d}.parquet"
 
     LOGGER.info("Étape 4/4 : export Parquet")
     df.to_parquet(output_path, index=False)
@@ -72,9 +69,7 @@ def prepare_dataset(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Prépare le dataset horaire EnerVision."
-    )
+    parser = argparse.ArgumentParser(description="Prépare le dataset horaire EnerVision.")
 
     parser.add_argument(
         "--start",

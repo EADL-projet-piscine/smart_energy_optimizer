@@ -1,8 +1,7 @@
-
 import argparse
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +22,6 @@ from smart_energy_ml.preprocessing.inference_data import (
     load_inference_data,
 )
 
-
 # ---------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------
@@ -37,10 +35,7 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-DATASET_PATH = (
-    BASE_DIR
-    / "data/processed/readings_hourly_20250101_20260701.parquet"
-)
+DATASET_PATH = BASE_DIR / "data/processed/readings_hourly_20250101_20260701.parquet"
 
 RAW_INFERENCE_DIR = BASE_DIR / "data/raw/inference"
 OUTPUT_DIR = BASE_DIR / "data/predictions"
@@ -54,12 +49,10 @@ MODEL_NAME = "smart-energy-rf-global"
 # Arguments CLI
 # ---------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Génération des prévisions énergétiques "
-            "H+1 à H+24 pour chaque site."
-        )
+        description=("Génération des prévisions énergétiques H+1 à H+24 pour chaque site.")
     )
 
     parser.add_argument(
@@ -84,10 +77,7 @@ def parse_args() -> argparse.Namespace:
         "--model-version",
         type=int,
         default=None,
-        help=(
-            "Version MLflow à utiliser. "
-            "Par défaut : alias champion."
-        ),
+        help=("Version MLflow à utiliser. Par défaut : alias champion."),
     )
 
     return parser.parse_args()
@@ -96,6 +86,7 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------
 # Détermination de l'origine
 # ---------------------------------------------------------
+
 
 def get_forecast_origin(
     target_date: str | None,
@@ -115,11 +106,7 @@ def get_forecast_origin(
         if source == "parquet":
             return None
 
-        target_date = (
-            datetime.now(timezone.utc)
-            .date()
-            .isoformat()
-        )
+        target_date = datetime.now(UTC).date().isoformat()
 
     try:
         parsed_date = pd.Timestamp(target_date)
@@ -132,14 +119,9 @@ def get_forecast_origin(
             raise ValueError
 
     except (ValueError, TypeError) as exc:
-        raise ValueError(
-            "La date doit être au format YYYY-MM-DD."
-        ) from exc
+        raise ValueError("La date doit être au format YYYY-MM-DD.") from exc
 
-    forecast_origin = (
-        parsed_date.tz_localize("UTC")
-        - pd.Timedelta(hours=1)
-    )
+    forecast_origin = parsed_date.tz_localize("UTC") - pd.Timedelta(hours=1)
 
     logger.info(
         "Journée cible : %s | Origine : %s",
@@ -154,6 +136,7 @@ def get_forecast_origin(
 # Chargement des données horaires
 # ---------------------------------------------------------
 
+
 def load_hourly_data(
     source: str,
     forecast_origin: pd.Timestamp | None,
@@ -167,17 +150,12 @@ def load_hourly_data(
         )
 
         if not DATASET_PATH.exists():
-            raise FileNotFoundError(
-                f"Dataset introuvable : {DATASET_PATH}"
-            )
+            raise FileNotFoundError(f"Dataset introuvable : {DATASET_PATH}")
 
         return pd.read_parquet(DATASET_PATH)
 
     if forecast_origin is None:
-        raise ValueError(
-            "Une origine de prévision est requise "
-            "pour la collecte API."
-        )
+        raise ValueError("Une origine de prévision est requise pour la collecte API.")
 
     logger.info(
         "Collecte EnerVision pour l'origine %s",
@@ -194,6 +172,7 @@ def load_hourly_data(
 # Sélection du modèle MLflow
 # ---------------------------------------------------------
 
+
 def resolve_model_version(
     requested_version: int | None,
 ) -> int:
@@ -205,9 +184,7 @@ def resolve_model_version(
 
     if requested_version is not None:
         if requested_version < 1:
-            raise ValueError(
-                "La version du modèle doit être positive."
-            )
+            raise ValueError("La version du modèle doit être positive.")
 
         return requested_version
 
@@ -225,6 +202,7 @@ def resolve_model_version(
 # Construction des résultats
 # ---------------------------------------------------------
 
+
 def build_results(
     df_features: pd.DataFrame,
 ) -> list[dict[str, Any]]:
@@ -235,24 +213,24 @@ def build_results(
     for site_id, site_df in df_features.groupby("site_id"):
         site_df = site_df.sort_values("horizon")
 
-        results.append({
-            "site_id": site_id,
-            "site_type": site_df["site_type"].iloc[0],
-            "forecast_origin": (
-                site_df["forecast_origin"].iloc[0].isoformat()
-            ),
-            "predictions": [
-                {
-                    "timestamp": row.target_timestamp.isoformat(),
-                    "horizon": int(row.horizon),
-                    "predicted_consumption_kw": round(
-                        float(row.predicted_consumption_kw),
-                        2,
-                    ),
-                }
-                for row in site_df.itertuples()
-            ],
-        })
+        results.append(
+            {
+                "site_id": site_id,
+                "site_type": site_df["site_type"].iloc[0],
+                "forecast_origin": (site_df["forecast_origin"].iloc[0].isoformat()),
+                "predictions": [
+                    {
+                        "timestamp": row.target_timestamp.isoformat(),
+                        "horizon": int(row.horizon),
+                        "predicted_consumption_kw": round(
+                            float(row.predicted_consumption_kw),
+                            2,
+                        ),
+                    }
+                    for row in site_df.itertuples()
+                ],
+            }
+        )
 
     return results
 
@@ -266,33 +244,23 @@ def validate_predictions(
         horizons = sorted(site_df["horizon"].tolist())
 
         if horizons != list(range(1, 25)):
-            raise ValueError(
-                f"Prévisions incomplètes pour {site_id} : "
-                f"{len(horizons)} horizons."
-            )
+            raise ValueError(f"Prévisions incomplètes pour {site_id} : {len(horizons)} horizons.")
 
         if site_df["forecast_origin"].nunique() != 1:
-            raise ValueError(
-                f"Plusieurs origines détectées pour {site_id}."
-            )
+            raise ValueError(f"Plusieurs origines détectées pour {site_id}.")
 
-        expected_timestamps = (
-            site_df["forecast_origin"]
-            + pd.to_timedelta(site_df["horizon"], unit="h")
+        expected_timestamps = site_df["forecast_origin"] + pd.to_timedelta(
+            site_df["horizon"], unit="h"
         )
 
-        if not (
-            site_df["target_timestamp"]
-            == expected_timestamps
-        ).all():
-            raise ValueError(
-                f"Timestamps incohérents pour {site_id}."
-            )
+        if not (site_df["target_timestamp"] == expected_timestamps).all():
+            raise ValueError(f"Timestamps incohérents pour {site_id}.")
 
 
 # ---------------------------------------------------------
 # Export JSON
 # ---------------------------------------------------------
+
 
 def export_json(
     data: list[dict[str, Any]],
@@ -328,6 +296,7 @@ def export_json(
 # Exécution principale
 # ---------------------------------------------------------
 
+
 def main() -> None:
     args = parse_args()
 
@@ -347,9 +316,7 @@ def main() -> None:
 
     # 3. Construction des caractéristiques
 
-    logger.info(
-        "Construction des caractéristiques d'inférence"
-    )
+    logger.info("Construction des caractéristiques d'inférence")
 
     df_features = build_inference_features(
         df_hourly,
@@ -357,9 +324,7 @@ def main() -> None:
     )
 
     if df_features.empty:
-        raise ValueError(
-            "Aucune caractéristique d'inférence générée."
-        )
+        raise ValueError("Aucune caractéristique d'inférence générée.")
 
     logger.info(
         "%s exemples générés pour %s sites",
@@ -371,9 +336,7 @@ def main() -> None:
 
     mlflow.set_tracking_uri(TRACKING_URI)
 
-    model_version = resolve_model_version(
-        args.model_version
-    )
+    model_version = resolve_model_version(args.model_version)
 
     model_uri = f"models:/{MODEL_NAME}/{model_version}"
 
@@ -389,18 +352,12 @@ def main() -> None:
 
     logger.info("Calcul des prévisions")
 
-    predictions = model.predict(
-        df_features[FEATURE_COLUMNS]
-    )
+    predictions = model.predict(df_features[FEATURE_COLUMNS])
 
     if not np.isfinite(predictions).all():
-        raise ValueError(
-            "Le modèle a produit des prédictions invalides."
-        )
+        raise ValueError("Le modèle a produit des prédictions invalides.")
 
-    df_features["predicted_consumption_kw"] = (
-        np.clip(predictions, a_min=0, a_max=None)
-    )
+    df_features["predicted_consumption_kw"] = np.clip(predictions, a_min=0, a_max=None)
 
     validate_predictions(df_features)
 
@@ -416,38 +373,23 @@ def main() -> None:
     # 7. Détermination de la date cible
 
     if forecast_origin is not None:
-        output_date = (
-            forecast_origin + pd.Timedelta(hours=1)
-        ).strftime("%Y-%m-%d")
+        output_date = (forecast_origin + pd.Timedelta(hours=1)).strftime("%Y-%m-%d")
     else:
-        target_dates = (
-            df_features["target_timestamp"]
-            .dt.strftime("%Y-%m-%d")
-            .unique()
-        )
+        target_dates = df_features["target_timestamp"].dt.strftime("%Y-%m-%d").unique()
 
-        output_date = (
-            target_dates[0]
-            if len(target_dates) == 1
-            else "latest"
-        )
+        output_date = target_dates[0] if len(target_dates) == 1 else "latest"
 
     # 8. Export des deux fichiers JSON
 
-    forecast_path = (
-        OUTPUT_DIR / f"forecast_{output_date}.json"
-    )
+    forecast_path = OUTPUT_DIR / f"forecast_{output_date}.json"
 
-    db_path = (
-        OUTPUT_DIR / f"forecast_{output_date}_db.json"
-    )
+    db_path = OUTPUT_DIR / f"forecast_{output_date}_db.json"
 
     export_json(results, forecast_path)
     export_json(db_records, db_path)
 
     logger.info(
-        "Traitement terminé : %s prévisions "
-        "pour %s sites (modèle v%s)",
+        "Traitement terminé : %s prévisions pour %s sites (modèle v%s)",
         len(df_features),
         len(results),
         model_version,

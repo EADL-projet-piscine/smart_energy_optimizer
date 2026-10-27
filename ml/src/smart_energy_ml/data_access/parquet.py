@@ -31,9 +31,7 @@ class ParquetDataSource(HourlyReadingsDataSource):
             raise ValueError("La date de début doit précéder la date de fin.")
 
         if not self.file_path.is_file():
-            raise FileNotFoundError(
-                f"Fichier Parquet introuvable : {self.file_path}"
-            )
+            raise FileNotFoundError(f"Fichier Parquet introuvable : {self.file_path}")
 
         df = pd.read_parquet(self.file_path)
 
@@ -43,16 +41,11 @@ class ParquetDataSource(HourlyReadingsDataSource):
         start_utc = pd.Timestamp(start_date).tz_convert("UTC")
         end_utc = pd.Timestamp(end_date).tz_convert("UTC")
 
-        df = df.loc[
-            (df["timestamp"] >= start_utc)
-            & (df["timestamp"] < end_utc)
-        ]
+        df = df.loc[(df["timestamp"] >= start_utc) & (df["timestamp"] < end_utc)]
 
         df = df.loc[:, list(REQUIRED_COLUMNS)].copy()
 
-        df = df.sort_values(
-            ["site_id", "timestamp"]
-        ).reset_index(drop=True)
+        df = df.sort_values(["site_id", "timestamp"]).reset_index(drop=True)
 
         validate_hourly_readings(df)
 

@@ -3,7 +3,6 @@ import argparse
 import mlflow
 from mlflow import MlflowClient
 
-
 MODEL_NAME = "smart-energy-rf-global"
 TRACKING_URI = "sqlite:///mlflow.db"
 
@@ -34,10 +33,7 @@ def main() -> None:
         version=model_version.version,
     )
 
-    print(
-        f"Champion défini : {MODEL_NAME} "
-        f"version {model_version.version}"
-    )
+    print(f"Champion défini : {MODEL_NAME} version {model_version.version}")
 
 
 if __name__ == "__main__":

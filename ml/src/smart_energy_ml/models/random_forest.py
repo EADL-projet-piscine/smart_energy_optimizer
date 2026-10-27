@@ -1,12 +1,8 @@
-
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
-
-from smart_energy_ml.features.feature_engineering import FEATURE_COLUMNS
-
 
 NUMERIC_COLUMNS = [
     "horizon",
@@ -14,7 +10,6 @@ NUMERIC_COLUMNS = [
     "target_day_of_week",
     "target_month",
     "target_is_weekend",
-    
 ]
 
 IMPUTED_COLUMNS = [

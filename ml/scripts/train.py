@@ -1,8 +1,7 @@
-
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from datetime import datetime, timezone
 
 import mlflow
 import mlflow.sklearn
@@ -18,10 +17,7 @@ from smart_energy_ml.models.random_forest import create_pipeline
 
 EXPERIMENT_NAME = "smart-energy-forecasting"
 MODEL_NAME = "smart-energy-rf-global"
-RUN_NAME = (
-    f"rf_365d_h24_"
-    f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-)
+RUN_NAME = f"rf_365d_h24_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
 
 logging.basicConfig(
@@ -30,12 +26,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATASET_PATH = Path(
-    "data/processed/readings_hourly_20250101_20260701.parquet"
-)
+DATASET_PATH = Path("data/processed/readings_hourly_20250101_20260701.parquet")
 
 TRAIN_END = pd.Timestamp("2026-01-01", tz="UTC")
 VALIDATION_END = pd.Timestamp("2026-04-01", tz="UTC")
+
 
 def calculate_metrics(y_true, y_pred) -> dict:
     actual = np.asarray(y_true)
@@ -45,14 +40,10 @@ def calculate_metrics(y_true, y_pred) -> dict:
 
     return {
         "mae_kw": float(mean_absolute_error(actual, predicted)),
-        "rmse_kw": float(
-            np.sqrt(mean_squared_error(actual, predicted))
-        ),
-        "wape_pct": float(
-            np.abs(actual - predicted).sum()
-            / denominator
-            * 100
-        ) if denominator > 0 else float("nan"),
+        "rmse_kw": float(np.sqrt(mean_squared_error(actual, predicted))),
+        "wape_pct": float(np.abs(actual - predicted).sum() / denominator * 100)
+        if denominator > 0
+        else float("nan"),
     }
 
 
@@ -77,8 +68,7 @@ def main() -> None:
     ].copy()
 
     df_validation = df.loc[
-        (df["forecast_origin"] >= TRAIN_END)
-        & (df["target_timestamp"] < VALIDATION_END)
+        (df["forecast_origin"] >= TRAIN_END) & (df["target_timestamp"] < VALIDATION_END)
     ].copy()
 
     if df_train.empty or df_validation.empty:
@@ -104,18 +94,19 @@ def main() -> None:
     pipeline = create_pipeline()
 
     with mlflow.start_run(run_name=RUN_NAME):
-
-        mlflow.log_params({
-            "model_type": "RandomForestRegressor",
-            "training_days": 365,
-            "forecast_horizon": 24,
-            "n_estimators": 50,
-            "max_depth": 15,
-            "min_samples_leaf": 10,
-            "random_state": 42,
-            "train_examples": len(df_train),
-            "validation_examples": len(df_validation),
-        })
+        mlflow.log_params(
+            {
+                "model_type": "RandomForestRegressor",
+                "training_days": 365,
+                "forecast_horizon": 24,
+                "n_estimators": 50,
+                "max_depth": 15,
+                "min_samples_leaf": 10,
+                "random_state": 42,
+                "train_examples": len(df_train),
+                "validation_examples": len(df_validation),
+            }
+        )
 
         logger.info("Début de l'entraînement")
 
@@ -128,10 +119,12 @@ def main() -> None:
         predictions = pipeline.predict(X_val)
         metrics = calculate_metrics(y_val, predictions)
 
-        mlflow.log_metrics({
-            **metrics,
-            "training_seconds": duration,
-        })
+        mlflow.log_metrics(
+            {
+                **metrics,
+                "training_seconds": duration,
+            }
+        )
 
         logger.info("MAE : %.2f kW", metrics["mae_kw"])
         logger.info("RMSE : %.2f kW", metrics["rmse_kw"])
@@ -157,15 +150,17 @@ def main() -> None:
 
         mlflow.log_input(dataset, context="source")
 
-        mlflow.set_tags({
-            "project": "smart-energy-optimizer",
-            "algorithm": "random_forest",
-            "model_scope": "global",
-            "forecast_horizon": "24h",
-            "training_period": "2025",
-            "validation_period": "2026-Q1",
-            "environment": "development",
-        })
+        mlflow.set_tags(
+            {
+                "project": "smart-energy-optimizer",
+                "algorithm": "random_forest",
+                "model_scope": "global",
+                "forecast_horizon": "24h",
+                "training_period": "2025",
+                "validation_period": "2026-Q1",
+                "environment": "development",
+            }
+        )
 
         logger.info("Expérience MLflow enregistrée")
 

@@ -1,13 +1,26 @@
 import argparse
+import importlib.util
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from scripts import predict
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "predict.py"
+
+spec = importlib.util.spec_from_file_location(
+    "predict",
+    SCRIPT_PATH,
+)
+
+if spec is None or spec.loader is None:
+    raise ImportError(f"Impossible de charger {SCRIPT_PATH}")
+
+predict = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(predict)
 
 # ---------------------------------------------------------
 # Fixtures

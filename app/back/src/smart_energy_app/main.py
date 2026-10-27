@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from smart_energy_app.consommation.planificateur import refresh_loop
 from smart_energy_app.consommation.routes import router as consommation_router
 from smart_energy_app.db import database_available
+from smart_energy_app.previsions.routes import router as previsions_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +43,9 @@ app = FastAPI(
 )
 
 app.include_router(consommation_router, prefix="/api/consommations", tags=["Consommations"])
+# Les prévisions viennent de la base, pas de l'API source : elles ne passent
+# donc pas par le planificateur et n'ont pas d'état en mémoire à rafraîchir.
+app.include_router(previsions_router, prefix="/api/previsions", tags=["Prévisions"])
 
 
 @app.get("/health")

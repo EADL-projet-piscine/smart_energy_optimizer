@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     history_site_count: int = 7
     history_margin_s: int = 300
     consumption_min_refresh_s: float = 2.0
+    forecast_hours: int = 24
     # Seuils des alertes de capacité, en pourcentage de la capacité du site.
     # Celui d'extinction est volontairement plus bas que celui de levée : avec
     # un seuil unique, un site qui oscille autour de 90 % ferait clignoter son

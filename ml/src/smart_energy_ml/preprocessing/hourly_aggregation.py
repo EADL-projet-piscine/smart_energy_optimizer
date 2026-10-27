@@ -2,8 +2,6 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-import os
-import stat
 
 import pandas as pd
 
@@ -21,42 +19,6 @@ OUTPUT_COLUMNS = [
     "total_readings",
     "coverage_pct",
 ]
-
-def load_raw_files(raw_dir: Path, days: pd.DatetimeIndex) -> list[dict]:
-    """Charge les fichiers JSON du répertoire autorisé."""
-
-    base_dir = raw_dir.resolve(strict=True)
-    payloads = []
-
-    for day in days:
-        for file_path in base_dir.glob(f"SITE*/SITE*_{day:%Y%m%d}.json"):
-            if file_path.is_symlink() or file_path.parent.is_symlink():
-                raise ValueError(f"Lien symbolique interdit : {file_path}")
-
-            resolved = file_path.resolve(strict=True)
-
-            if not resolved.is_relative_to(base_dir):
-                raise ValueError(f"Chemin non autorisé : {file_path}")
-
-            flags = os.O_RDONLY
-
-            if hasattr(os, "O_NOFOLLOW"):
-                flags |= os.O_NOFOLLOW
-
-            fd = os.open(resolved, flags)
-
-            try:
-                if not stat.S_ISREG(os.fstat(fd).st_mode):
-                    raise ValueError(f"Fichier invalide : {file_path}")
-
-                with os.fdopen(fd, encoding="utf-8") as file:
-                    fd = -1
-                    payloads.append(json.load(file))
-            finally:
-                if fd != -1:
-                    os.close(fd)
-
-    return payloads
 
 
 def build_hourly_dataset(
@@ -87,14 +49,19 @@ def build_hourly_dataset(
         inclusive="left",
     )
 
-    payloads = load_raw_files(raw_dir, days)
+    files = sorted(
+        file_path for day in days for file_path in raw_dir.glob(f"SITE*/SITE*_{day:%Y%m%d}.json")
+    )
 
-    if not payloads:
+    if not files:
         raise FileNotFoundError(f"Aucun fichier JSON EnerVision trouvé dans {raw_dir}")
 
     records = []
 
-    for payload in payloads:
+    for file_path in files:
+        with file_path.open(encoding="utf-8") as file:
+            payload = json.load(file)
+
         for reading in payload["readings"]:
             records.append(
                 {

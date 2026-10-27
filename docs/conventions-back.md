@@ -42,6 +42,12 @@ deux modes de défaillance. Les fusionner dans un seul fichier rendrait les
 deux plus difficiles à lire et à tester. Dans ce cas, le fichier porte le
 nom de l'usage, pas un suffixe technique.
 
+`alertes` suit la même règle : sa seule règle aujourd'hui vit dans
+`capacite.py`, et une règle future sur la perte de transmission vivra dans
+son propre fichier plutôt que de grossir celui-là. Un module peut donc
+n'avoir ni `routes.py` ni `service.py` : il expose son état, et c'est un
+autre module qui le sert.
+
 ### Pourquoi séparer `models.py` et `schemas.py`
 
 `models.py` décrit la base de données. `schemas.py` décrit le contrat de
@@ -77,6 +83,21 @@ from .service import get_site, list_sites
 
 __all__ = ["get_site", "list_sites"]
 ```
+
+Un module qui n'expose qu'un objet d'état suit la même règle :
+
+```python
+# alertes/__init__.py
+from .capacite import capacity_alerts
+
+__all__ = ["capacity_alerts"]
+```
+
+> Cette règle se contourne sans effort et sans erreur visible : un import
+> direct fonctionne parfaitement. Rien ne l'attrape, ni ruff, ni les tests.
+> Seule la relecture la voit — d'où l'intérêt de la vérifier avant d'ouvrir
+> une pull request : `grep -rn "from smart_energy_app\.[a-z]*\." src/` ne
+> doit remonter que des imports de `commun` et du module courant.
 
 ## Ce qui vit hors des modules
 
@@ -165,10 +186,68 @@ portées par Azure Data Factory, hors du back-end.
 | `fetched_at` | Heure de la mesure |
 | `next_at` | Heure de la prochaine mesure, pour que le client s'y cale |
 | `stale` | Vrai si la mesure dépasse `CONSUMPTION_STALENESS_S` |
+| `last_readings` | Dernière consommation réellement mesurée de chaque site, avec son heure |
+| `alertes` | Alertes de capacité en cours, calculées depuis la charge constatée |
 
 `next_at` évite au front de sonder à l'aveugle : il planifie son appel juste
 après l'heure annoncée, et reçoit chaque mesure quelques secondes après
 qu'elle existe, pour un seul appel par cycle.
+
+`last_readings` et `alertes` vivent **à côté** de `data`, jamais dedans :
+`data` est le résumé de la source, relayé tel quel, et y glisser nos propres
+calculs les rendrait indiscernables de ce que la source a envoyé.
+
+## La mémoire des dernières mesures
+
+La source renvoie `null` dès qu'un site cesse de transmettre, et le cycle
+suivant écrase la valeur précédente. Sans mémoire, l'écran n'a plus aucun
+chiffre à montrer alors que l'historique prouve que le site consommait deux
+heures plus tôt.
+
+`consommation/last_readings.py` retient donc la dernière consommation **non
+nulle** de chaque site. Toute la règle tient en une phrase : *une valeur
+absente n'est pas une valeur nulle, et n'a donc aucune raison d'écraser ce
+qu'on savait déjà.*
+
+Ce n'est pas un cache. Un cache expire et se reconstruit depuis sa source ;
+ici la valeur est conservée précisément parce que la source ne sait plus la
+donner. Deux limites à connaître :
+
+- la mémoire **part vide à chaque redémarrage** : un site déjà muet au
+  démarrage n'y figure pas tant qu'il n'a pas transmis une fois ;
+- elle **ne survit pas au conteneur**. C'est à cela que servira la base, le
+  jour où ce sera un ticket.
+
+## Les alertes de capacité
+
+`alertes/capacite.py` évalue à chaque cycle, depuis le résumé déjà en
+mémoire, sans appel réseau supplémentaire. Trois seuils, tous en
+configuration :
+
+| Seuil | Défaut | Effet |
+|---|---|---|
+| `ALERT_CRITICAL_PCT` | 100 | lève une alerte critique |
+| `ALERT_MEDIUM_PCT` | 90 | lève une alerte moyenne |
+| `ALERT_CLEAR_PCT` | 85 | éteint l'alerte |
+
+**Le seuil d'extinction est volontairement plus bas que celui de levée.**
+Avec un seuil unique, un site qui oscille autour de 90 % verrait son alerte
+clignoter à chaque minute. Entre 85 et 90, rien ne change : une alerte déjà
+levée le reste, une situation calme le reste aussi.
+
+Deux règles qui se discutent et qu'il faut pouvoir défendre :
+
+**Une charge inconnue ne lève rien et n'éteint rien.** Perdre la mesure ne
+prouve pas que la surcharge a cessé. Éteindre l'alerte reviendrait à
+affirmer que tout va bien alors qu'on ne sait plus. Conséquence visible : un
+site muet garde son alerte, avec la dernière charge connue.
+
+**Un changement de gravité est un nouvel événement.** L'alerte garde son
+horodatage de levée tant qu'elle ne change pas de sévérité ; elle en prend
+un nouveau quand elle passe de moyenne à critique ou l'inverse. En revanche
+`load_percent` suit la charge courante — c'est ce qui dit si la situation
+empire. Les deux ne décrivent donc pas le même instant, et un client qui les
+présenterait comme un seul fait mentirait.
 
 ### Nommage des endpoints
 
@@ -265,9 +344,30 @@ peut donc pas être lue directement : elle doit être intégrée à partir des
 puissances.
 
 **Les alertes de `/alerts` sont décorrélées des mesures.** Elles sont
-générées indépendamment de la consommation réelle. Les afficher à côté de
-nos propres courbes produirait des contradictions visibles. Nos badges et
-seuils sont dérivés des mesures, pas de cet endpoint.
+générées indépendamment de la consommation réelle, et régénérées à chaque
+appel. Les afficher à côté de nos propres courbes produirait des
+contradictions visibles. Nos badges et seuils sont dérivés des mesures, pas
+de cet endpoint.
+
+**Aucun seuil contractuel n'existe dans cette API.** Ni dans `/sites`, ni
+dans `/stats/summary`, ni ailleurs. Ce qui existe est `capacity_kw`, la
+capacité technique de l'installation, présente dans les deux. Le `threshold`
+que porte une alerte de `/alerts` est le seuil de détection interne du
+simulateur — 135 kW pour un site de 200 kW de capacité — et non un
+engagement commercial : l'afficher sous le nom « seuil contractuel » ferait
+passer l'un pour l'autre.
+
+**`/sensors/status` donne l'inventaire complet des capteurs.** Cinq par
+site : `consumption`, `electrical`, `temperature`, `humidity`, `network`.
+Ce sont exactement les cinq codes que `null_reasons` peut contenir
+(`consumption_sensor_failure`, `electrical_sensor_failure`,
+`temperature_sensor_failure`, `humidity_sensor_failure`, `network_loss`) —
+c'est la seule source qui permette d'affirmer que la liste est complète.
+
+L'endpoint porte aussi `failing_until`, l'heure de rétablissement prévue.
+Peu exploitable en l'état : les pannes du simulateur durent quelques
+secondes, là où notre boucle tourne à la minute. L'information serait
+périmée avant d'être affichée.
 
 **`/readings` n'est pas reproductible.** Deux appels identiques renvoient
 des valeurs différentes : la source régénère son historique à chaque fois.
@@ -325,12 +425,20 @@ Les tests suivent la même organisation que le code, un fichier par fichier :
 tests/
 ├── conftest.py
 ├── test_health.py
+├── alertes/
+│   └── test_capacite.py
 └── consommation/
     ├── test_client.py
     ├── test_historique.py
+    ├── test_last_readings.py
     ├── test_routes.py
     └── test_service.py
 ```
+
+Les dossiers de `tests/` n'ont **pas** de `__init__.py` : pytest les trouve
+sans. En ajouter un à un seul dossier crée une asymétrie que rien ne
+justifie. Contrepartie : deux fichiers de test ne peuvent pas porter le même
+nom dans deux dossiers différents.
 
 Un test ne doit pas dépendre du lancement de Docker ni d'un appel réseau
 réel. Si une fonction a besoin de la base, le test remplace le repository ;
@@ -343,9 +451,16 @@ plutôt qu'être ignoré, sinon une base absente rendrait la CI verte à tort.
 
 Un test gagne à garder un piège plutôt qu'à vérifier une évidence. Les plus
 utiles de cette suite vérifient que les bornes envoyées à la source sont en
-UTC et dans le passé, que `limit` vaut bien `heures × sites`, et que
-`next_at` reflète la cadence configurée — trois erreurs qui ont réellement
-coûté du temps.
+UTC et dans le passé, que `limit` vaut bien `heures × sites`, que `next_at`
+reflète la cadence configurée, qu'une valeur absente n'efface pas la
+dernière mesure connue, et qu'une charge inconnue n'éteint pas une alerte —
+cinq erreurs qui ont réellement coûté du temps, ou qui auraient pu.
+
+Un piège qui mérite son test : **`bool` est une sous-classe de `int` en
+Python.** Sans garde-fou explicite, un `true` reçu de la source passerait
+pour une consommation de 1 kW. `commun` n'a pas vocation à porter ce genre
+de contrôle : la lecture défensive du résumé vit dans
+`consommation/payload.py`, et les modules qui en ont besoin l'importent.
 
 ## Avant de pousser
 

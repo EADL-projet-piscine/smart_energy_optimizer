@@ -537,6 +537,14 @@ par Git. Le fichier `.env.example` sert de modèle.
 | `HISTORY_HOURS`           | Profondeur de l'historique renvoyé, en heures                     | `24`                                                                                                                     |
 | `HISTORY_SITE_COUNT`      | Nombre de sites du parc, qui fixe le pas d'échantillonnage        | `7`                                                                                                                      |
 | `HISTORY_MARGIN_S`        | Marge sur l'heure courante, pour l'écart d'horloge avec la source | `300`                                                                                                                    |
+| `ALERT_CRITICAL_PCT`      | Charge à partir de laquelle une alerte critique est levée, en %   | `100`                                                                                                                    |
+| `ALERT_MEDIUM_PCT`        | Charge à partir de laquelle une alerte moyenne est levée, en %    | `90`                                                                                                                     |
+| `ALERT_CLEAR_PCT`         | Charge sous laquelle une alerte s'éteint, en %                    | `85`                                                                                                                     |
+
+Les trois seuils d'alerte vont par paire : celui d'extinction est
+volontairement plus bas que celui de levée. Avec un seuil unique, un site
+qui oscille autour de 90 % ferait clignoter son alerte à chaque cycle. Le
+détail de la règle est dans `docs/conventions-back.md`.
 
 ### Dashboard (`app/front/.env`)
 
@@ -585,9 +593,22 @@ votre machine. Arrêtez le programme qui l'occupe, ou changez le port dans
 Vérifiez `docker compose ps`, puis `docker compose logs db`.
 
 **Les logs affichent `l'API a répondu 401`** — les identifiants de l'API
-source manquent ou sont faux. Vérifiez `ENERVISION_USER` et
-`ENERVISION_PASSWORD` dans `app/back/.env`, et relancez l'application : le
-fichier n'est lu qu'au démarrage.
+source manquent ou sont faux. Trois causes, dans l'ordre :
+
+1. `ENERVISION_USER` ou `ENERVISION_PASSWORD` est absent de `app/back/.env`.
+2. Le fichier existe, mais **le conteneur ne le lit pas**. Le service `back`
+   de `docker-compose.yml` doit porter `env_file: [app/back/.env]` : sans
+   cette ligne, le conteneur démarre sans identifiants et toutes les
+   requêtes à la source reviennent en 401. Pour vérifier ce qu'il voit
+   réellement, sans afficher les valeurs :
+
+   ```bash
+   docker compose exec back env | grep -o '^ENERVISION_[A-Z_]*'
+   ```
+
+   Les deux variables doivent y figurer.
+3. L'application tourne sur une version antérieure du fichier : il n'est lu
+   qu'au démarrage. Relancez-la.
 
 **`/api/consommations` répond 503** — aucune mesure n'a encore été
 récupérée. Regardez les logs de l'application : le rafraîchissement tourne
@@ -632,8 +653,19 @@ npm run preview`, un seul appel.
 `services/format.ts` le corrige ; si vous ajoutez un champ horodaté, pensez
 à le faire passer par cette fonction.
 
-**`Temporary failure in name resolution` dans WSL** — le réseau de WSL est
-tombé. Depuis PowerShell : `wsl --shutdown`, puis rouvrir le terminal.
+**`Could not resolve host: github.com` dans WSL** — la résolution de noms
+est tombée, pas le réseau : `ping -c1 8.8.8.8` passe encore. Depuis
+PowerShell — pas depuis Ubuntu, où la commande n'existe pas —
+`wsl --shutdown`, puis rouvrir le terminal. Si cela ne suffit pas,
+`systemd-resolved` n'a plus de serveur en amont :
+
+```bash
+sudo rm -f /etc/resolv.conf
+printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' | sudo tee /etc/resolv.conf
+printf '[network]\ngenerateResolvConf = false\n' | sudo tee /etc/wsl.conf
+```
+
+La dernière ligne évite que WSL réécrase le fichier au prochain démarrage.
 
 **`npm run dev` échoue sur la version de Node** — `nvm use` depuis
 `app/front` sélectionne Node 22, la version fixée dans `.nvmrc` et utilisée

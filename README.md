@@ -597,11 +597,50 @@ par Git. Le fichier `.env.example` sert de modèle.
 | `ALERT_CRITICAL_PCT`      | Charge à partir de laquelle une alerte critique est levée, en %   | `100`                                                                                                                    |
 | `ALERT_MEDIUM_PCT`        | Charge à partir de laquelle une alerte moyenne est levée, en %    | `90`                                                                                                                     |
 | `ALERT_CLEAR_PCT`         | Charge sous laquelle une alerte s'éteint, en %                    | `85`                                                                                                                     |
+| `AUTH_ENABLED`            | Active l'authentification : sans session valide, les routes `/api` répondent 401 | `false` : routes ouvertes                                                                                                |
+| `JWT_SECRET`              | Clé de signature des jetons, 32 caractères au moins (`openssl rand -hex 32`) | vide : **obligatoire** quand `AUTH_ENABLED=true`, sinon l'API refuse de démarrer                                         |
+| `JWT_TTL_MINUTES`         | Durée de vie du jeton de session, en minutes                      | `15`                                                                                                                     |
+| `AUTH_COOKIE_SECURE`      | Cookie de session réservé au HTTPS (et à `localhost`)             | `true` : ne désactiver que pour un serveur en HTTP                                                                       |
 
 Les trois seuils d'alerte vont par paire : celui d'extinction est
 volontairement plus bas que celui de levée. Avec un seuil unique, un site
 qui oscille autour de 90 % ferait clignoter son alerte à chaque cycle. Le
 détail de la règle est dans `docs/conventions-back.md`.
+
+### Authentification de l'API
+
+Activée par `AUTH_ENABLED=true` (désactivée par défaut, tant que le dashboard
+ne sait pas se connecter). Elle répond au constat C1 de l'audit de sécurité.
+
+- **Connexion** : `POST /api/auth/login` avec `{"email", "password"}`. Le mot
+  de passe est vérifié contre son condensé argon2 (table `users`) ; en retour,
+  un jeton JWT signé de 15 minutes est posé dans le cookie
+  `enervision_session` (`HttpOnly`, `Secure`, `SameSite=Strict`, limité à
+  `/api`). Le dashboard n'a donc jamais le jeton en main. `POST
+  /api/auth/logout` efface le cookie ; `GET /api/auth/me` décrit la session.
+- **Routes protégées** : toutes les routes `/api` répondent **401** sans
+  session valide (cookie absent, expiré ou falsifié). `/health` et la
+  documentation (`/docs`) restent ouvertes.
+- **Rôles et sites** : `admin` et `operator` voient tout le parc ; `viewer` ne
+  voit que les sites dont il est le client (`sites.client_user_id`). Les
+  listes et les totaux sont filtrés, et un autre site répond **403**, qu'il
+  existe ou non. Les rôles et les sites sont figés dans le jeton : un
+  changement de droits prend effet à la connexion suivante, au plus tard
+  15 minutes après.
+- **Comptes** : pas d'inscription en ligne. Un administrateur les crée en
+  ligne de commande ; le mot de passe (12 caractères au moins) est demandé au
+  clavier :
+
+      docker compose exec back python -m smart_energy_app.auth.create_user \
+        --email ada@example.com --name "Ada Lovelace" --role viewer \
+        --site SITE001 --site SITE003
+
+Les tests `tests/auth/` vérifient à chaque pull request les 401 de chaque route,
+les 403 hors périmètre, le filtrage des réponses et la connexion sur une vraie
+base. **Production** : `AUTH_ENABLED` et `JWT_SECRET` vont dans le `back.env`
+de la VM. Le cookie `Secure` exige le HTTPS, absent aujourd'hui (constat C6) ;
+d'ici là, la connexion ne fonctionne pas en production sans
+`AUTH_COOKIE_SECURE=false`, qui ferait circuler la session en clair.
 
 ### Dashboard (`app/front/.env`)
 

@@ -14,7 +14,7 @@ beforeEach(() => {
 })
 
 describe('loadSummary', () => {
-  it('queries the back end summary route and unwraps its envelope', async () => {
+  it('interroge la route résumé du back et déballe son enveloppe', async () => {
     vi.mocked(fetchJson).mockResolvedValue({
       data: SUMMARY,
       fetched_at: '2026-10-21T09:35:00+00:00',
@@ -29,19 +29,19 @@ describe('loadSummary', () => {
     expect(nextAt).toBe('2026-10-21T09:36:00+00:00')
   })
 
-  it('returns null as the next reading when the server does not announce one', async () => {
+  it('rend null comme prochaine mesure quand le serveur ne l’annonce pas', async () => {
     vi.mocked(fetchJson).mockResolvedValue({ data: SUMMARY })
 
     await expect(loadSummary()).resolves.toMatchObject({ nextAt: null })
   })
 
-  it('ignores a next reading that is not a string', async () => {
+  it('ignore une prochaine mesure qui n’est pas une chaîne', async () => {
     vi.mocked(fetchJson).mockResolvedValue({ data: SUMMARY, next_at: 1761037200 })
 
     await expect(loadSummary()).resolves.toMatchObject({ nextAt: null })
   })
 
-  it('accepts a summary sent without an envelope', async () => {
+  it('accepte un résumé envoyé sans enveloppe', async () => {
     vi.mocked(fetchJson).mockResolvedValue(SUMMARY)
 
     await expect(loadSummary()).resolves.toMatchObject({
@@ -50,8 +50,8 @@ describe('loadSummary', () => {
     })
   })
 
-  it.each([null, 'unexpected', { data: { unexpected: true } }])(
-    'rejects a response it cannot read: %j',
+  it.each([null, 'inattendu', { data: { inattendu: true } }])(
+    'refuse une réponse qu’il ne sait pas lire : %j',
     async (body) => {
       vi.mocked(fetchJson).mockResolvedValue(body)
 
@@ -59,7 +59,7 @@ describe('loadSummary', () => {
     },
   )
 
-  it('lets a network failure bubble up', async () => {
+  it('laisse remonter l’échec de l’appel réseau', async () => {
     vi.mocked(fetchJson).mockRejectedValue(new Error('Statut 503'))
 
     await expect(loadSummary()).rejects.toThrow('Statut 503')

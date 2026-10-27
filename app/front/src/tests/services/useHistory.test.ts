@@ -13,8 +13,8 @@ const HISTORY: History = {
   },
 }
 
-/** History cadence, in milliseconds. The source steps hourly, so refreshing
- * more often would show nothing new. */
+/** Cadence de l'historique, en millisecondes. Le pas de la source étant
+ * horaire, rafraîchir plus souvent ne montrerait rien de neuf. */
 const REFRESH_MS = 300_000
 
 beforeEach(() => {
@@ -28,15 +28,15 @@ afterEach(() => {
 })
 
 describe('useHistory', () => {
-  it('exposes the history it received', async () => {
+  it('expose l’historique reçu', async () => {
     const { result } = renderHook(() => useHistory())
 
     await waitFor(() => expect(result.current.history).toEqual(HISTORY))
     expect(result.current.error).toBeNull()
   })
 
-  it('reports an error without inventing a curve', async () => {
-    // An empty chart is honest, a reconstructed one is not.
+  it('signale une erreur sans inventer de courbe', async () => {
+    // Un graphique vide est honnête, un graphique reconstitué ne l'est pas.
     vi.mocked(loadHistory).mockRejectedValue(new Error('Statut 502'))
 
     const { result } = renderHook(() => useHistory())
@@ -45,15 +45,15 @@ describe('useHistory', () => {
     expect(result.current.history).toBeNull()
   })
 
-  it('gives a generic message on an error without one', async () => {
-    vi.mocked(loadHistory).mockRejectedValue('failure')
+  it('donne un message générique sur une erreur sans message', async () => {
+    vi.mocked(loadHistory).mockRejectedValue('panne')
 
     const { result } = renderHook(() => useHistory())
 
     await waitFor(() => expect(result.current.error).toBe('Historique indisponible'))
   })
 
-  it('refreshes every five minutes', async () => {
+  it('rafraîchit toutes les cinq minutes', async () => {
     renderHook(() => useHistory())
     await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(1))
 
@@ -62,7 +62,7 @@ describe('useHistory', () => {
     await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(2))
   })
 
-  it('does not refresh before it is due', async () => {
+  it('ne rafraîchit pas avant l’échéance', async () => {
     renderHook(() => useHistory())
     await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(1))
 
@@ -71,7 +71,7 @@ describe('useHistory', () => {
     expect(loadHistory).toHaveBeenCalledTimes(1)
   })
 
-  it('forgets a past error once the next call succeeds', async () => {
+  it('oublie une erreur passée quand l’appel suivant réussit', async () => {
     vi.mocked(loadHistory).mockRejectedValueOnce(new Error('Statut 502'))
 
     const { result } = renderHook(() => useHistory())
@@ -83,7 +83,7 @@ describe('useHistory', () => {
     expect(result.current.history).toEqual(HISTORY)
   })
 
-  it('calls nothing more after unmount', async () => {
+  it('n’appelle plus rien après le démontage', async () => {
     const { unmount } = renderHook(() => useHistory())
     await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(1))
 

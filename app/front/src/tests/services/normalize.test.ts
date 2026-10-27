@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { attachCapacityAlerts, attachLastReadings, normalizeSummary } from '../../services/normalize'
 
-// Same shape as a real /api/v1/stats/summary response from the EnerVision API.
+// Même forme qu'une vraie réponse de /api/v1/stats/summary de l'API EnerVision.
 const ENERVISION_SUMMARY = {
   timestamp: '2026-10-21T09:34:44.744410',
   total_sites: 2,
@@ -26,8 +26,8 @@ const ENERVISION_SUMMARY = {
   ],
 }
 
-describe('normalizeSummary — response shape', () => {
-  it('reads a summary from the EnerVision API', () => {
+describe('normalizeSummary — forme de la réponse', () => {
+  it('lit un résumé de l’API EnerVision', () => {
     const result = normalizeSummary(ENERVISION_SUMMARY)
 
     expect(result).toMatchObject({
@@ -45,17 +45,17 @@ describe('normalizeSummary — response shape', () => {
     ])
   })
 
-  it('unwraps the envelope sent by the back end', () => {
+  it('déballe l’enveloppe envoyée par le back', () => {
     const envelope = { data: ENERVISION_SUMMARY, fetched_at: '2026-10-21T09:35:00+00:00', stale: false }
 
     expect(normalizeSummary(envelope)).toEqual(normalizeSummary(ENERVISION_SUMMARY))
   })
 
-  it.each([null, 'unexpected', 42, {}, [], { data: {} }])('returns null on an unknown body: %j', (body) => {
+  it.each([null, 'inattendu', 42, {}, [], { data: {} }])('rend null sur un corps inconnu : %j', (body) => {
     expect(normalizeSummary(body)).toBeNull()
   })
 
-  it('accepts sites indexed by identifier', () => {
+  it('accepte des sites indexés par identifiant', () => {
     const result = normalizeSummary({
       sites: { SITE001: 120, SITE002: { name: 'Usine Lyon', current_kw: 80 } },
     })
@@ -66,21 +66,21 @@ describe('normalizeSummary — response shape', () => {
     ])
   })
 
-  it('ignores entries that are not sites', () => {
-    const result = normalizeSummary({ sites: [null, 'text', { site_id: 'SITE001', current_kw: 10 }] })
+  it('ignore les entrées qui ne sont pas des sites', () => {
+    const result = normalizeSummary({ sites: [null, 'texte', { site_id: 'SITE001', current_kw: 10 }] })
 
     expect(result?.sites.map((site) => site.id)).toEqual(['SITE001'])
   })
 
-  it('gives a default identifier to an anonymous site', () => {
+  it('attribue un identifiant par défaut à un site anonyme', () => {
     const result = normalizeSummary({ sites: [{ current_kw: 10 }, { current_kw: 20 }] })
 
     expect(result?.sites.map((site) => site.id)).toEqual(['SITE001', 'SITE002'])
   })
 })
 
-describe('normalizeSummary — values', () => {
-  it('reads French-formatted numbers and spelled-out booleans', () => {
+describe('normalizeSummary — valeurs', () => {
+  it('lit les nombres à la française et les booléens écrits en toutes lettres', () => {
     const result = normalizeSummary({
       sites: [{ site_id: 'SITE001', current_consumption_kw: '1 234,5', online: 'offline' }],
     })
@@ -93,7 +93,7 @@ describe('normalizeSummary — values', () => {
     expect(result).toMatchObject({ excludedSites: ['SITE001'], coveragePct: 0 })
   })
 
-  it('infers that a site transmits when it has a reading, even without a flag', () => {
+  it('déduit qu’un site transmet quand il a une mesure, même sans indicateur', () => {
     const result = normalizeSummary({
       sites: [{ site_id: 'SITE001', current_kw: 10 }, { site_id: 'SITE002' }],
     })
@@ -101,7 +101,7 @@ describe('normalizeSummary — values', () => {
     expect(result?.sites.map((site) => site.isTransmitting)).toEqual([true, false])
   })
 
-  it('recognises the status labels of the API', () => {
+  it('reconnaît les libellés d’état de l’API', () => {
     const result = normalizeSummary({
       sites: [
         { site_id: 'A', current_kw: 1, status: 'forecast_exceedance' },
@@ -119,7 +119,7 @@ describe('normalizeSummary — values', () => {
     ])
   })
 
-  it('reads the exclusion list as identifiers or as objects', () => {
+  it('lit la liste d’exclusion sous forme d’identifiants ou d’objets', () => {
     const result = normalizeSummary({
       total_consumption_kw: 100,
       excluded_sites: ['SITE004', { site_id: 'SITE005' }, 42],
@@ -128,7 +128,7 @@ describe('normalizeSummary — values', () => {
     expect(result?.excludedSites).toEqual(['SITE004', 'SITE005'])
   })
 
-  it('reads the fleet indicators provided by the API', () => {
+  it('lit les indicateurs du parc fournis par l’API', () => {
     const result = normalizeSummary({
       total_consumption_kw: 100,
       daily_cost_eur: 4200,
@@ -154,8 +154,8 @@ describe('normalizeSummary — values', () => {
   })
 })
 
-describe('normalizeSummary — alerts and recommendations', () => {
-  it('translates severities and attaches a fleet alert to its site, only once', () => {
+describe('normalizeSummary — alertes et recommandations', () => {
+  it('traduit les gravités et rattache une alerte du parc à son site, une seule fois', () => {
     const result = normalizeSummary({
       sites: [
         {
@@ -179,15 +179,15 @@ describe('normalizeSummary — alerts and recommendations', () => {
     expect(result).toMatchObject({ totalAlerts: 2, criticalAlerts: 1, mediumAlerts: 1 })
   })
 
-  it('files an unknown severity as plain information', () => {
+  it('range une gravité inconnue en simple information', () => {
     const result = normalizeSummary({
-      sites: [{ site_id: 'SITE001', current_kw: 1, alerts: [{ message: 'À noter', severity: 'odd' }] }],
+      sites: [{ site_id: 'SITE001', current_kw: 1, alerts: [{ message: 'À noter', severity: 'bizarre' }] }],
     })
 
     expect(result?.sites[0].alerts[0]).toMatchObject({ severity: 'info', id: 'alerte-0', title: 'Alerte' })
   })
 
-  it('discards an alert with neither title nor message', () => {
+  it('écarte une alerte sans titre ni message', () => {
     const result = normalizeSummary({
       sites: [{ site_id: 'SITE001', current_kw: 1, alerts: [{ severity: 'critical' }, null] }],
     })
@@ -195,7 +195,7 @@ describe('normalizeSummary — alerts and recommendations', () => {
     expect(result?.sites[0].alerts).toEqual([])
   })
 
-  it('formats the saving of a recommendation in euros', () => {
+  it('formate l’économie d’une recommandation en euros', () => {
     const result = normalizeSummary({
       sites: [
         {
@@ -226,8 +226,8 @@ describe('normalizeSummary — alerts and recommendations', () => {
   })
 })
 
-describe('normalizeSummary — dated series', () => {
-  it('sorts the points chronologically', () => {
+describe('normalizeSummary — séries datées', () => {
+  it('trie les points dans le temps', () => {
     const result = normalizeSummary({
       sites: [
         {
@@ -248,12 +248,12 @@ describe('normalizeSummary — dated series', () => {
     ])
   })
 
-  it('discards a point without a readable timestamp', () => {
+  it('écarte un point sans horodatage lisible', () => {
     const result = normalizeSummary({
       sites: [
         {
           site_id: 'SITE001',
-          series: [{ measured_kw: 10 }, { timestamp: 'not a date', measured_kw: 11 }, 42, null],
+          series: [{ measured_kw: 10 }, { timestamp: 'pas une date', measured_kw: 11 }, 42, null],
         },
       ],
     })
@@ -261,7 +261,7 @@ describe('normalizeSummary — dated series', () => {
     expect(result?.sites[0].series).toEqual([])
   })
 
-  it('keeps a dated point without a value: a missing reading stays visible', () => {
+  it('garde un point daté sans valeur : l’absence de mesure reste visible', () => {
     const result = normalizeSummary({
       sites: [{ site_id: 'SITE001', series: [{ timestamp: '2026-10-21T09:00:00Z' }] }],
     })
@@ -271,7 +271,7 @@ describe('normalizeSummary — dated series', () => {
     ])
   })
 
-  it('reads the fleet series when the API provides one', () => {
+  it('lit la série du parc quand l’API la fournit', () => {
     const result = normalizeSummary({
       total_consumption_kw: 100,
       series: [{ timestamp: '2026-10-21T09:00:00Z', measured_kw: 100 }],
@@ -281,27 +281,27 @@ describe('normalizeSummary — dated series', () => {
   })
 })
 
-// ─────────────────────────── Business API envelope ───────────────────────────
+// ─────────────────────────── Enveloppe de l'API métier ───────────────────────
 
-// These two functions run after normalisation: the last known readings and the
-// capacity alerts travel in the envelope set by the business API, next to the
-// summary rather than inside it.
+// Ces deux fonctions s'appliquent après la normalisation : les dernières
+// mesures connues et les alertes de capacité voyagent dans l'enveloppe posée
+// par l'API métier, à côté du résumé, et non dedans.
 
-/** Minimal two-site summary, one of which has gone silent. */
-function baseSummary() {
+/** Résumé minimal à deux sites, dont l'un s'est tu. */
+function resume() {
   const summary = normalizeSummary({
     sites: [
       { site_id: 'SITE001', current_consumption_kw: null },
       { site_id: 'SITE007', current_consumption_kw: 907, capacity_kw: 950 },
     ],
   })
-  if (!summary) throw new Error('summary not recognised')
+  if (!summary) throw new Error('résumé non reconnu')
   return summary
 }
 
 describe('attachLastReadings', () => {
-  it('attaches the last known reading to the right site', () => {
-    const result = attachLastReadings(baseSummary(), {
+  it('attache la dernière mesure connue au bon site', () => {
+    const result = attachLastReadings(resume(), {
       SITE001: { consumption_kw: 176.4, at: '2026-10-26T11:54:00+00:00' },
     })
 
@@ -310,27 +310,27 @@ describe('attachLastReadings', () => {
     expect(result.sites[1].lastKnownKw).toBeUndefined()
   })
 
-  it('accepts an envelope that carries none', () => {
-    // A back end predating this ticket does not provide the key: the screen
-    // must keep working.
-    expect(attachLastReadings(baseSummary(), undefined).sites[0].lastKnownKw).toBeUndefined()
+  it('accepte une enveloppe qui n’en porte pas', () => {
+    // Un back antérieur à ce ticket ne fournit pas la clé : l'écran doit
+    // continuer de fonctionner.
+    expect(attachLastReadings(resume(), undefined).sites[0].lastKnownKw).toBeUndefined()
   })
 
-  it('ignores an unreadable entry', () => {
-    const result = attachLastReadings(baseSummary(), { SITE001: 'not an object' })
+  it('ignore une entrée illisible', () => {
+    const result = attachLastReadings(resume(), { SITE001: 'pas un objet' })
 
     expect(result.sites[0].lastKnownKw).toBeUndefined()
   })
 
-  it('ignores an identifier that matches no site', () => {
-    const result = attachLastReadings(baseSummary(), { SITE999: { consumption_kw: 1 } })
+  it('ignore un identifiant qui ne désigne aucun site', () => {
+    const result = attachLastReadings(resume(), { SITE999: { consumption_kw: 1 } })
 
     expect(result.sites.every((site) => site.lastKnownKw === undefined)).toBe(true)
   })
 })
 
 describe('attachCapacityAlerts', () => {
-  const ALERT = {
+  const ALERTE = {
     site_id: 'SITE007',
     severity: 'moyenne',
     message: 'Le site approche de sa capacité',
@@ -339,77 +339,77 @@ describe('attachCapacityAlerts', () => {
     capacity_kw: 950,
   }
 
-  it('attaches the alert to the right site', () => {
-    const result = attachCapacityAlerts(baseSummary(), [ALERT])
+  it('attache l’alerte au bon site', () => {
+    const result = attachCapacityAlerts(resume(), [ALERTE])
 
     expect(result.sites[0].alerts).toHaveLength(0)
     expect(result.sites[1].alerts).toHaveLength(1)
     expect(result.sites[1].alerts[0].title).toBe('Capacité bientôt atteinte')
   })
 
-  it('titles a critical alert differently', () => {
-    const result = attachCapacityAlerts(baseSummary(), [{ ...ALERT, severity: 'critique' }])
+  it('titre autrement une alerte critique', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, severity: 'critique' }])
 
     expect(result.sites[1].alerts[0].title).toBe('Capacité dépassée')
   })
 
-  it('falls back to a neutral title for an unexpected severity', () => {
-    const result = attachCapacityAlerts(baseSummary(), [{ ...ALERT, severity: 'odd' }])
+  it('retombe sur un titre neutre pour une gravité inattendue', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, severity: 'bizarre' }])
 
     expect(result.sites[1].alerts[0].title).toBe('Capacité')
   })
 
-  it('explains what justifies the alert', () => {
-    const result = attachCapacityAlerts(baseSummary(), [ALERT])
+  it('explique ce qui justifie l’alerte', () => {
+    const result = attachCapacityAlerts(resume(), [ALERTE])
 
     expect(result.sites[1].alerts[0].message).toContain('95,5 % de 950 kW')
     expect(result.sites[1].alerts[0].message).toContain('alerte levée à 14h50')
   })
 
-  it('does without the capacity when it is missing', () => {
-    const result = attachCapacityAlerts(baseSummary(), [{ ...ALERT, capacity_kw: null }])
+  it('se passe de la capacité quand elle manque', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, capacity_kw: null }])
 
     expect(result.sites[1].alerts[0].message).toContain('95,5 % de charge')
   })
 
-  it('keeps the server message when there are no figures', () => {
-    const result = attachCapacityAlerts(baseSummary(), [
+  it('garde le message du serveur faute de chiffres', () => {
+    const result = attachCapacityAlerts(resume(), [
       { site_id: 'SITE007', severity: 'moyenne', message: 'Le site approche de sa capacité' },
     ])
 
     expect(result.sites[1].alerts[0].message).toBe('Le site approche de sa capacité')
   })
 
-  it('updates the banner counters', () => {
-    // They are derived from the site alerts: without going back through
-    // buildSummary, the banner would keep announcing zero.
-    const result = attachCapacityAlerts(baseSummary(), [ALERT])
+  it('met à jour les compteurs du bandeau', () => {
+    // Ils se déduisent des alertes des sites : sans repasser par buildSummary,
+    // le bandeau continuerait d'annoncer zéro.
+    const result = attachCapacityAlerts(resume(), [ALERTE])
 
     expect(result.totalAlerts).toBe(1)
     expect(result.mediumAlerts).toBe(1)
   })
 
-  it('never adds the same alert twice', () => {
-    // The identifier carries the time it was raised: two successive cycles on
-    // the same alert must not duplicate it.
-    const result = attachCapacityAlerts(attachCapacityAlerts(baseSummary(), [ALERT]), [ALERT])
+  it('n’ajoute jamais deux fois la même alerte', () => {
+    // L'identifiant porte l'horodatage de levée : deux cycles successifs sur
+    // la même alerte ne doivent pas la dupliquer.
+    const result = attachCapacityAlerts(attachCapacityAlerts(resume(), [ALERTE]), [ALERTE])
 
     expect(result.sites[1].alerts).toHaveLength(1)
   })
 
-  it('accepts an envelope without any alert', () => {
-    expect(attachCapacityAlerts(baseSummary(), []).sites[1].alerts).toHaveLength(0)
-    expect(attachCapacityAlerts(baseSummary(), undefined).sites[1].alerts).toHaveLength(0)
+  it('accepte une enveloppe sans alerte', () => {
+    expect(attachCapacityAlerts(resume(), []).sites[1].alerts).toHaveLength(0)
+    expect(attachCapacityAlerts(resume(), undefined).sites[1].alerts).toHaveLength(0)
   })
 
-  it('ignores an unreadable entry or one without a site', () => {
-    const result = attachCapacityAlerts(baseSummary(), ['x', { message: 'no site' }])
+  it('ignore une entrée illisible ou sans site', () => {
+    const result = attachCapacityAlerts(resume(), ['x', { message: 'sans site' }])
 
     expect(result.sites.every((site) => site.alerts.length === 0)).toBe(true)
   })
 
-  it('ignores an identifier that matches no site', () => {
-    const result = attachCapacityAlerts(baseSummary(), [{ ...ALERT, site_id: 'SITE999' }])
+  it('ignore un identifiant qui ne désigne aucun site', () => {
+    const result = attachCapacityAlerts(resume(), [{ ...ALERTE, site_id: 'SITE999' }])
 
     expect(result.sites.every((site) => site.alerts.length === 0)).toBe(true)
   })

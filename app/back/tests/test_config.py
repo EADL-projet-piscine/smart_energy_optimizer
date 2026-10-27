@@ -4,9 +4,9 @@ from smart_energy_app.config import Settings
 
 
 def test_database_url_default_carries_no_credentials(monkeypatch):
-    """Credentials come from DATABASE_URL, never from the code.
+    """Les identifiants viennent de DATABASE_URL, jamais du code.
 
-    A default password stays in the Git history, whichever database it targets.
+    Un mot de passe par défaut reste dans l'historique Git, quelle que soit la base visée.
     """
     monkeypatch.delenv("DATABASE_URL", raising=False)
 

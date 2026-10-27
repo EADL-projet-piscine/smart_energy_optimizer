@@ -6,31 +6,31 @@ from fastapi.testclient import TestClient
 from smart_energy_app import db
 from smart_energy_app.main import app
 
-# Address reserved for documentation (RFC 5737): never routed, the connection never answers.
-UNREACHABLE_URL = "postgresql+psycopg://192.0.2.1:5432/enervision"
+# Adresse réservée à la documentation (RFC 5737) : jamais routée, la connexion ne répond pas.
+URL_INJOIGNABLE = "postgresql+psycopg://192.0.2.1:5432/enervision"
 
 
 def test_health():
     with TestClient(app) as client:
-        response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+        reponse = client.get("/health")
+    assert reponse.status_code == 200
+    assert reponse.json()["status"] == "ok"
 
 
 @pytest.mark.db
-def test_health_reports_database_available():
+def test_health_base_disponible():
     with TestClient(app) as client:
-        response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok", "database": "ok"}
+        reponse = client.get("/health")
+    assert reponse.status_code == 200
+    assert reponse.json() == {"status": "ok", "database": "ok"}
 
 
-def test_health_reports_database_unreachable(monkeypatch):
-    monkeypatch.setattr(db, "engine", db.creer_moteur(UNREACHABLE_URL))
+def test_health_base_injoignable(monkeypatch):
+    monkeypatch.setattr(db, "engine", db.creer_moteur(URL_INJOIGNABLE))
     with TestClient(app) as client:
-        start = time.perf_counter()
-        response = client.get("/health")
-        elapsed = time.perf_counter() - start
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok", "database": "indisponible"}
-    assert elapsed < 5
+        debut = time.perf_counter()
+        reponse = client.get("/health")
+        duree = time.perf_counter() - debut
+    assert reponse.status_code == 200
+    assert reponse.json() == {"status": "ok", "database": "indisponible"}
+    assert duree < 5

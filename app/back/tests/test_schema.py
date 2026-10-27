@@ -1,4 +1,4 @@
-"""PostgreSQL schema: tables, constraints, and privileges of the application roles."""
+"""Schéma PostgreSQL : tables, contraintes, et droits des rôles applicatifs."""
 
 from pathlib import Path
 
@@ -11,7 +11,7 @@ from smart_energy_app.config import settings
 from smart_energy_app.db import engine
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "db" / "migrations" / "001_initial_schema.sql"
-# Passwords from the development docker-compose, not production secrets.
+# Mots de passe du docker-compose de développement, pas des secrets de production.
 APP_ROLE = "enervision_app"
 ML_ROLE = "enervision_ml"
 APP_PASSWORD = "enervision_app"
@@ -20,7 +20,7 @@ HASH = "x" * 60
 
 
 def split_sql(script: str) -> list[str]:
-    """Split a script into statements, without breaking functions or strings."""
+    """Découpe un script en requêtes, sans casser les fonctions ni les chaînes."""
     statements: list[str] = []
     buf: list[str] = []
     i = 0
@@ -377,7 +377,7 @@ def test_app_and_ml_roles_have_distinct_access(schema):
                 {"role": APP_ROLE},
             ).scalar()
         except ProgrammingError:
-            pytest.skip("roles missing: sh scripts/apply_schema.sh")
+            pytest.skip("rôles absents : sh scripts/apply_schema.sh")
         assert app_can_read_users is True
         assert (
             conn.execute(

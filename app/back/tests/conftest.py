@@ -6,16 +6,16 @@ from smart_energy_app.db import database_available
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip tests marked `db` when no database can be reached.
+    """Ignore les tests marqués `db` quand aucune base n'est joignable.
 
-    In CI, REQUIRE_DB=1 disables this behaviour: a `db` test must then fail
-    rather than be skipped, otherwise a missing database would go unnoticed.
+    En CI, REQUIRE_DB=1 désactive ce comportement : un test `db` doit alors échouer
+    plutôt qu'être ignoré, sinon une base absente passerait inaperçue.
     """
     if os.environ.get("REQUIRE_DB") == "1":
         return
-    db_tests = [item for item in items if "db" in item.keywords]
-    if not db_tests or database_available():
+    tests_db = [item for item in items if "db" in item.keywords]
+    if not tests_db or database_available():
         return
-    reason = pytest.mark.skip(reason="PostgreSQL unreachable (set REQUIRE_DB=1 to require it)")
-    for item in db_tests:
-        item.add_marker(reason)
+    raison = pytest.mark.skip(reason="base PostgreSQL injoignable (REQUIRE_DB=1 pour l'exiger)")
+    for item in tests_db:
+        item.add_marker(raison)

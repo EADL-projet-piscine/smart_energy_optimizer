@@ -32,7 +32,7 @@ class FakeServer(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def fake_api():
-    """Run a local server mimicking the source API for the duration of the test."""
+    """Lance un serveur local qui imite l'API source, le temps du test."""
     server = HTTPServer(("127.0.0.1", 0), FakeServer)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -78,7 +78,7 @@ def test_logs_error_code(fake_api, caplog):
 
 
 def test_loop_interval(monkeypatch):
-    """The loop must call refresh() at the configured cadence."""
+    """La boucle doit appeler refresh() à la cadence configurée."""
     monkeypatch.setattr(settings, "consumption_refresh_s", 0.01)
 
     calls = []
@@ -91,8 +91,8 @@ def test_loop_interval(monkeypatch):
         return True
 
     monkeypatch.setattr(planificateur, "refresh", fake_refresh)
-    # The loop also loads the site details: without this stand-in, the test
-    # reaches the real network and runs a single cycle.
+    # La boucle charge aussi le détail des sites : sans cette doublure, le test
+    # part sur le réseau réel et n'exécute qu'un seul cycle.
     monkeypatch.setattr(planificateur, "refresh_details", fake_refresh_details)
 
     async def scenario():

@@ -5,23 +5,23 @@ from smart_energy_app.consommation.client import _auth
 
 
 def test_auth_none_without_user(monkeypatch):
-    """Without credentials, httpx must receive no tuple at all: None, not ("", "")."""
+    """Sans identifiants, httpx ne doit recevoir aucun tuple : None, pas ("", "")."""
     monkeypatch.setattr(settings, "enervision_user", "")
 
     assert _auth() is None
 
 
 def test_auth_returns_credentials(monkeypatch):
-    monkeypatch.setattr(settings, "enervision_user", "someone")
-    monkeypatch.setattr(settings, "enervision_password", SecretStr("s3cr3t"))
+    monkeypatch.setattr(settings, "enervision_user", "utilisateur")
+    monkeypatch.setattr(settings, "enervision_password", SecretStr("motdepasse"))
 
-    assert _auth() == ("someone", "s3cr3t")
+    assert _auth() == ("utilisateur", "motdepasse")
 
 
 def test_auth_does_not_leak_password(monkeypatch):
-    """The password is a SecretStr: its value must only surface via get_secret_value."""
-    monkeypatch.setattr(settings, "enervision_user", "someone")
-    monkeypatch.setattr(settings, "enervision_password", SecretStr("s3cr3t"))
+    """Le mot de passe est un SecretStr : sa valeur ne doit sortir que par get_secret_value."""
+    monkeypatch.setattr(settings, "enervision_user", "utilisateur")
+    monkeypatch.setattr(settings, "enervision_password", SecretStr("motdepasse"))
 
-    assert "s3cr3t" not in str(settings.enervision_password)
-    assert "s3cr3t" not in repr(settings.enervision_password)
+    assert "motdepasse" not in str(settings.enervision_password)
+    assert "motdepasse" not in repr(settings.enervision_password)

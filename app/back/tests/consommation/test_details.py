@@ -16,10 +16,10 @@ SITES = [{"site_id": site_id, "site_type": "office"} for site_id in SITE_IDS]
 
 
 def current_for(site_id: str) -> dict:
-    """Typical response of /api/v1/sites/{id}/current.
+    """Réponse type de /api/v1/sites/{id}/current.
 
-    The timestamp deliberately carries no timezone: that is what the source
-    returns, and the endpoint relays it untouched.
+    L'horodatage est volontairement sans fuseau : c'est ce que renvoie la
+    source, et l'endpoint le relaie tel quel.
     """
     return {
         "timestamp": "2026-10-23T13:15:16.361330",
@@ -36,7 +36,7 @@ CURRENT_PATH = re.compile(r"^/api/v1/sites/([^/]+)/current$")
 
 
 class FakeServer(BaseHTTPRequestHandler):
-    """Mimics the source API: the site referential and each site's reading."""
+    """Imite l'API source : le référentiel des sites et la mesure de chacun."""
 
     failing_sites: ClassVar[set[str]] = set()
     referential_code = 200
@@ -73,7 +73,7 @@ class FakeServer(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def fake_api():
-    """Run a local server mimicking the source API for the duration of the test."""
+    """Lance un serveur local qui imite l'API source, le temps du test."""
     server = HTTPServer(("127.0.0.1", 0), FakeServer)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -83,8 +83,8 @@ def fake_api():
     FakeServer.failing_sites = set()
     FakeServer.referential_code = 200
     FakeServer.referential_calls = 0
-    # The state is a module singleton: without this reset, a referential cached
-    # by one test would contaminate the next.
+    # L'état est un singleton de module : sans remise à zéro, le référentiel
+    # mis en cache par un test contaminerait le suivant.
     state.by_site = {}
     state.site_ids = []
 
@@ -104,7 +104,7 @@ def test_loads_every_site(fake_api):
 
 
 def test_relays_the_response_untouched(fake_api):
-    """No field is filtered out: that is the whole point of this endpoint."""
+    """Aucun champ n'est filtré : c'est tout l'intérêt de cet endpoint."""
     asyncio.run(refresh_details())
 
     relayed = state.by_site["SITE002"]["data"]
@@ -118,7 +118,7 @@ def test_one_failing_site_does_not_break_the_others(fake_api):
 
     assert asyncio.run(refresh_details()) is False
 
-    # The others must still be there: one silent sensor does not blind the fleet.
+    # Les autres doivent être là : un capteur muet n'aveugle pas le parc.
     assert sorted(state.by_site) == ["SITE001", "SITE003"]
 
 
@@ -143,7 +143,7 @@ def test_logs_the_failing_site(fake_api, caplog):
 
 
 def test_loads_the_referential_once(fake_api):
-    """The fleet does not change: no need to ask for it on every cycle."""
+    """Le parc ne change pas : inutile de le redemander à chaque cycle."""
     asyncio.run(refresh_details())
     asyncio.run(refresh_details())
     asyncio.run(refresh_details())
@@ -159,13 +159,12 @@ def test_gives_up_when_the_referential_is_unavailable(fake_api):
 
 
 def test_logs_when_the_referential_is_unreadable(fake_api, caplog, monkeypatch):
-    """A 200 response that cannot be used must not pass silently."""
+    """Une réponse 200 mais inexploitable ne doit pas passer en silence."""
     monkeypatch.setattr("smart_energy_app.consommation.details._extract_site_ids", lambda _: [])
 
     with caplog.at_level("WARNING"):
         assert asyncio.run(refresh_details()) is False
 
-    # The source logs in French; matching its own wording is the point of the assertion.
     assert "illisible" in caplog.text
 
 
@@ -173,7 +172,7 @@ def test_stale_marks_a_site_without_measure(fake_api):
     asyncio.run(refresh_details())
 
     assert state.is_stale("SITE001") is False
-    # A site never measured is stale by default, not "fresh because absent".
+    # Un site jamais mesuré est périmé par défaut, pas « frais parce qu'absent ».
     assert state.is_stale("SITE404") is True
     assert state.as_payload("SITE404") is None
 
@@ -199,5 +198,5 @@ def test_payload_carries_the_timestamp_and_staleness(fake_api):
     ],
 )
 def test_extract_site_ids(payload, expected):
-    """Extraction is defensive: the shape of the response is not a contract."""
+    """L'extraction est défensive : la forme de la réponse n'est pas un contrat."""
     assert _extract_site_ids(payload) == expected

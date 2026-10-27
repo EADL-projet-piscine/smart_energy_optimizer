@@ -35,10 +35,10 @@ SITE_DETAIL = {
 
 @pytest.fixture(autouse=True)
 def clean_state():
-    """Reset both states before and after each test.
+    """Remet les deux états à zéro avant et après chaque test.
 
-    `state` and `details_state` are module singletons: a test that leaves one
-    filled contaminates the next.
+    `state` et `details_state` sont des singletons de module : un test qui en
+    laisse un rempli contamine le suivant.
     """
     state.data = None
     state.fetched_at = None
@@ -55,7 +55,7 @@ def clean_state():
 
 @pytest.fixture
 def details():
-    """Two sites in the referential, only one of which actually answered."""
+    """Deux sites au référentiel, dont un seul a réellement répondu."""
     details_state.site_ids = ["SITE001", "SITE002"]
     details_state.by_site = {
         "SITE001": {"data": SITE_DETAIL, "fetched_at": datetime.now(UTC)},
@@ -96,7 +96,7 @@ def test_flags_stale_data():
 
 
 def test_announces_next_measurement(monkeypatch):
-    """next_at must reflect the real cadence: the client paces itself on it."""
+    """next_at doit refléter la cadence réelle : c'est dessus que le client se cale."""
     monkeypatch.setattr(settings, "consumption_refresh_s", 30)
     state.data = SUMMARY
     state.fetched_at = datetime.now(UTC)
@@ -104,8 +104,8 @@ def test_announces_next_measurement(monkeypatch):
     with TestClient(app) as client:
         body = client.get("/api/consommations").json()
 
-    gap = datetime.fromisoformat(body["next_at"]) - datetime.fromisoformat(body["fetched_at"])
-    assert gap == timedelta(seconds=30)
+    ecart = datetime.fromisoformat(body["next_at"]) - datetime.fromisoformat(body["fetched_at"])
+    assert ecart == timedelta(seconds=30)
 
 
 def test_sites_returns_every_known_detail(details):
@@ -122,7 +122,7 @@ def test_sites_answers_503_before_the_first_refresh():
 
 
 def test_site_relays_the_payload_untouched(details):
-    """No field is filtered out: that is the whole point of this endpoint."""
+    """Aucun champ n'est filtré : c'est tout l'intérêt de cet endpoint."""
     response = TestClient(app).get("/api/consommations/sites/SITE001")
 
     assert response.status_code == 200
@@ -133,7 +133,7 @@ def test_site_relays_the_payload_untouched(details):
 
 
 def test_unknown_site_answers_404(details):
-    """An unknown identifier is a client error, not an outage."""
+    """Un identifiant inconnu est une erreur du client, pas une panne."""
     response = TestClient(app).get("/api/consommations/sites/SITE999")
 
     assert response.status_code == 404
@@ -141,7 +141,7 @@ def test_unknown_site_answers_404(details):
 
 
 def test_known_site_without_measure_answers_503(details):
-    """SITE002 is in the referential but never answered: that is not a 404."""
+    """SITE002 est au référentiel mais n'a jamais répondu : ce n'est pas un 404."""
     response = TestClient(app).get("/api/consommations/sites/SITE002")
 
     assert response.status_code == 503

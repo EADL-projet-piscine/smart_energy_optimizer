@@ -82,7 +82,10 @@ def build_hourly_dataset(
         format="ISO8601",
         utc=True,
     )
-    df["consumption_kw"] = pd.to_numeric(df["consumption_kw"], errors="coerce")
+    df["consumption_kw"] = pd.to_numeric(
+        df["consumption_kw"],
+        errors="coerce",
+    )
 
     # Conserver uniquement la période demandée.
     df = df.loc[(df["timestamp"] >= start_utc) & (df["timestamp"] < end_utc)].copy()

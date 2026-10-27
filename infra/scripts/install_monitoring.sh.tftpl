@@ -1,0 +1,48 @@
+#!/bin/bash
+# =====================================================================
+# Script exécuté par Azure DANS la VM (extension Custom Script).
+# Il installe Docker, dépose les fichiers de la stack de monitoring
+# et lance Prometheus + Grafana + node_exporter.
+#
+# Ce fichier est un MODÈLE Terraform (.tftpl) : les éléments entre
+# dollar-accolades sont remplacés par Terraform avant l'envoi à la VM.
+# Les fichiers sont transmis encodés en base64 pour éviter tout souci
+# de caractères spéciaux.
+# =====================================================================
+set -euo pipefail
+
+# 1. Installer Docker (seulement s'il n'est pas déjà là)
+#    Si quelqu'un l'a déjà installé à la main, on ne touche à rien.
+if ! command -v docker > /dev/null 2>&1; then
+  curl -fsSL https://get.docker.com | sh
+fi
+
+# Docker installé à la main via le paquet Ubuntu "docker.io" n'inclut pas
+# toujours "docker compose" : on l'ajoute seulement s'il manque.
+if ! docker compose version > /dev/null 2>&1; then
+  apt-get update
+  apt-get install -y docker-compose-v2 || apt-get install -y docker-compose-plugin
+fi
+
+# Permet à l'utilisateur admin d'utiliser Docker sans sudo
+usermod -aG docker ${admin_username}
+
+# 2. Déposer les fichiers de la stack dans /opt/monitoring-stack
+mkdir -p /opt/monitoring-stack/prometheus
+mkdir -p /opt/monitoring-stack/grafana/provisioning/datasources
+
+echo '${docker_compose_b64}' | base64 -d > /opt/monitoring-stack/docker-compose.yml
+echo '${prometheus_b64}'     | base64 -d > /opt/monitoring-stack/prometheus/prometheus.yml
+echo '${datasources_b64}'    | base64 -d > /opt/monitoring-stack/grafana/provisioning/datasources/datasources.yml
+
+# 3. Le fichier .env (mot de passe Grafana + ID d'abonnement),
+#    lisible uniquement par root
+echo '${env_b64}' | base64 -d > /opt/monitoring-stack/.env
+chmod 600 /opt/monitoring-stack/.env
+
+# 4. Lancer (ou mettre à jour) les conteneurs
+cd /opt/monitoring-stack
+docker compose pull
+docker compose up -d
+
+echo "Stack de monitoring démarrée."

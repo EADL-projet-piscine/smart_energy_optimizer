@@ -1,8 +1,7 @@
 """PostgreSQL schema: tables, constraints, and privileges of the application roles."""
 
-from pathlib import Path
-
 import pytest
+from schema_tools import MIGRATIONS_DIR, migration_files, split_sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
@@ -10,82 +9,13 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from smart_energy_app.config import settings
 from smart_energy_app.db import engine
 
-SCHEMA_PATH = Path(__file__).resolve().parents[3] / "db" / "migrations" / "001_initial_schema.sql"
+SCHEMA_PATH = MIGRATIONS_DIR / "001_initial_schema.sql"
 # Passwords from the development docker-compose, not production secrets.
 APP_ROLE = "enervision_app"
 ML_ROLE = "enervision_ml"
 APP_PASSWORD = "enervision_app"
 ML_PASSWORD = "enervision_ml"
 HASH = "x" * 60
-
-
-def split_sql(script: str) -> list[str]:
-    """Split a script into statements, without breaking functions or strings."""
-    statements: list[str] = []
-    buf: list[str] = []
-    i = 0
-    length = len(script)
-    dollar_tag: str | None = None
-    in_single = False
-
-    while i < length:
-        if dollar_tag is not None:
-            if script.startswith(dollar_tag, i):
-                buf.append(dollar_tag)
-                i += len(dollar_tag)
-                dollar_tag = None
-                continue
-            buf.append(script[i])
-            i += 1
-            continue
-
-        if in_single:
-            buf.append(script[i])
-            if script[i] == "'":
-                if i + 1 < length and script[i + 1] == "'":
-                    buf.append("'")
-                    i += 2
-                    continue
-                in_single = False
-            i += 1
-            continue
-
-        if script[i] == "'":
-            in_single = True
-            buf.append("'")
-            i += 1
-            continue
-
-        if script[i] == "$":
-            end = i + 1
-            while end < length and (script[end].isalnum() or script[end] == "_"):
-                end += 1
-            if end < length and script[end] == "$":
-                dollar_tag = script[i : end + 1]
-                buf.append(dollar_tag)
-                i = end + 1
-                continue
-
-        if script.startswith("--", i):
-            while i < length and script[i] != "\n":
-                i += 1
-            continue
-
-        if script[i] == ";":
-            statement = "".join(buf).strip()
-            if statement:
-                statements.append(statement)
-            buf = []
-            i += 1
-            continue
-
-        buf.append(script[i])
-        i += 1
-
-    tail = "".join(buf).strip()
-    if tail:
-        statements.append(tail)
-    return statements
 
 
 def test_migration_script_splits_functions():
@@ -98,38 +28,12 @@ def test_migration_script_splits_functions():
     assert any("CREATE TABLE IF NOT EXISTS predictions" in item for item in statements)
 
 
-def _schema_ready() -> bool:
-    with engine.connect() as conn:
-        sites = conn.execute(text("SELECT to_regclass('public.sites')")).scalar()
-        function = conn.execute(
-            text(
-                "SELECT EXISTS ("
-                "  SELECT 1 FROM pg_proc p"
-                "  JOIN pg_namespace n ON n.oid = p.pronamespace"
-                "  WHERE n.nspname = 'public' AND p.proname = 'upsert_current'"
-                ")"
-            )
-        ).scalar()
-    return sites is not None and bool(function)
+def test_every_migration_is_applied_in_name_order():
+    """db/init/01_schema.sh sorts by file name; the tests must do the same."""
+    names = [path.name for path in migration_files()]
 
-
-def _apply_schema() -> None:
-    script = SCHEMA_PATH.read_text(encoding="utf-8")
-    with engine.connect() as conn:
-        transaction = conn.begin()
-        try:
-            for statement in split_sql(script):
-                conn.execute(text(statement))
-            transaction.commit()
-        except Exception:
-            transaction.rollback()
-            raise
-
-
-@pytest.fixture(scope="module")
-def schema():
-    if not _schema_ready():
-        _apply_schema()
+    assert names == sorted(names)
+    assert names[0] == "001_initial_schema.sql"
 
 
 @pytest.fixture
@@ -178,17 +82,34 @@ def _current(conn, site_id: str = "SITE901", consumption: float | None = 412.5):
     )
 
 
-def _prediction(conn, site_id: str = "SITE901", value: float = 480, version: str | None = "v1"):
+def _prediction(
+    conn,
+    site_id: str = "SITE901",
+    value: float = 480,
+    origin: str = "2026-10-21 10:00:00+00",
+    period_start: str = "2026-10-21 12:00:00+00",
+    period_end: str = "2026-10-21 13:00:00+00",
+    version: str | None = "v1",
+):
+    """Default case: forecast made at 10:00 for the 12:00–13:00 slot, horizon 2."""
     return conn.execute(
         text(
             "SELECT upsert_prediction("
             "  CAST(:site_id AS text), CAST(:value AS numeric),"
-            "  timestamptz '2026-10-21 10:00:00+00',"
-            "  timestamptz '2026-10-21 12:00:00+00',"
+            "  CAST(:origin AS timestamptz),"
+            "  CAST(:period_start AS timestamptz),"
+            "  CAST(:period_end AS timestamptz),"
             "  'consumption_forecast', CAST(:version AS text)"
             ")"
         ),
-        {"site_id": site_id, "value": value, "version": version},
+        {
+            "site_id": site_id,
+            "value": value,
+            "origin": origin,
+            "period_start": period_start,
+            "period_end": period_end,
+            "version": version,
+        },
     ).scalar()
 
 
@@ -326,12 +247,22 @@ def test_current_is_upserted_and_requires_a_site(db):
     assert db.execute(text("SELECT count(*) FROM current WHERE site_id = 'SITE901'")).scalar() == 1
 
 
+# ─────────────────────────────── Forecasts ───────────────────────────────────
+
+
 @pytest.mark.db
-def test_prediction_is_attached_to_a_site_and_keeps_one_row_per_period(db):
+def test_prediction_requires_a_site(db):
+    with pytest.raises(IntegrityError), db.begin_nested():
+        _prediction(db, site_id="SITE404")
+
+
+@pytest.mark.db
+def test_rewriting_a_forecast_updates_the_row_instead_of_adding_one(db):
+    # Same site, same origin, same horizon, same model: one row, updated.
     _site(db)
-    _current(db)
-    first = _prediction(db, value=480, version=None)
-    second = _prediction(db, value=510, version=None)
+    first = _prediction(db, value=480)
+    second = _prediction(db, value=510)
+
     assert first == second
     count = db.execute(text("SELECT count(*) FROM predictions WHERE site_id = 'SITE901'")).scalar()
     predicted = db.execute(
@@ -340,24 +271,143 @@ def test_prediction_is_attached_to_a_site_and_keeps_one_row_per_period(db):
     assert count == 1
     assert predicted == 510
 
+
+@pytest.mark.db
+def test_a_new_origin_adds_a_row_rather_than_replacing_one(db):
+    # The 10:00 forecast is not erased by the 16:00 one: both are kept, and
+    # the read decides. Keeping the old one is what makes the model auditable.
+    _site(db)
+    _prediction(db, value=480, origin="2026-10-21 10:00:00+00")
+    _prediction(
+        db,
+        value=505,
+        origin="2026-10-21 16:00:00+00",
+        period_start="2026-10-21 18:00:00+00",
+        period_end="2026-10-21 19:00:00+00",
+    )
+
+    count = db.execute(text("SELECT count(*) FROM predictions WHERE site_id = 'SITE901'")).scalar()
+    assert count == 2
+
+
+@pytest.mark.db
+def test_horizon_is_derived_from_the_origin_and_the_slot(db):
+    _site(db)
+    _prediction(db, origin="2026-10-21 10:00:00+00", period_start="2026-10-21 12:00:00+00")
+
+    horizon = db.execute(text("SELECT horizon FROM predictions WHERE site_id = 'SITE901'")).scalar()
+    assert horizon == 2
+
+
+@pytest.mark.db
+def test_horizon_cannot_be_written_directly(db):
+    """A generated column refuses any value: it cannot contradict the other two."""
+    _site(db)
+    _prediction(db)
+
+    with pytest.raises(ProgrammingError), db.begin_nested():
+        db.execute(text("UPDATE predictions SET horizon = 7 WHERE site_id = 'SITE901'"))
+
+
+@pytest.mark.db
+def test_horizon_beyond_twenty_four_hours_is_refused(db):
+    _site(db)
+
     with pytest.raises(IntegrityError), db.begin_nested():
-        db.execute(
-            text(
-                "SELECT upsert_prediction("
-                "  'SITE901', 100,"
-                "  timestamptz '2026-10-21 12:00:00+00',"
-                "  timestamptz '2026-10-21 10:00:00+00',"
-                "  'consumption_forecast', 'v1'"
-                ")"
-            )
+        _prediction(
+            db,
+            origin="2026-10-21 10:00:00+00",
+            period_start="2026-10-22 11:00:00+00",  # 25 hours later
+            period_end="2026-10-22 12:00:00+00",
         )
 
+
+@pytest.mark.db
+def test_a_forecast_cannot_target_its_own_origin(db):
+    # Horizon 0 is not a forecast: the model would be predicting the present.
+    _site(db)
+
+    with pytest.raises(IntegrityError), db.begin_nested():
+        _prediction(
+            db,
+            origin="2026-10-21 12:00:00+00",
+            period_start="2026-10-21 12:00:00+00",
+            period_end="2026-10-21 13:00:00+00",
+        )
+
+
+@pytest.mark.db
+def test_a_negative_consumption_is_refused(db):
+    _site(db)
+
+    with pytest.raises(IntegrityError), db.begin_nested():
+        _prediction(db, value=-1)
+
+
+@pytest.mark.db
+def test_a_slot_ending_before_it_starts_is_refused(db):
+    _site(db)
+
+    with pytest.raises(IntegrityError), db.begin_nested():
+        _prediction(
+            db,
+            period_start="2026-10-21 12:00:00+00",
+            period_end="2026-10-21 11:00:00+00",
+        )
+
+
+@pytest.mark.db
+def test_the_read_serves_the_most_recently_informed_forecast(db):
+    # Two forecasts for the 18:00 slot: one made at 10:00, one at 16:00. The
+    # 16:00 one saw the 16:00 consumption, the other did not.
+    _site(db)
+    _prediction(
+        db,
+        value=480,
+        origin="2026-10-21 10:00:00+00",
+        period_start="2026-10-21 18:00:00+00",
+        period_end="2026-10-21 19:00:00+00",
+    )
+    _prediction(
+        db,
+        value=505,
+        origin="2026-10-21 16:00:00+00",
+        period_start="2026-10-21 18:00:00+00",
+        period_end="2026-10-21 19:00:00+00",
+    )
+
+    # The query the business API will run, kept here so the rule is tested
+    # rather than merely written down.
+    served = db.execute(
+        text(
+            "SELECT DISTINCT ON (site_id, period_start) predicted_kw, forecast_origin "
+            "FROM predictions "
+            "WHERE site_id = :site_id "
+            "ORDER BY site_id, period_start, forecast_origin DESC, "
+            "         model_version DESC, created_at DESC"
+        ),
+        {"site_id": "SITE901"},
+    ).one()
+
+    assert served.predicted_kw == 505
+
+
+@pytest.mark.db
+def test_deleting_a_site_removes_its_forecasts(db):
+    _site(db)
+    _current(db)
+    _prediction(db)
+
     db.execute(text("DELETE FROM sites WHERE site_id = 'SITE901'"))
+
     assert db.execute(text("SELECT count(*) FROM current WHERE site_id = 'SITE901'")).scalar() == 0
     remaining = db.execute(
         text("SELECT count(*) FROM predictions WHERE site_id = 'SITE901'")
     ).scalar()
     assert remaining == 0
+
+
+# ─────────────────────────────── Privileges ──────────────────────────────────
 
 
 def _role_engine(username: str, password: str):
@@ -427,3 +477,53 @@ def test_app_and_ml_roles_have_distinct_access(schema):
             return
         finally:
             role_engine.dispose()
+
+
+@pytest.mark.db
+def test_only_ml_writes_the_forecasts(schema):
+    """The ML service writes, the business API reads: the reverse must fail."""
+    with engine.connect() as conn:
+        try:
+            privileges = conn.execute(
+                text(
+                    "SELECT"
+                    "  has_table_privilege(:ml, 'public.predictions', 'INSERT') AS ml_insert,"
+                    "  has_table_privilege(:ml, 'public.predictions', 'UPDATE') AS ml_update,"
+                    "  has_table_privilege(:app, 'public.predictions', 'SELECT') AS app_select,"
+                    "  has_table_privilege(:app, 'public.predictions', 'INSERT') AS app_insert,"
+                    "  has_table_privilege(:app, 'public.predictions', 'UPDATE') AS app_update,"
+                    "  has_table_privilege(:app, 'public.predictions', 'DELETE') AS app_delete"
+                ),
+                {"ml": ML_ROLE, "app": APP_ROLE},
+            ).one()
+        except ProgrammingError:
+            pytest.skip("roles missing: sh scripts/apply_schema.sh")
+
+    assert privileges.ml_insert is True
+    assert privileges.ml_update is True
+    assert privileges.app_select is True
+    assert privileges.app_insert is False
+    assert privileges.app_update is False
+    assert privileges.app_delete is False
+
+
+@pytest.mark.db
+def test_the_business_api_cannot_insert_a_forecast(schema):
+    # has_table_privilege states what was granted; only a real connection shows
+    # what the database actually refuses.
+    role_engine = _role_engine(APP_ROLE, APP_PASSWORD)
+    try:
+        with role_engine.connect() as conn, pytest.raises(ProgrammingError):
+            conn.execute(
+                text(
+                    "INSERT INTO predictions"
+                    "  (site_id, predicted_kw, forecast_origin, period_start, period_end)"
+                    "VALUES ('SITE901', 1, timestamptz '2026-10-21 10:00:00+00',"
+                    "        timestamptz '2026-10-21 12:00:00+00',"
+                    "        timestamptz '2026-10-21 13:00:00+00')"
+                )
+            )
+    except OperationalError:
+        return
+    finally:
+        role_engine.dispose()

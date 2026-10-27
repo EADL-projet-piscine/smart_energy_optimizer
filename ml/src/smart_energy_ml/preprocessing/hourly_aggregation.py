@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +20,46 @@ OUTPUT_COLUMNS = [
     "total_readings",
     "coverage_pct",
 ]
+
+
+def find_raw_files(
+    raw_dir: Path,
+    days: pd.DatetimeIndex,
+) -> list[Path]:
+    """Recherche les fichiers JSON dans le répertoire autorisé."""
+
+    base_dir = raw_dir.resolve(strict=True)
+    files = []
+
+    for day in days:
+        pattern = f"SITE*/SITE*_{day:%Y%m%d}.json"
+
+        for file_path in raw_dir.glob(pattern):
+            # Ne pas suivre les liens symboliques vers des fichiers externes.
+            if file_path.is_symlink() or file_path.parent.is_symlink():
+                raise ValueError(f"Lien symbolique non autorisé : {file_path}")
+
+            resolved_path = file_path.resolve(strict=True)
+
+            if not resolved_path.is_relative_to(base_dir):
+                raise ValueError(f"Chemin en dehors du répertoire autorisé : {file_path}")
+
+            site_id = file_path.parent.name
+
+            if not re.fullmatch(r"SITE\d+", site_id):
+                raise ValueError(f"Identifiant de site invalide : {site_id}")
+
+            expected_filename = f"{site_id}_{day:%Y%m%d}.json"
+
+            if file_path.name != expected_filename:
+                raise ValueError(f"Nom de fichier invalide : {file_path.name}")
+
+            if not resolved_path.is_file():
+                raise ValueError(f"Fichier JSON invalide : {file_path}")
+
+            files.append(resolved_path)
+
+    return sorted(files)
 
 
 def build_hourly_dataset(
@@ -49,9 +90,7 @@ def build_hourly_dataset(
         inclusive="left",
     )
 
-    files = sorted(
-        file_path for day in days for file_path in raw_dir.glob(f"SITE*/SITE*_{day:%Y%m%d}.json")
-    )
+    files = find_raw_files(raw_dir, days)
 
     if not files:
         raise FileNotFoundError(f"Aucun fichier JSON EnerVision trouvé dans {raw_dir}")

@@ -24,11 +24,10 @@ services:
   back:
     build: ./app/back
     container_name: enervision-back
-    env_file:
-      - app/back/.env
     environment:
       DATABASE_URL: postgresql+psycopg://enervision_app:enervision_app@db:5432/enervision
       ENERVISION_API_URL: https://api-mock.charlieandre.fr
+    # `required: false` : en CI aucun `.env` n'existe, le fichier est facultatif.
     env_file:
       - path: ./app/back/.env
         required: false

@@ -1,0 +1,24 @@
+# Frontal HTTPS de la production (service `proxy` de docker-compose.deploy.yml).
+#
+# Caddy obtient et renouvelle seul le certificat Let's Encrypt du nom SITE_DOMAIN
+# (le nom DNS Azure de l'IP publique, voir infra/outputs.tf), et redirige le HTTP
+# vers le HTTPS. Le port 80 doit rester ouvert : Let's Encrypt y vérifie le domaine.
+#
+# Tout part vers le front, dont le nginx sert le dashboard et relaie /api au back :
+# c'est le seul conteneur joignable depuis Internet.
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy front:80
+
+	header {
+		# Le navigateur n'essaie plus le HTTP pendant un an : le cookie de session ne
+		# peut pas fuiter par une première requête en clair.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

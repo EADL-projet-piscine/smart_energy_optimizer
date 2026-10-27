@@ -49,6 +49,9 @@ resource "azurerm_public_ip" "public_ip" {
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  # Nom DNS <label>.<région>.cloudapp.azure.com : Let's Encrypt ne délivre un certificat
+  # qu'à un nom de domaine. Voir l'output fqdn et deploy/Caddyfile.
+  domain_name_label = "enervision-${var.student_id}"
 
   tags = {
     user = var.student_id
@@ -129,6 +132,38 @@ resource "azurerm_network_security_group" "nsg" {
     source_port_range          = "*"
     destination_port_range     = "22"
     source_address_prefix      = var.ip
+    destination_address_prefix = "*"
+  }
+
+  # Le dashboard est un service public : HTTPS depuis Internet. Seul le conteneur
+  # Caddy publie ces ports ; la base, l'API et le ML restent sur le réseau Docker.
+  # Exception Trivy : exposition voulue du frontal HTTPS, seul service public.
+  # trivy:ignore:AVD-AZU-0047
+  security_rule {
+    name                       = "Allow-HTTPS"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+
+  # HTTP : Let's Encrypt y vérifie le domaine, et Caddy redirige tout le reste vers
+  # le HTTPS. Aucun contenu n'est servi en clair.
+  # Exception Trivy : validation Let's Encrypt et redirection vers le HTTPS.
+  # trivy:ignore:AVD-AZU-0047
+  security_rule {
+    name                       = "Allow-HTTP-ACME"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "Internet"
     destination_address_prefix = "*"
   }
 

@@ -16,6 +16,7 @@ dependencies = [
     "scikit-learn",
     "mlflow",
     "python-dotenv",
+    "pyarrow",
 ]
 
 [project.optional-dependencies]

@@ -7,7 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "collect_readings.py"
+SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1] / "scripts" / "explorations" / "collect_readings.py"
+)
 
 
 @pytest.fixture

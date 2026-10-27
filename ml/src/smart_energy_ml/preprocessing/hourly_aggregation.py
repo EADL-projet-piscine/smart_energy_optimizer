@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +9,7 @@ LOGGER = logging.getLogger(__name__)
 
 EXPECTED_READINGS_PER_HOUR = 12
 MIN_VALID_READINGS = 9
+SITE_IDS = tuple(f"SITE{i:03d}" for i in range(1, 8))
 
 OUTPUT_COLUMNS = [
     "site_id",
@@ -26,36 +26,34 @@ def find_raw_files(
     raw_dir: Path,
     days: pd.DatetimeIndex,
 ) -> list[Path]:
-    """Recherche les fichiers JSON dans le répertoire autorisé."""
+    """Recherche les fichiers JSON des sites autorisés."""
 
-    base_dir = raw_dir.resolve(strict=True)
+    base_dir = Path(raw_dir).resolve(strict=True)
     files = []
 
-    for day in days:
-        pattern = f"SITE*/SITE*_{day:%Y%m%d}.json"
+    for site_id in SITE_IDS:
+        site_dir = base_dir / site_id
 
-        for file_path in raw_dir.glob(pattern):
-            # Ne pas suivre les liens symboliques vers des fichiers externes.
-            if file_path.is_symlink() or file_path.parent.is_symlink():
-                raise ValueError(f"Lien symbolique non autorisé : {file_path}")
+        if site_dir.is_symlink():
+            raise ValueError(f"Lien symbolique interdit : {site_dir}")
+
+        for day in days:
+            filename = f"{site_id}_{day:%Y%m%d}.json"
+            file_path = site_dir / filename
+
+            if file_path.is_symlink():
+                raise ValueError(f"Lien symbolique interdit : {file_path}")
+
+            if not file_path.exists():
+                continue
 
             resolved_path = file_path.resolve(strict=True)
 
             if not resolved_path.is_relative_to(base_dir):
-                raise ValueError(f"Chemin en dehors du répertoire autorisé : {file_path}")
-
-            site_id = file_path.parent.name
-
-            if not re.fullmatch(r"SITE\d+", site_id):
-                raise ValueError(f"Identifiant de site invalide : {site_id}")
-
-            expected_filename = f"{site_id}_{day:%Y%m%d}.json"
-
-            if file_path.name != expected_filename:
-                raise ValueError(f"Nom de fichier invalide : {file_path.name}")
+                raise ValueError(f"Chemin non autorisé : {file_path}")
 
             if not resolved_path.is_file():
-                raise ValueError(f"Fichier JSON invalide : {file_path}")
+                raise ValueError(f"Fichier invalide : {file_path}")
 
             files.append(resolved_path)
 
@@ -85,9 +83,8 @@ def build_hourly_dataset(
 
     days = pd.date_range(
         start=start_utc.normalize(),
-        end=end_utc,
+        end=(end_utc - pd.Timedelta(nanoseconds=1)).normalize(),
         freq="D",
-        inclusive="left",
     )
 
     files = find_raw_files(raw_dir, days)

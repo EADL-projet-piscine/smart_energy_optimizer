@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from schema_tools import apply_schema, schema_ready
 
 from smart_energy_app.db import database_available
 
@@ -19,3 +20,15 @@ def pytest_collection_modifyitems(config, items):
     reason = pytest.mark.skip(reason="PostgreSQL unreachable (set REQUIRE_DB=1 to require it)")
     for item in db_tests:
         item.add_marker(reason)
+
+
+@pytest.fixture(scope="session")
+def schema():
+    """Builds the schema once per run, if the database does not have it yet.
+
+    Shared rather than defined in one test file: in CI the database starts
+    empty, and whichever file runs first needs it — pytest walks the folders in
+    alphabetical order, so tests/previsions comes before tests/test_schema.
+    """
+    if not schema_ready():
+        apply_schema()

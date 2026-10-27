@@ -42,11 +42,15 @@ def _forecast(conn, site_id: str, value: float, origin_hours: int, target_hours:
 
 
 @pytest.fixture
-def seeded():
-    """Writes then rolls back: the development data stays untouched.
+def seeded(schema):
+    """Creates the test site, then deletes it — the cascade takes its forecasts.
 
-    The route opens its own connection, so it must see committed rows — hence
-    a real transaction, undone at the end rather than never committed.
+    A rollback would not do: the route opens its own connection and only sees
+    committed rows, so the test has to commit. Cleaning up therefore means
+    deleting, not undoing.
+
+    `schema` comes from tests/conftest.py: in CI the database starts empty, and
+    this file runs before tests/test_schema.py.
     """
     with engine.connect() as conn:
         _site(conn)

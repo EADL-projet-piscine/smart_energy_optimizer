@@ -82,6 +82,11 @@ export type History = {
   bySite: Record<string, SeriesPoint[]>
 }
 
+export type Forecasts = {
+  park: SeriesPoint[]
+  bySite: Record<string, SeriesPoint[]>
+}
+
 /** Détail temps réel d'un site : ce que le résumé ne dit pas. */
 export type SiteDetail = {
   at: string | null

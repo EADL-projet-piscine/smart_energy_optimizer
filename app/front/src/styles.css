@@ -54,7 +54,10 @@
   --accent: #ff7a1a;
   --accent-doux: rgba(255, 122, 26, 0.14);
   --mesure: #d6ef4e;
-  --prevision: #6aabff;
+  /* Orange : tranche franchement sur le vert-jaune de la mesure. Il voisine
+     l'ambre des alertes et le rouge du seuil, lui aussi en tiretés ; cette
+     nuance est la plus éloignée de l'ambre tout en restant orange. */
+  --prevision: #ff8c42;
   --seuil: #ef5d5d;
   --grille: rgba(255, 255, 255, 0.06);
   --piste: rgba(255, 255, 255, 0.08);
@@ -85,8 +88,9 @@
   --accent: #0284c7;
   --accent-doux: rgba(2, 132, 199, 0.12);
   --mesure: #0ea5e9;
-  /* Violet et non bleu : la prévision doit rester distincte de la mesure. */
-  --prevision: #7c3aed;
+  /* Vert sapin : assez sombre pour tenir sur fond blanc, et nettement
+     distinct du bleu de la mesure. */
+  --prevision: #14532d;
   --seuil: #b45309;
   --grille: rgba(16, 24, 40, 0.08);
   --piste: rgba(16, 24, 40, 0.08);

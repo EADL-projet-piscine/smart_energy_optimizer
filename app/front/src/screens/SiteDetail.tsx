@@ -8,9 +8,13 @@ import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Caption, Subtitle } from '../components/ui/Text'
 import {
+  forecastPeak,
+  formatDayHour,
   formatKw,
   formatNumber,
   formatTime,
+  lastMeasuredIndex,
+  loadTone,
   qualityLabel,
   qualityShort,
   sensorLabel,
@@ -144,16 +148,6 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   const main = mainAlert(site)
   const others = site.alerts.filter((alert) => alert !== main)
   const status = rowStatus(site, detail)
-  const forecastExceeds =
-    site.thresholdKw !== null && site.forecast2hKw !== null && site.forecast2hKw > site.thresholdKw
-  const readingsComplete =
-    site.receivedCount !== null &&
-    site.expectedCount !== null &&
-    site.expectedCount > 0 &&
-    site.receivedCount >= site.expectedCount
-  const readingsPartial =
-    site.receivedCount !== null && site.expectedCount !== null && site.receivedCount < site.expectedCount
-  const readingsTone = readingsComplete ? 'ok' : readingsPartial ? 'ambre' : 'defaut'
 
   // La qualité ne s'affiche que lorsqu'elle pose problème : « 24/24 » suivi de
   // « toutes les mesures sont disponibles » n'apprend rien au lecteur.
@@ -166,6 +160,36 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // bandeau s'en charge, et le dupliquer risquerait de le contredire.
   const loadPct = reading.value !== null && site.capacityKw ? (reading.value / site.capacityKw) * 100 : null
   const loadLabel = loadPct === null ? undefined : `${formatNumber(loadPct, 1)} % utilisés`
+
+  // Maximum prévu, strictement après la dernière mesure. `forecastPeak` se
+  // rabat sur toute la série quand il ne trouve rien au-delà ; comme le point
+  // de jonction porte la dernière mesure en guise de prévision, il rendrait
+  // alors un chiffre mesuré sous l'étiquette « prévu ». D'où le garde-fou.
+  const measuredIndex = lastMeasuredIndex(series)
+  const hasForecastAhead = series.slice(measuredIndex + 1).some((point) => point.forecastKw !== null)
+  const peak = hasForecastAhead ? forecastPeak(series, measuredIndex) : null
+  const peakPct = peak && site.capacityKw ? (peak.value / site.capacityKw) * 100 : null
+  const peakTone = loadTone(peakPct)
+
+  // Trois états, et non deux. Un pic au seuil des alertes se montre avec son
+  // heure ; un maximum ordinaire n'en est pas un, et la case le dit plutôt
+  // que de crier au loup ; une absence de prévision n'est ni l'un ni l'autre,
+  // et seule celle-là mérite un tiret. Sans capacité connue il n'y a rien à
+  // comparer, donc rien à qualifier de pic.
+  const notable = peak !== null && peakTone !== 'defaut'
+  const lastForecast = series.findLast(
+    (point) => point.forecastKw !== null && point !== series[measuredIndex],
+  )
+
+  let peakValue = '—'
+  let peakDetail: string | undefined
+  if (notable && peak && peakPct !== null) {
+    peakValue = formatKw(peak.value)
+    peakDetail = `${formatDayHour(peak.at)} · ${formatNumber(peakPct)} % de la capacité`
+  } else if (peak && lastForecast) {
+    peakValue = 'Aucun'
+    peakDetail = `jusqu’à ${formatDayHour(lastForecast.at)}`
+  }
 
   return (
     <div
@@ -213,7 +237,14 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 min-[681px]:grid-cols-2 min-[981px]:grid-cols-4">
+          {/* Ce que le site consomme, ce qu'il peut encaisser, et le pic
+              prévu. Trois cases fixes : les faire apparaître et disparaître
+              selon le site donnerait des panneaux de largeurs inégales dès
+              que deux sont ouverts côte à côte.
+              « Prévu +2 h » et « Mesures reçues » ont été retirées — aucune
+              source ne les alimentait, elles affichaient un tiret en
+              permanence. */}
+          <div className="mt-3 grid grid-cols-1 gap-3 min-[681px]:grid-cols-2 min-[981px]:grid-cols-3">
             <Metric
               variant="inset"
               label="Actuel"
@@ -221,13 +252,6 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
               value={formatKw(reading.value)}
               unit={reading.value === null ? undefined : 'kW'}
               detail={reading.note}
-            />
-            <Metric
-              variant="inset"
-              label="Prévu +2 h"
-              value={formatKw(site.forecast2hKw)}
-              unit={site.forecast2hKw === null ? undefined : 'kW'}
-              tone={forecastExceeds ? 'danger' : 'defaut'}
             />
             <Metric
               variant="inset"
@@ -241,15 +265,17 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
             />
             <Metric
               variant="inset"
-              label="Mesures reçues"
-              tone={readingsTone}
-              value={
-                site.receivedCount === null || site.expectedCount === null
-                  ? '—'
-                  : `${formatNumber(site.receivedCount)}/${formatNumber(site.expectedCount)}`
-              }
-              // Le résumé dit qu'il manque des mesures, le détail dit pourquoi.
-              detail={qualityIssue}
+              // Le même franchissement que montre la courbe, dit en chiffres :
+              // la ligne de capacité se lit d'un coup d'œil, la valeur exacte
+              // demande de survoler.
+              label="Pic de consommation prévu"
+              // Mêmes seuils que les alertes de capacité : 90 % en ambre,
+              // 100 % en rouge. Un pic signalé autrement que la charge réelle
+              // ferait douter de l'un ou de l'autre.
+              tone={peakTone}
+              value={peakValue}
+              unit={notable ? 'kW' : undefined}
+              detail={peakDetail}
             />
           </div>
 

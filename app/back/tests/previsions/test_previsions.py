@@ -12,7 +12,10 @@ SITE = "SITE902"
 
 def _site(conn, site_id: str = SITE):
     conn.execute(
-        text("SELECT upsert_site(CAST(:site_id AS text), CAST(:name AS text), NULL, 500::numeric)"),
+        text(
+            "SELECT upsert_site("
+            "CAST(:site_id AS text), CAST(:name AS text), NULL::text, 500::numeric)"
+        ),
         {"site_id": site_id, "name": f"Site {site_id}"},
     )
 

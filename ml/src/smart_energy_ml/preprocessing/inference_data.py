@@ -74,6 +74,7 @@ def load_inference_data(
     df_hourly = build_hourly_dataset(
         start=start.to_pydatetime(),
         end=end.to_pydatetime(),
+        raw_dir=raw_dir,
     )
 
     # 3. Validation du contrat ETL → ML.

@@ -4,7 +4,6 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import pytest
 
-import smart_energy_ml.preprocessing.hourly_aggregation as aggregation
 from smart_energy_ml.preprocessing.hourly_aggregation import (
     build_hourly_dataset,
     find_raw_files,
@@ -12,16 +11,6 @@ from smart_energy_ml.preprocessing.hourly_aggregation import (
 
 START = datetime(2026, 6, 15, tzinfo=UTC)
 END = datetime(2026, 6, 16, tzinfo=UTC)
-
-
-@pytest.fixture(autouse=True)
-def mock_raw_data_dir(tmp_path, monkeypatch):
-    """Redirige le répertoire de données vers celui du test."""
-    monkeypatch.setattr(
-        aggregation,
-        "RAW_DATA_DIR",
-        tmp_path,
-    )
 
 
 # ---------------------------------------------------------
@@ -90,7 +79,7 @@ def test_full_hour_has_correct_average(tmp_path):
 
     write_readings(tmp_path, readings)
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     first_hour = df.iloc[0]
 
@@ -107,7 +96,7 @@ def test_nine_valid_readings_are_accepted(tmp_path):
         make_readings(9, value=42.0),
     )
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     first_hour = df.iloc[0]
 
@@ -122,7 +111,7 @@ def test_eight_valid_readings_are_rejected(tmp_path):
         make_readings(8),
     )
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     first_hour = df.iloc[0]
 
@@ -137,7 +126,7 @@ def test_missing_hours_are_reconstructed(tmp_path):
         make_readings(12, hour=0),
     )
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     assert len(df) == 24
 
@@ -158,7 +147,7 @@ def test_invalid_values_are_excluded_from_average(tmp_path):
 
     write_readings(tmp_path, readings)
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     first_hour = df.iloc[0]
 
@@ -179,7 +168,7 @@ def test_duplicate_readings_raise_error(tmp_path):
     write_readings(tmp_path, readings)
 
     with pytest.raises(ValueError, match="Doublons"):
-        build_hourly_dataset(START, END)
+        build_hourly_dataset(START, END, tmp_path)
 
 
 def test_multiple_site_types_raise_error(tmp_path):
@@ -192,7 +181,7 @@ def test_multiple_site_types_raise_error(tmp_path):
     write_readings(tmp_path, readings)
 
     with pytest.raises(ValueError, match="Plusieurs types"):
-        build_hourly_dataset(START, END)
+        build_hourly_dataset(START, END, tmp_path)
 
 
 def test_files_outside_period_are_ignored(tmp_path):
@@ -211,7 +200,7 @@ def test_files_outside_period_are_ignored(tmp_path):
         encoding="utf-8",
     )
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     assert len(df) == 24
     assert df.iloc[0]["consumption_kw"] == pytest.approx(50.0)
@@ -219,7 +208,7 @@ def test_files_outside_period_are_ignored(tmp_path):
 
 def test_missing_files_raise_error(tmp_path):
     with pytest.raises(FileNotFoundError):
-        build_hourly_dataset(START, END)
+        build_hourly_dataset(START, END, tmp_path)
 
 
 def test_naive_dates_raise_error(tmp_path):
@@ -230,6 +219,7 @@ def test_naive_dates_raise_error(tmp_path):
         build_hourly_dataset(
             naive_start,
             naive_end,
+            tmp_path,
         )
 
 
@@ -238,6 +228,7 @@ def test_invalid_period_raises_error(tmp_path):
         build_hourly_dataset(
             END,
             START,
+            tmp_path,
         )
 
 
@@ -248,6 +239,7 @@ def test_non_aligned_hours_raise_error(tmp_path):
         build_hourly_dataset(
             start,
             END,
+            tmp_path,
         )
 
 
@@ -274,7 +266,7 @@ def test_multiple_sites_are_aggregated_separately(tmp_path):
         site_id="SITE002",
     )
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     assert len(df) == 48
     assert df["site_id"].nunique() == 2
@@ -306,7 +298,7 @@ def test_end_boundary_is_exclusive(tmp_path):
 
     write_readings(tmp_path, readings)
 
-    df = build_hourly_dataset(START, END)
+    df = build_hourly_dataset(START, END, tmp_path)
 
     assert len(df) == 24
     assert df["timestamp"].max() == pd.Timestamp("2026-06-15T23:00:00Z")

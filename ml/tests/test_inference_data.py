@@ -195,7 +195,7 @@ def test_aggregation_uses_same_period(
 
     assert aggregate_kwargs["start"] == collect_kwargs["start"]
     assert aggregate_kwargs["end"] == collect_kwargs["end"]
-    assert set(aggregate_kwargs) == {"start", "end"}
+    assert aggregate_kwargs["raw_dir"] == tmp_path
 
 
 def test_contract_validation_is_called(

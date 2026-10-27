@@ -106,6 +106,15 @@ regarde pas qui est la bonne. Voir la section suivante.
 | `summary.ts` | `GET /api/consommations` | le parc : totaux, consommation et capacité de chaque site, alertes |
 | `details.ts` | `GET /api/consommations/sites` | par site : qualité de la mesure, causes d'absence, grandeurs électriques |
 | `history.ts` | `GET /api/consommations/historique` | les 24 dernières heures, par site et pour le parc |
+| `session.ts` | `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/logout` | la session : faut-il se connecter, qui est connecté, quels sites il voit |
+
+**Session.** `useSession` décide de l'écran : connexion ou dashboard. Le jeton
+vit dans un cookie `HttpOnly` que le dashboard ne lit jamais ; `fetchJson`
+l'envoie avec chaque appel. Une réponse 401, d'où qu'elle vienne (session
+expirée au bout de 15 minutes), émet `UNAUTHORIZED_EVENT` et ramène à l'écran
+de connexion. Si l'API est ouverte (`AUTH_ENABLED=false`) ou ne connaît pas
+`/api/auth/me`, le dashboard s'affiche comme avant. Le filtrage par site est
+fait par l'API : le dashboard affiche ce qu'il reçoit.
 
 **Le résumé dit *combien*, le détail dit *pourquoi*.** Les deux portent
 `consumption_kw`, et c'est le seul recouvrement : la consommation affichée à

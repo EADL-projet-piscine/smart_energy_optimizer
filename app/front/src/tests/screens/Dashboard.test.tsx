@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dashboard } from '../../screens/Dashboard'
 import type { DetailsBySite, ParkSummary } from '../../services/model'
@@ -47,6 +47,22 @@ beforeEach(() => {
 })
 
 describe('Dashboard', () => {
+  it('shows the signed-in user and lets them sign out', () => {
+    const onSignOut = vi.fn()
+
+    render(<Dashboard account={{ name: 'Ada Lovelace', onSignOut }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
+
+    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument()
+    expect(onSignOut).toHaveBeenCalledOnce()
+  })
+
+  it('has no sign-out button when the API is open', () => {
+    render(<Dashboard />)
+
+    expect(screen.queryByRole('button', { name: 'Se déconnecter' })).not.toBeInTheDocument()
+  })
+
   it('displays the consumption it received', () => {
     render(<Dashboard />)
 

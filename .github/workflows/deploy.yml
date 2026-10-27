@@ -10,7 +10,6 @@ on:
 permissions:
   contents: read
   packages: read
-  actions: read
 
 concurrency:
   group: production-deploy
@@ -20,18 +19,23 @@ jobs:
   deploy:
     name: Deploy application
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      ) ||
       (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.event == 'push'
       )
     runs-on: self-hosted
+    environment: production
 
     steps:
       - name: Checkout deployed commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          persist-credentials: false
           ref: >-
             ${{
               github.event_name == 'workflow_run' &&
@@ -40,13 +44,65 @@ jobs:
             }}
 
       - name: Login to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check that a complete image set was published
+        id: image-set
+        env:
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_TAG: >-
+            ${{
+              github.event_name == 'workflow_run' &&
+              github.event.workflow_run.head_sha ||
+              github.sha
+            }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE_PREFIX="ghcr.io/$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          missing=()
+          published=0
+
+          for service in back ml mlflow; do
+            image="${IMAGE_PREFIX}/${service}:${IMAGE_TAG}"
+            if inspection=$(docker manifest inspect "$image" 2>&1); then
+              published=$((published + 1))
+            elif grep -Eqi 'manifest unknown|no such manifest|not found' <<< "$inspection"; then
+              missing+=("$service")
+            else
+              echo "::error::Unable to inspect ${image}: ${inspection}"
+              exit 1
+            fi
+          done
+
+          if (( published == 0 )); then
+            # CI publishes images only for a commit that changes something deployable.
+            # After a CI run that is expected; a manual run asked for a deployment, so
+            # it must not report success when there is nothing to deploy.
+            if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+              echo "::error::No images were published for ${IMAGE_TAG}: the latest commit of main changes nothing deployable. Nothing was deployed."
+              exit 1
+            fi
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No deployable images were published for ${IMAGE_TAG}; deployment skipped."
+            exit 0
+          fi
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Incomplete image set for ${IMAGE_TAG}; missing: ${missing[*]}"
+            exit 1
+          fi
+
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
       - name: Pull and deploy
+        if: steps.image-set.outputs.deploy == 'true'
         env:
           REPOSITORY: ${{ github.repository }}
           IMAGE_TAG: >-
@@ -68,10 +124,6 @@ jobs:
           PROD_ENV="$HOME/enervision/.env"
 
           test -f "$PROD_ENV"
-
-          set -a
-          source "$PROD_ENV"
-          set +a
 
           docker compose \
             -f docker-compose.yml \

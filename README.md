@@ -635,6 +635,16 @@ ne sait pas se connecter). Elle répond au constat C1 de l'audit de sécurité.
         --email ada@example.com --name "Ada Lovelace" --role viewer \
         --site SITE001 --site SITE003
 
+- **Gestion des comptes** : une fois le premier administrateur créé par cette
+  commande, les autres comptes se gèrent depuis l'écran « Comptes » du
+  dashboard (bouton dans l'en-tête, administrateurs seulement), ou par
+  `GET`, `POST` et `PATCH /api/comptes` : création, nom, activation, rôle,
+  sites d'un lecteur et nouveau mot de passe. Rattacher un site à un client
+  le retire à son client précédent. Ces routes répondent 403 à un autre rôle,
+  et tant que `AUTH_ENABLED=false`. Un administrateur ne peut ni désactiver
+  son propre compte ni s'enlever le rôle `admin`. Chaque action est
+  journalisée avec son auteur, jamais avec un mot de passe.
+
 Les tests `tests/auth/` vérifient à chaque pull request les 401 de chaque route,
 les 403 hors périmètre, le filtrage des réponses et la connexion sur une vraie
 base. **Production** : `AUTH_ENABLED` et `JWT_SECRET` vont dans le `back.env`

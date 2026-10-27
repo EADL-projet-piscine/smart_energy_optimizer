@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
-from smart_energy_app.auth.dependencies import CurrentPrincipal, forbidden_site
+from smart_energy_app.auth import CurrentPrincipal, forbidden_site
 from smart_energy_app.previsions.repository import load_forecasts
 
 logger = logging.getLogger(__name__)

@@ -8,6 +8,20 @@ export function IconBolt({ className }: Props) {
   )
 }
 
+export function IconUsers({ className }: Props) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.2a6.5 6.5 0 0 1 3.5 5.8"
+      />
+    </svg>
+  )
+}
+
 export function IconLogout({ className }: Props) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">

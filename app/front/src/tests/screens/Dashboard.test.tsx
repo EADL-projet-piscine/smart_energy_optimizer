@@ -57,6 +57,17 @@ describe('Dashboard', () => {
     expect(onSignOut).toHaveBeenCalledOnce()
   })
 
+  it('offers account management to an administrator only', () => {
+    const onOpenAccounts = vi.fn()
+    const { rerender } = render(<Dashboard account={{ name: 'Ada', onSignOut: vi.fn() }} />)
+    expect(screen.queryByRole('button', { name: 'Gérer les comptes' })).not.toBeInTheDocument()
+
+    rerender(<Dashboard account={{ name: 'Admin', onSignOut: vi.fn(), onOpenAccounts }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Gérer les comptes' }))
+
+    expect(onOpenAccounts).toHaveBeenCalledOnce()
+  })
+
   it('has no sign-out button when the API is open', () => {
     render(<Dashboard />)
 

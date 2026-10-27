@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
-import { IconBolt, IconLogout, IconMoon, IconSun } from '../components/Icons'
+import { IconBolt, IconLogout, IconMoon, IconSun, IconUsers } from '../components/Icons'
 import { Banner } from '../components/ui/Banner'
 import { Card } from '../components/ui/Card'
 import { IconButton } from '../components/ui/IconButton'
@@ -16,7 +16,12 @@ import { useSummary } from '../services/useSummary'
 import { SiteDetail } from './SiteDetail'
 
 /** L'utilisateur connecté, absent quand l'API est ouverte. */
-export type SignedInAccount = { name: string; onSignOut: () => void }
+export type SignedInAccount = {
+  name: string
+  onSignOut: () => void
+  /** Présent pour un administrateur seulement. */
+  onOpenAccounts?: () => void
+}
 
 export function Dashboard({ account = null }: { account?: SignedInAccount | null }) {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
@@ -69,6 +74,11 @@ export function Dashboard({ account = null }: { account?: SignedInAccount | null
               <span className="self-center px-2 text-[13px] text-secondaire max-[680px]:hidden">
                 {account.name}
               </span>
+              {account.onOpenAccounts && (
+                <IconButton onClick={account.onOpenAccounts} aria-label="Gérer les comptes">
+                  <IconUsers />
+                </IconButton>
+              )}
               <IconButton onClick={account.onSignOut} aria-label="Se déconnecter">
                 <IconLogout />
               </IconButton>

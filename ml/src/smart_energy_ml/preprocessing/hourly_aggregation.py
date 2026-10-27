@@ -1,9 +1,9 @@
 import json
 import logging
-import os
-import stat
 from datetime import datetime
 from pathlib import Path
+import os
+import stat
 
 import pandas as pd
 
@@ -21,7 +21,6 @@ OUTPUT_COLUMNS = [
     "total_readings",
     "coverage_pct",
 ]
-
 
 def load_raw_files(raw_dir: Path, days: pd.DatetimeIndex) -> list[dict]:
     """Charge les fichiers JSON du répertoire autorisé."""

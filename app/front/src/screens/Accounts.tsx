@@ -198,6 +198,12 @@ function AccountForm({ account, isSelf = false, sites, accounts, onSubmit, onCan
   )
 }
 
+/** Vrai si les deux listes contiennent les mêmes sites, dans n'importe quel ordre. */
+function sameSites(left: string[], right: string[]): boolean {
+  const rightSet = new Set(right)
+  return new Set(left).size === rightSet.size && left.every((siteId) => rightSet.has(siteId))
+}
+
 /** Les champs modifiés, et seulement eux : le serveur journalise ce qui a changé. */
 export function changesOf(account: ManagedAccount, values: FormValues): AccountChanges {
   const changes: AccountChanges = {}
@@ -205,7 +211,7 @@ export function changesOf(account: ManagedAccount, values: FormValues): AccountC
   if (values.isActive !== account.isActive) changes.isActive = values.isActive
   if (values.role !== account.role) changes.role = values.role
   const sites = values.role === 'viewer' ? values.siteIds : []
-  if ([...sites].sort().join() !== [...account.siteIds].sort().join()) changes.siteIds = sites
+  if (!sameSites(sites, account.siteIds)) changes.siteIds = sites
   if (values.password !== '') changes.password = values.password
   return changes
 }

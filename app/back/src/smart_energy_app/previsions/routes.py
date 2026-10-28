@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
+from smart_energy_app.auth.dependencies import CurrentPrincipal, forbidden_site
 from smart_energy_app.previsions.repository import load_forecasts
 
 logger = logging.getLogger(__name__)
@@ -12,9 +13,9 @@ router = APIRouter()
 
 # Chemin vide : le préfixe du routeur porte déjà « /api/previsions ».
 @router.get("", summary="Prévisions de consommation des prochaines heures")
-def forecasts() -> dict:
+def forecasts(principal: CurrentPrincipal) -> dict:
     try:
-        return load_forecasts()
+        payload = load_forecasts()
     except SQLAlchemyError as error:
         # Pas de repli : un graphique vide est honnête, un graphique
         # reconstitué ne l'est pas.
@@ -23,10 +24,17 @@ def forecasts() -> dict:
             status_code=503,
             detail="La base de données est injoignable.",
         ) from error
+    return {**payload, "sites": principal.visible(payload["sites"])}
 
 
-@router.get("/{site_id}", summary="Prévisions de consommation d'un site")
-def site_forecasts(site_id: str) -> dict:
+@router.get(
+    "/{site_id}",
+    summary="Prévisions de consommation d'un site",
+    responses={403: {"description": "Site hors du périmètre de l'utilisateur"}},
+)
+def site_forecasts(site_id: str, principal: CurrentPrincipal) -> dict:
+    if not principal.can_see(site_id):
+        raise forbidden_site(site_id)
     try:
         payload = load_forecasts()
     except SQLAlchemyError as error:

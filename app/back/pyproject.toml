@@ -14,6 +14,8 @@ dependencies = [
     "pydantic-settings",
     "sqlalchemy",
     "psycopg[binary]",
+    "pyjwt",
+    "argon2-cffi",
 ]
 
 [project.optional-dependencies]

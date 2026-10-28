@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SiteDetail } from '../../screens/SiteDetail'
-import type { Alert, SiteDetail as Detail, DetailsBySite, Site } from '../../services/model'
+import type { Alert, SiteDetail as Detail, DetailsBySite, SeriesPoint, Site } from '../../services/model'
 
 // The chart belongs to Recharts: replacing it isolates what we test and
 // avoids the zero-dimension warnings under jsdom.
@@ -50,9 +50,22 @@ function detail(overrides: Partial<Detail> = {}): Detail {
   }
 }
 
-function renderDetail(sites: Site[], siteId = sites[0]?.id ?? '', details: DetailsBySite = {}) {
+function renderDetail(
+  sites: Site[],
+  siteId = sites[0]?.id ?? '',
+  details: DetailsBySite = {},
+  seriesBySite: Record<string, SeriesPoint[]> = {},
+) {
   const onSelect = vi.fn()
-  render(<SiteDetail sites={sites} siteId={siteId} onSelect={onSelect} seriesBySite={{}} details={details} />)
+  render(
+    <SiteDetail
+      sites={sites}
+      siteId={siteId}
+      onSelect={onSelect}
+      seriesBySite={seriesBySite}
+      details={details}
+    />,
+  )
   return onSelect
 }
 
@@ -148,7 +161,7 @@ describe('SiteDetail', () => {
 
   it('puts a dash on missing values', () => {
     // Never a zero: zero is a measurement, the absence of one is not.
-    renderDetail([site({ currentKw: null, forecast2hKw: null, thresholdKw: null })])
+    renderDetail([site({ currentKw: null, capacityKw: null })])
 
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)
   })
@@ -173,17 +186,91 @@ describe('SiteDetail', () => {
 
     expect(screen.queryByText(/% utilisés/)).not.toBeInTheDocument()
   })
+})
 
-  it('displays the count of readings received', () => {
-    renderDetail([site({ receivedCount: 14, expectedCount: 24 })])
+describe('SiteDetail — forecast peak', () => {
+  const PEAK = 'Pic de consommation prévu'
 
-    expect(screen.getByText('14/24')).toBeInTheDocument()
+  /** A forecast peaking at `value`, local hours (TZ=Europe/Paris): 17:00Z → 18h00. */
+  function forecastAt(value: number): SeriesPoint[] {
+    return [
+      { at: '2026-10-27T09:00:00Z', measuredKw: 100, forecastKw: null },
+      { at: '2026-10-27T16:00:00Z', measuredKw: null, forecastKw: value * 0.8 },
+      { at: '2026-10-27T17:00:00Z', measuredKw: null, forecastKw: value },
+    ]
+  }
+
+  it('displays the highest forecast and the hour it lands', () => {
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: forecastAt(190) })
+
+    expect(screen.getByText('190')).toBeInTheDocument()
+    expect(screen.getByText(/18h00/)).toBeInTheDocument()
   })
 
-  it('puts a dash when the count is unknown', () => {
-    renderDetail([site({ receivedCount: null, expectedCount: null })])
+  it('states the peak as a share of the capacity', () => {
+    // The same crossing the chart shows, said in figures.
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: forecastAt(190) })
 
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/95 % de la capacité/)).toBeInTheDocument()
+  })
+
+  it('turns red beyond the capacity', () => {
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: forecastAt(210) })
+
+    expect(screen.getByText(/105 % de la capacité/)).toBeInTheDocument()
+  })
+
+  it('announces no peak for an ordinary maximum', () => {
+    // Announcing a peak at 70 % of capacity would cry wolf on a plain day —
+    // but saying so is not the same as showing a dash.
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: forecastAt(140) })
+
+    expect(screen.getByText(PEAK)).toBeInTheDocument()
+    expect(screen.getByText('Aucun')).toBeInTheDocument()
+    expect(screen.queryByText(/% de la capacité/)).not.toBeInTheDocument()
+  })
+
+  it('says how far the forecast reaches', () => {
+    // "No peak" without a horizon is a half-answer: no peak until when?
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: forecastAt(140) })
+
+    expect(screen.getByText(/jusqu’à .*18h00/)).toBeInTheDocument()
+  })
+
+  it('stays silent one point below the threshold', () => {
+    // 89,5 % and 90 % must not read the same: the boundary is the business
+    // rule, not a rounding.
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: forecastAt(179) })
+
+    expect(screen.getByText('Aucun')).toBeInTheDocument()
+  })
+
+  it('announces no peak without a capacity to compare to', () => {
+    renderDetail([site({ capacityKw: null })], 'SITE001', {}, { SITE001: forecastAt(190) })
+
+    expect(screen.getByText('Aucun')).toBeInTheDocument()
+    expect(screen.queryByText(/% de la capacité/)).not.toBeInTheDocument()
+  })
+
+  it('does not mistake the last measurement for a peak', () => {
+    // The junction point carries the last measurement as a forecast so the
+    // lines join. Reading it as a peak would label a measured figure
+    // "forecast".
+    const joinedOnly: SeriesPoint[] = [{ at: '2026-10-27T09:00:00Z', measuredKw: 195, forecastKw: 195 }]
+
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: joinedOnly })
+
+    expect(screen.queryByText('195')).not.toBeInTheDocument()
+    expect(screen.queryByText('Aucun')).not.toBeInTheDocument()
+  })
+
+  it('puts a dash when the model produced nothing', () => {
+    // No forecast at all is neither a peak nor its absence: only that case
+    // deserves a dash.
+    renderDetail([site({ capacityKw: 200 })], 'SITE001', {}, { SITE001: [] })
+
+    expect(screen.getByText(PEAK)).toBeInTheDocument()
+    expect(screen.queryByText('Aucun')).not.toBeInTheDocument()
   })
 })
 
@@ -245,11 +332,7 @@ describe('SiteDetail — diagnosis', () => {
   })
 
   it('explains why readings are missing', () => {
-    // This is what the ticket is about: the summary says some are missing, the
-    // detail says why. Without it the screen shows "22/24" and nothing else.
-    renderDetail([site({ receivedCount: 22, expectedCount: 24 })], 'SITE001', {
-      SITE001: detail({ dataQuality: 'partial' }),
-    })
+    renderDetail([site()], 'SITE001', { SITE001: detail({ dataQuality: 'partial' }) })
 
     expect(screen.getAllByText('Un capteur secondaire en panne').length).toBeGreaterThanOrEqual(1)
   })

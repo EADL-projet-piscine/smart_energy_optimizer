@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dashboard } from '../../screens/Dashboard'
-import type { DetailsBySite, ParkSummary } from '../../services/model'
+import type { DetailsBySite, Forecasts, History, ParkSummary } from '../../services/model'
+import { useForecasts } from '../../services/useForecasts'
 import { useHistory } from '../../services/useHistory'
 import { useSummary } from '../../services/useSummary'
 
 vi.mock('../../services/useSummary', () => ({ useSummary: vi.fn() }))
 vi.mock('../../services/useHistory', () => ({ useHistory: vi.fn() }))
+vi.mock('../../services/useForecasts', () => ({ useForecasts: vi.fn() }))
 
 const SUMMARY: ParkSummary = {
   siteCount: 7,
@@ -30,6 +32,16 @@ const SUMMARY: ParkSummary = {
   source: 'api',
 }
 
+const HISTORY: History = {
+  park: [{ at: '2026-10-22T09:00:00Z', measuredKw: 2847, forecastKw: null }],
+  bySite: {},
+}
+
+const FORECASTS: Forecasts = {
+  park: [{ at: '2026-10-22T11:00:00Z', measuredKw: null, forecastKw: 3100 }],
+  bySite: {},
+}
+
 function mockHooks(summary: ParkSummary | null, error: string | null, details: DetailsBySite = {}) {
   vi.mocked(useSummary).mockReturnValue({
     summary,
@@ -40,6 +52,7 @@ function mockHooks(summary: ParkSummary | null, error: string | null, details: D
     setSiteId: vi.fn(),
   })
   vi.mocked(useHistory).mockReturnValue({ history: null, error: null })
+  vi.mocked(useForecasts).mockReturnValue({ forecasts: null, error: null })
 }
 
 beforeEach(() => {
@@ -125,5 +138,41 @@ describe('Dashboard', () => {
     render(<Dashboard />)
 
     expect(screen.getByText('2 847')).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard — forecasts', () => {
+  it('announces the forecast curve in the legend once there is one', () => {
+    vi.mocked(useHistory).mockReturnValue({ history: HISTORY, error: null })
+    vi.mocked(useForecasts).mockReturnValue({ forecasts: FORECASTS, error: null })
+
+    render(<Dashboard />)
+
+    expect(screen.getByText('Prévu')).toBeInTheDocument()
+    expect(screen.getByText('Mesuré')).toBeInTheDocument()
+  })
+
+  it('promises no forecast curve when the model has produced none', () => {
+    // A legend entry without a line sends the reader looking for a curve that
+    // is not there.
+    vi.mocked(useHistory).mockReturnValue({ history: HISTORY, error: null })
+    vi.mocked(useForecasts).mockReturnValue({ forecasts: null, error: null })
+
+    render(<Dashboard />)
+
+    expect(screen.queryByText('Prévu')).not.toBeInTheDocument()
+    expect(screen.getByText('Mesuré')).toBeInTheDocument()
+  })
+
+  it('keeps the measurements on screen when the forecasts fail', () => {
+    // Forecasts are a complement: losing them must not empty the chart.
+    vi.mocked(useHistory).mockReturnValue({ history: HISTORY, error: null })
+    vi.mocked(useForecasts).mockReturnValue({ forecasts: null, error: 'Statut 503' })
+
+    render(<Dashboard />)
+
+    expect(screen.getByText(/Prévisions indisponibles/)).toBeInTheDocument()
+    expect(screen.getByText('2 847')).toBeInTheDocument()
+    expect(screen.queryByText(/Historique indisponible/)).not.toBeInTheDocument()
   })
 })

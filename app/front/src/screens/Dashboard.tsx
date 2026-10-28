@@ -11,6 +11,8 @@ import { Label, SiteText } from '../components/ui/Text'
 import { alertsLabel, formatCollectedAt, formatNumber, sitesLabel } from '../services/format'
 import { appendCurrent } from '../services/history'
 import type { SeriesPoint } from '../services/model'
+import { connectForecast, mergeSeries } from '../services/series'
+import { useForecasts } from '../services/useForecasts'
 import { useHistory } from '../services/useHistory'
 import { useSummary } from '../services/useSummary'
 import { SiteDetail } from './SiteDetail'
@@ -29,6 +31,7 @@ export function Dashboard({ account = null }: { account?: SignedInAccount | null
   )
   const { summary, details, error, siteId, setSiteId } = useSummary()
   const { history, error: historyError } = useHistory()
+  const { forecasts, error: forecastError } = useForecasts()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -37,22 +40,32 @@ export function Dashboard({ account = null }: { account?: SignedInAccount | null
 
   // L'historique s'arrête à l'heure précédente ; la mesure temps réel le prolonge
   // jusqu'à maintenant, pour que la courbe rejoigne le chiffre affiché au-dessus.
-  const parkSeries = useMemo(
-    () => appendCurrent(history?.park ?? [], summary?.consumptionKw ?? null, summary?.lastCollectedAt),
-    [history, summary],
-  )
+  // Les prévisions prennent la suite, raccordées à la dernière mesure : sans ce
+  // raccord, leur ligne démarrerait détachée et se lirait comme une autre courbe.
+  const parkSeries = useMemo(() => {
+    const measured = appendCurrent(
+      history?.park ?? [],
+      summary?.consumptionKw ?? null,
+      summary?.lastCollectedAt,
+    )
+    return connectForecast(mergeSeries(measured, forecasts?.park ?? []))
+  }, [history, summary, forecasts])
 
   const seriesBySite = useMemo(() => {
     const result: Record<string, SeriesPoint[]> = {}
     for (const site of summary?.sites ?? []) {
-      result[site.id] = appendCurrent(
-        history?.bySite[site.id] ?? [],
-        site.currentKw,
-        summary?.lastCollectedAt,
-      )
+      const measured = appendCurrent(history?.bySite[site.id] ?? [], site.currentKw, summary?.lastCollectedAt)
+      // Chaque site reçoit ses propres prévisions. Un site que le modèle n'a
+      // pas traité garde ses mesures seules, sans rien d'inventé.
+      result[site.id] = connectForecast(mergeSeries(measured, forecasts?.bySite[site.id] ?? []))
     }
     return result
-  }, [history, summary])
+  }, [history, summary, forecasts])
+
+  // La légende n'annonce une courbe que si elle existe : promettre des
+  // prévisions quand le modèle n'a rien produit ferait chercher au lecteur un
+  // tracé absent.
+  const hasForecast = parkSeries.some((point) => point.forecastKw !== null)
 
   const exclusionMessage =
     summary && summary.excludedSites.length > 0
@@ -175,8 +188,25 @@ export function Dashboard({ account = null }: { account?: SignedInAccount | null
                     installations est une limite théorique, jamais atteinte
                     simultanément, et le total affiché exclut les sites muets.
                     La capacité garde tout son sens au niveau d'un site. */}
-                <Legend entries={[{ label: 'Mesuré', style: 'mesure' }]} />
+                <Legend
+                  entries={
+                    hasForecast
+                      ? [
+                          { label: 'Mesuré', style: 'mesure' },
+                          { label: 'Prévu', style: 'prevision' },
+                        ]
+                      : [{ label: 'Mesuré', style: 'mesure' }]
+                  }
+                />
               </header>
+              {/* Les prévisions sont un complément : leur absence laisse les
+                  mesures à l'écran, contrairement à l'historique qui est la
+                  courbe elle-même. */}
+              {forecastError && (
+                <Banner tone="ambre">
+                  Prévisions indisponibles : {forecastError}. Les mesures restent affichées.
+                </Banner>
+              )}
               {historyError ? (
                 <p className="mt-1.5 text-[13px] text-discret">Historique indisponible : {historyError}</p>
               ) : (

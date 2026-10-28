@@ -5,8 +5,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 
 from smart_energy_app.alertes.capacite import capacity_alerts
-from smart_energy_app.auth.dependencies import CurrentPrincipal, forbidden_site
-from smart_energy_app.auth.principal import Principal
+from smart_energy_app.auth import CurrentPrincipal, Principal, forbidden_site
 from smart_energy_app.config import settings
 from smart_energy_app.consommation.details import state as details_state
 from smart_energy_app.consommation.historique import load_history

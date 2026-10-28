@@ -104,6 +104,33 @@ describe('fetchJson', () => {
     expect(listener).toHaveBeenCalledOnce()
   })
 
+  it('keeps the message the API gives with an error', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'Un compte existe déjà avec cet e-mail.' }, 409))
+
+    const outcome = await fetchJson('/api/comptes', undefined, 'POST', {}).catch((cause: unknown) => cause)
+
+    expect((outcome as HttpError).detail).toBe('Un compte existe déjà avec cet e-mail.')
+  })
+
+  it.each([
+    ['a validation error list', jsonResponse({ detail: [{ msg: 'field required' }] }, 422)],
+    ['a body that is not JSON', new Response('<html>Bad Gateway</html>', { status: 502 })],
+  ])('has no message for %s', async (_label, response) => {
+    fetchMock.mockResolvedValue(response)
+
+    const outcome = await fetchJson('/api/comptes').catch((cause: unknown) => cause)
+
+    expect((outcome as HttpError).detail).toBeNull()
+  })
+
+  it('sends a PATCH', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}))
+
+    await fetchJson('/api/comptes/u-1', undefined, 'PATCH', { is_active: false })
+
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH', body: '{"is_active":false}' })
+  })
+
   it('does not announce other errors as a lost session', async () => {
     fetchMock.mockResolvedValue(jsonResponse({}, 403))
     const listener = vi.fn()

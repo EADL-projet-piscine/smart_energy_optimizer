@@ -69,7 +69,7 @@ export function Dashboard({ account = null }: { account?: SignedInAccount | null
 
   const exclusionMessage =
     summary && summary.excludedSites.length > 0
-      ? `Le total du parc exclut ${summary.excludedSites.join(' et ')}, sans relevé depuis plus de deux heures. La consommation réelle est donc supérieure à la valeur affichée.`
+      ? `Le total du parc exclut ${summary.excludedSites.join(' et ')}, sans relevé depuis plus de deux heures.`
       : null
 
   return (

@@ -18,8 +18,8 @@ Trois couches, du plus bas au plus haut :
 | Affichage | `src/components/`, `src/screens/` | Composants React. Pas d'appel réseau. |
 
 Un composant n'appelle jamais `fetch` directement : il consomme un hook
-(`useSummary`, `useHistory`) qui s'en charge. Cela permet de tester toute
-la logique de données sans monter de composant.
+(`useSummary`, `useHistory`, `useForecasts`) qui s'en charge. Cela permet de
+tester toute la logique de données sans monter de composant.
 
 La frontière entre un service et un hook est celle du **quoi** et du
 **quand**. `history.ts` sait aller chercher l'historique et le transformer
@@ -40,6 +40,17 @@ src/
 │   └── ConsumptionChart.tsx
 ├── screens/               Écrans : Dashboard, SiteDetail
 ├── services/              Modèle, normalisation, formatage, hooks
+│   ├── model.ts           Les types partagés
+│   ├── normalize.ts       Lecture défensive du résumé de la source
+│   ├── format.ts          Formatage et règles d'affichage
+│   ├── series.ts          Opérations sur les séries datées
+│   ├── summary.ts         ┐
+│   ├── details.ts         │ un service par endpoint,
+│   ├── history.ts         │ plus son hook
+│   ├── forecasts.ts       ┘
+│   ├── useSummary.ts
+│   ├── useHistory.ts
+│   └── useForecasts.ts
 ├── data/                  Jeux de données de démonstration
 ├── tests/                 Tests, en miroir de l'arborescence ci-dessus
 └── styles.css             Thème : variables CSS et classes Tailwind
@@ -95,6 +106,13 @@ chaîne ISO. Un entier d'heure ne distingue pas 9h hier de 9h aujourd'hui :
 sur une fenêtre glissante, trier par heure relie deux points séparés de
 vingt-trois heures.
 
+**Une heure seule ne suffit pas au-delà de la journée.** Les prévisions
+portent sur 24 heures : « 14h00 » ne dit pas si c'est dans deux heures ou
+dans vingt-deux, et se lit volontiers comme un moment déjà passé.
+`formatDayHour()` ajoute « demain » dès qu'il ne s'agit plus d'aujourd'hui.
+`formatHour()` reste juste pour les graduations du graphique, où l'axe porte
+la chronologie.
+
 **Un champ affiché a une seule source.** Deux endpoints qui servent la même
 donnée, ce sont deux versions de la vérité, et c'est toujours celle qu'on ne
 regarde pas qui est la bonne. Voir la section suivante.
@@ -106,6 +124,7 @@ regarde pas qui est la bonne. Voir la section suivante.
 | `summary.ts` | `GET /api/consommations` | le parc : totaux, consommation et capacité de chaque site, alertes |
 | `details.ts` | `GET /api/consommations/sites` | par site : qualité de la mesure, causes d'absence, grandeurs électriques |
 | `history.ts` | `GET /api/consommations/historique` | les 24 dernières heures, par site et pour le parc |
+| `forecasts.ts` | `GET /api/previsions` | les prévisions à venir, par site et pour le parc |
 
 **Le résumé dit *combien*, le détail dit *pourquoi*.** Les deux portent
 `consumption_kw`, et c'est le seul recouvrement : la consommation affichée à
@@ -120,6 +139,10 @@ endpoints sont décorrélés : quand le résumé porte un chiffre, il vient du
 cycle courant et il est à jour, même si le détail signale au même moment une
 panne du compteur. Avoir conclu l'inverse a produit un écran qui annonçait
 « relevé de 14h43 » alors que la collecte datait de 14h43.
+
+`/api/previsions` existe aussi en version par site
+(`/api/previsions/{site_id}`), inutilisée : l'écran affiche le parc et les
+sept sites ensemble, un seul appel suffit.
 
 ### Ce qui voyage dans l'enveloppe
 
@@ -143,7 +166,9 @@ Sans cela, l'écran continuerait d'annoncer zéro alerte.
 
 Le détail est un **complément** : s'il échoue, l'écran perd son bloc
 « État de l'installation » et garde tout le reste. C'est pour cela que
-`useSummary` les charge avec `Promise.allSettled` et non `Promise.all`.
+`useSummary` les charge avec `Promise.allSettled` et non `Promise.all`. Les
+prévisions suivent la même logique : leur absence laisse les mesures à
+l'écran, avec un bandeau.
 
 Les chemins sont écrits dans les services, jamais dans un composant. Ce sont
 des **chaînes de caractères** : ni TypeScript ni Biome ne les vérifie, et une
@@ -154,11 +179,43 @@ URL complètes, puis regarder l'onglet réseau du navigateur.
 La convention de nommage des endpoints est décrite dans
 `conventions-back.md` : collection au pluriel, vue calculée au singulier.
 
+## Les séries datées
+
+`services/series.ts` porte les trois opérations que l'historique et les
+prévisions partagent.
+
+**`sumBySite`** additionne les sites à horodatage égal. Un horodatage où
+aucun site n'a de valeur reste à `null` : un site muet ne tire pas le total
+du parc vers le bas. La fonction prend le champ à sommer — `measuredKw` ou
+`forecastKw` — plutôt que d'exister en deux copies.
+
+**`mergeSeries`** réunit mesures et prévisions en une seule série triée. Les
+deux ne se chevauchent pas, l'historique s'arrêtant au présent, mais si un
+horodatage leur est commun le point porte les deux valeurs au lieu
+d'apparaître en double.
+
+**`connectForecast`** raccorde la courbe de prévision à la dernière mesure.
+Sans lui, la ligne démarre au premier créneau à venir et **flotte** : le
+lecteur voit deux tracés sans lien alors qu'il s'agit de la même
+consommation, avant et après maintenant. Le point de jonction porte les deux
+valeurs, strictement égales — on ne prétend rien prévoir, on prolonge la
+ligne jusqu'à ce qui est déjà constaté.
+
+> Ce raccord a une conséquence qu'il faut connaître : le dernier point
+> mesuré porte désormais une valeur de prévision. Tout calcul qui cherche un
+> maximum prévu doit l'exclure, sous peine d'afficher un chiffre mesuré sous
+> l'étiquette « prévu ». `SiteDetail` le fait, et un test l'épingle.
+
+Les points d'historique tombent à des minutes non rondes — 09h32, 10h32 —
+tandis que les prévisions sont à l'heure pile. Les deux séries ne se
+superposent donc jamais, ce qui est sans gravité : elles ne couvrent pas la
+même période.
+
 ## Graphiques
 
 Les graphiques utilisent **Recharts**. Les couleurs passent par les
-variables CSS du thème (`var(--mesure)`, `var(--ambre)`) pour que le mode
-clair et le mode sombre fonctionnent sans JavaScript.
+variables CSS du thème (`var(--mesure)`, `var(--prevision)`, `var(--ambre)`)
+pour que le mode clair et le mode sombre fonctionnent sans JavaScript.
 
 La ligne de repère trace la **capacité du site**, en ambre, la même couleur
 que le bandeau d'alerte : les deux désignent la même limite, ils doivent se
@@ -166,6 +223,10 @@ répondre à l'œil. Elle n'est pas tracée sur le graphique du parc — la somm
 des sept capacités est une limite théorique, jamais atteinte simultanément,
 et le total affiché exclut les sites muets : comparer les deux ne compare
 rien.
+
+La courbe de prévision est en **tiretés**, comme la ligne de capacité. Sa
+légende n'apparaît que lorsqu'une prévision existe : une entrée de légende
+sans ligne envoie le lecteur chercher un tracé absent.
 
 `connectNulls` reste à `false` : une mesure absente doit couper la courbe.
 
@@ -181,6 +242,7 @@ mesures.
 | Résumé du parc | Calée sur `next_at` annoncé par le serveur | `useSummary.ts` |
 | Détail des sites | Dans le même cycle que le résumé | `useSummary.ts` |
 | Historique 24 h | 5 minutes | `useHistory.ts` |
+| Prévisions | 5 minutes | `useForecasts.ts` |
 
 Le serveur annonce dans `/api/consommations` l'heure de sa prochaine mesure
 (`next_at`). Le client planifie son appel juste après, au lieu de sonder à
@@ -200,6 +262,13 @@ L'historique est au pas horaire : le rafraîchir plus souvent ne montrerait
 rien de neuf, et la source régénère ses valeurs à chaque appel — la courbe
 sauterait.
 
+**Les prévisions suivent exactement la cadence de l'historique**, et c'est
+délibéré : les deux séries sont tracées ensemble, et des rythmes différents
+feraient apparaître une prévision plus récente que la mesure qu'elle
+prolonge. Cinq minutes sont généreuses pour une donnée que le modèle produit
+au mieux une fois par heure ; les ralentir imposerait de ralentir
+l'historique d'autant.
+
 ## Le détail par site
 
 Le détail est une **liste de panneaux dépliants**, un site par ligne,
@@ -218,12 +287,48 @@ suit ce que désigne le parent ; au premier clic, elle lui appartient.
 
 **Déplier ne déclenche aucun appel.** Les sept détails sont déjà chargés.
 
+### Les trois cases
+
+Un panneau ouvert montre **Actuel**, **Capacité** et **Pic de consommation
+prévu**. Elles se lisent ensemble : ce que le site consomme, ce qu'il peut
+encaisser, et le plus haut qu'il atteindra.
+
+Les trois sont **toujours présentes**, même quand l'une n'a rien à dire. Les
+faire apparaître et disparaître selon le site donnerait des panneaux de
+largeurs inégales dès que deux sont ouverts côte à côte.
+
 ### Ce qu'affiche la case « Actuel »
 
 Un chiffre n'est marqué comme daté que lorsqu'il **sort réellement de la
 mémoire du back**, c'est-à-dire quand le résumé ne porte plus rien. Il est
 alors affiché en ambre avec son heure : « Dernier relevé datant de 14h46 ».
 Un tiret ne reste que si l'on n'a jamais rien mesuré.
+
+### Ce qu'affiche la case « Pic de consommation prévu »
+
+Trois états, et non deux :
+
+| Situation | Affiché | Pourquoi |
+|---|---|---|
+| maximum prévu ≥ 90 % de la capacité | la valeur, son heure, son pourcentage | il y a un pic, et il faut dire quand |
+| maximum prévu sous le seuil | « Aucun », suivi de l'horizon couvert | annoncer un pic à 70 % crierait au loup |
+| aucune prévision pour ce site | « — » | le modèle n'a pas tourné : ce n'est ni un pic ni son absence |
+
+Le tiret est **réservé au dernier cas**. Une absence de pic n'est pas une
+donnée manquante, et les confondre ferait conclure à une panne.
+
+« Aucun » s'accompagne toujours de l'horizon — « jusqu'à demain 16h00 » —
+sans quoi la réponse est à moitié dite : aucun pic jusqu'à quand ?
+
+Les seuils sont ceux des alertes de capacité : 90 % en ambre, 100 % en
+rouge. Un pic signalé autrement que la charge réelle ferait douter de l'un
+ou de l'autre.
+
+> **Ces seuils sont recopiés de `config.py`**, que l'API n'expose pas. Ils
+> vivent dans `loadTone()`, dans `format.ts`, avec un commentaire qui le
+> signale. Si quelqu'un change `ALERT_MEDIUM_PCT` côté back, le front mentira
+> sans qu'aucun test ne le voie. Un ticket est ouvert pour les faire remonter
+> dans la réponse de `/api/consommations`.
 
 ### Les alertes
 
@@ -240,18 +345,23 @@ n'apprend rien et banalise les vraies urgences.
 
 ### Ce qui n'est pas affiché, et pourquoi
 
-Deux champs ont été retirés volontairement. Le **facteur de puissance**,
-parce qu'aucun seuil contractuel n'est connu et qu'un chiffre nu n'apprend
-rien à qui lit l'écran. Le **coût du jour**, parce que l'API ne le fournit
-pas et que le remplir exigerait d'inventer un tarif au kWh.
+Quatre champs ont été retirés volontairement.
 
-La règle est la même dans les deux cas : mieux vaut trois cartes justes que
-quatre dont une vide. Une carte qui affiche `—` sur les sept sites fait
+Le **facteur de puissance**, parce qu'aucun seuil contractuel n'est connu et
+qu'un chiffre nu n'apprend rien à qui lit l'écran. Le **coût du jour**,
+parce que l'API ne le fournit pas et que le remplir exigerait d'inventer un
+tarif au kWh.
+
+**« Prévu +2 h »** et **« Mesures reçues »**, parce qu'aucune source ne les
+alimentait : `forecast2hKw` se calcule depuis `site.series`, toujours vide,
+et `receivedCount` n'est renseigné par rien. Elles affichaient un tiret sur
+les sept sites. Le ticket qui devait brancher « Mesures reçues » depuis
+`/readings` reste ouvert, mais il s'intitule désormais « ajouter la case »
+et non « la brancher ».
+
+La règle est la même dans les quatre cas : mieux vaut trois cartes justes
+que cinq dont deux vides. Une carte qui affiche `—` sur les sept sites fait
 conclure à un lecteur que l'application ne marche pas.
-
-Reste « Prévu +2 h » et « Mesures reçues », qui affichent encore `—` : la
-première attend que le modèle soit branché, la seconde un calcul depuis
-l'historique. Les deux ont leur ticket.
 
 ## Thème clair et thème sombre
 
@@ -266,6 +376,8 @@ vraiment.
 | `--accent` | La couleur de marque : chevron ouvert, puces numérotées |
 | `--accent-doux` | Son aplat translucide, pour le fond d'un panneau ouvert |
 | `--mesure` | La courbe de consommation |
+| `--prevision` | La courbe de prévision, en tiretés |
+| `--seuil` | La ligne de capacité d'un site |
 | `--ambre`, `--danger` | Les signaux, jamais décoratifs |
 | `--halo` | Le dégradé du fond de page |
 
@@ -273,6 +385,12 @@ Les couleurs de signal sont **ajustées par thème**, pas héritées : une
 teinte pensée pour un fond sombre perd son contraste sur du blanc. Et elles
 restent ambre et rouge dans les deux thèmes — on repère une alerte parce
 qu'elle jure avec le reste, pas parce qu'elle s'y fond.
+
+`--prevision` vaut orange sur fond sombre et vert sapin sur fond clair, dans
+les deux cas franchement distinct de `--mesure`. Sur le thème sombre, cette
+teinte voisine l'ambre des alertes et le rouge du seuil, lui aussi tracé en
+tiretés : à surveiller sur le graphique d'un site, où les deux lignes se
+croisent quand la prévision dépasse la capacité.
 
 ## Qualité de code
 
@@ -306,6 +424,22 @@ Ici les fragments viennent d'un `split` sur une chaîne et ne bougent jamais.
 La directive doit tenir **sur une seule ligne**, immédiatement avant la
 ligne concernée. Sur deux lignes, Biome l'ignore sans le signaler.
 
+### La cible TypeScript
+
+`tsconfig` vise **ES2022**. Les méthodes plus récentes existent à
+l'exécution — `findLast`, `findLastIndex`, `Object.groupBy` — mais `tsc` les
+refuse, et **Vitest ne le voit pas** : il transpile sans vérifier les types.
+Un code fautif passe donc tous les tests en local et fait échouer la CI, qui
+lance `npm run build`.
+
+Deux de ces méthodes s'étaient glissées dans `series.ts` et `SiteDetail.tsx`.
+Elles ont été remplacées par des boucles, sur le modèle de
+`lastMeasuredIndex()` qui existait déjà — plutôt que de relever la cible du
+projet entier pour deux appels.
+
+**Lancer `npx tsc --noEmit` avant de pousser** est la seule façon de voir ce
+que `npm test` laisse passer.
+
 ### Ce qu'aucun outil n'attrape
 
 `tsc --noEmit` vérifie les types, Biome le style et quelques pièges
@@ -337,10 +471,13 @@ src/tests/
 │   └── SiteDetail.test.tsx
 └── services/
     ├── details.test.ts
+    ├── forecasts.test.ts
     ├── format.test.ts
     ├── history.test.ts
     ├── normalize.test.ts
+    ├── series.test.ts
     ├── summary.test.ts
+    ├── useForecasts.test.ts
     ├── useHistory.test.ts
     └── useSummary.test.ts
 ```
@@ -359,13 +496,20 @@ formatage convertissent en heure locale, donc sans fuseau fixé les tests
 passeraient sur une machine française et échoueraient en CI, qui tourne en
 UTC.
 
+**Un test ne doit pas dépendre du jour où il tourne.** `formatDayHour` prend
+un paramètre `now` injectable pour cette raison : sans lui, un test écrit le
+27 octobre afficherait « demain 14h00 » le 28 et échouerait. Les tests
+d'écran qui cherchent une heure utilisent une expression régulière plutôt
+qu'une chaîne exacte, la datation étant vérifiée là où elle vit.
+
 Un test gagne à garder une décision plutôt qu'à vérifier une évidence. Les
 plus utiles de cette suite vérifient qu'aucun chiffre ne s'affiche quand
 l'API ne répond pas, qu'un site muet ne compte pas pour zéro dans le total
 du parc, qu'un horodatage sans fuseau est bien lu comme de l'UTC, qu'un
-détail de site indisponible n'efface pas le résumé, et qu'un chiffre du
-cycle courant n'est pas annoncé comme périmé — cinq erreurs qui ont
-réellement coûté du temps, ou qui auraient pu.
+détail de site indisponible n'efface pas le résumé, qu'un chiffre du cycle
+courant n'est pas annoncé comme périmé, et que le point de jonction d'une
+courbe n'est pas pris pour un pic prévu — six erreurs qui ont réellement
+coûté du temps, ou qui auraient pu.
 
 > Un test vert ne dit pas que la couverture a augmenté, et une couverture
 > stable ne dit pas qu'un test est inutile. Huit tests ajoutés sur
@@ -389,6 +533,10 @@ aussi les promesses se résoudre.
 
 Chaque hook vérifie au minimum qu'il n'appelle plus rien après le
 démontage : un timer qui survit à son composant est une fuite silencieuse.
+
+**Un écran qui consomme un nouveau hook doit le simuler dans ses tests.**
+`Dashboard.test.tsx` simule `useSummary`, `useHistory` et `useForecasts` :
+en oublier un laisserait le vrai hook partir sur le réseau depuis un test.
 
 ### Couverture
 
@@ -426,11 +574,17 @@ npm run build
 non tenu ne se voit pas autrement.
 
 Le `build` vérifie en plus que le bundle de production se construit : une
-erreur qui ne gêne pas le serveur de développement peut le casser.
+erreur qui ne gêne pas le serveur de développement peut le casser. C'est
+aussi lui qui lance `tsc --noEmit`, d'où l'intérêt de le faire avant.
 
 **Et regarder l'écran.** C'est la seule vérification qui attrape un texte
 cassé, une couleur disparue ou une courbe qui part à l'envers. Aucun outil
 ne la remplace.
+
+> Pour voir les prévisions à l'écran, la base doit en contenir :
+> `db/seeds/dev_forecasts.sql` en pose un jeu. Il se rejoue, et son horizon
+> part de l'heure où on l'applique — un jeu posé hier ne montre plus grand
+> chose aujourd'hui.
 
 ## Mode strict de React
 

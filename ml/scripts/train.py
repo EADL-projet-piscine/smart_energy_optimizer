@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
-from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from smart_energy_ml.features.feature_engineering import (
@@ -63,32 +62,50 @@ def calculate_metrics(y_true, y_pred) -> dict:
     }
 
 
-def initialize_champion(model_name: str, version: str) -> None:
+def initialize_champion(
+    model_name: str,
+    model_version: str,
+) -> None:
+    """
+    Initialise l'alias champion uniquement s'il n'existe pas.
+
+    Un champion existant n'est jamais remplacé automatiquement.
+    """
     client = MlflowClient()
 
     try:
         champion = client.get_model_version_by_alias(
-            model_name,
-            "champion",
+            name=model_name,
+            alias="champion",
+        )
+
+    except MlflowException as exc:
+        if exc.error_code not in (
+            "RESOURCE_DOES_NOT_EXIST",
+            "INVALID_PARAMETER_VALUE",
+        ):
+            raise
+
+        # Vérifie que l'erreur correspond bien à un alias absent.
+        if "alias" not in str(exc).lower() or "not found" not in str(exc).lower():
+            raise
+
+        client.set_registered_model_alias(
+            name=model_name,
+            alias="champion",
+            version=model_version,
         )
 
         logger.info(
-            "Champion existant : version %s. Aucun changement.",
-            champion.version,
+            "Alias champion initialisé sur la version %s",
+            model_version,
         )
         return
 
-    except MlflowException as exc:
-        if exc.error_code != RESOURCE_DOES_NOT_EXIST:
-            raise
-
-    client.set_registered_model_alias(
-        name=model_name,
-        alias="champion",
-        version=version,
+    logger.info(
+        "Champion existant : version %s. Aucun changement.",
+        champion.version,
     )
-
-    logger.info("Champion initialisé : version %s", version)
 
 
 def sample_dataset(df: pd.DataFrame, max_samples: int) -> pd.DataFrame:

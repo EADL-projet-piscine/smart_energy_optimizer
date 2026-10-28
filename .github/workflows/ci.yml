@@ -489,7 +489,7 @@ jobs:
           - service: front
             context: app/front
             dockerfile: Dockerfile
-          
+
           - service: ml-predict
             context: ml
             dockerfile: Dockerfile.predict

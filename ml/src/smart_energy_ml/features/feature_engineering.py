@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 HORIZONS = range(1, 25)
@@ -28,7 +29,7 @@ def build_historical_features(df_hourly: pd.DataFrame) -> pd.DataFrame:
 
     grouped = df.groupby("site_id")["consumption_kw"]
 
-    # Dernière consommation connue (heure d'origine).
+    # Dernière consommation connue à l'origine.
     df["lag_1h"] = grouped.shift(0)
 
     # Consommation 24 heures avant l'origine.
@@ -50,62 +51,85 @@ def build_historical_features(df_hourly: pd.DataFrame) -> pd.DataFrame:
 
 def build_supervised_dataset(
     df_hourly: pd.DataFrame,
+    max_origins: int | None = None,
+    random_state: int = 42,
 ) -> pd.DataFrame:
     """
     Construit les exemples supervisés pour H+1 à H+24.
 
-    Les caractéristiques sont connues à l'origine.
-    La consommation cible est utilisée uniquement
-    pendant l'entraînement et l'évaluation.
+    Si max_origins est renseigné, échantillonne les origines
+    avant de développer les 24 horizons afin de limiter
+    la consommation mémoire.
+
+    Les cibles et références hebdomadaires sont calculées
+    à partir de l'historique complet, pour préserver
+    l'alignement temporel.
     """
+    if max_origins is not None and max_origins <= 0:
+        raise ValueError("max_origins doit être strictement positif")
+
     df = build_historical_features(df_hourly)
 
     grouped = df.groupby("site_id")["consumption_kw"]
 
-    supervised_frames = []
+    # Sélection déterministe des origines de prévision.
+    if max_origins is not None and len(df) > max_origins:
+        rng = np.random.default_rng(random_state)
+
+        selected_indices = np.sort(
+            rng.choice(
+                len(df),
+                size=max_origins,
+                replace=False,
+            )
+        )
+    else:
+        selected_indices = np.arange(len(df))
+
+    columns = [
+        "site_id",
+        "site_type",
+        "timestamp",
+        "lag_1h",
+        "lag_24h",
+        "rolling_mean_24h",
+    ]
+
+    origins = df.iloc[selected_indices][columns].copy()
+
+    frames = []
 
     for horizon in HORIZONS:
-        frame = df[
-            [
-                "site_id",
-                "site_type",
-                "timestamp",
-                "lag_1h",
-                "lag_24h",
-                "lag_168h",
-                "rolling_mean_24h",
-            ]
-        ].copy()
-
-        frame = frame.rename(columns={"timestamp": "forecast_origin"})
+        frame = origins.rename(columns={"timestamp": "forecast_origin"}).copy()
 
         frame["horizon"] = horizon
 
         frame["target_timestamp"] = frame["forecast_origin"] + pd.Timedelta(hours=horizon)
 
         # Consommation réellement observée à H+h.
-        frame["target_consumption_kw"] = grouped.shift(-horizon)
+        # Calcul sur l'historique complet, puis sélection.
+        frame["target_consumption_kw"] = grouped.shift(-horizon).iloc[selected_indices].to_numpy()
 
-        # Référence hebdomadaire de l'heure cible.
-        frame["target_lag_168h"] = grouped.shift(168 - horizon)
+        # Consommation de l'heure cible une semaine auparavant.
+        frame["target_lag_168h"] = grouped.shift(168 - horizon).iloc[selected_indices].to_numpy()
 
-        # Calendrier de l'heure cible.
+        # Caractéristiques calendaires de l'heure cible.
         frame["target_hour"] = frame["target_timestamp"].dt.hour
 
         frame["target_day_of_week"] = frame["target_timestamp"].dt.dayofweek
 
         frame["target_month"] = frame["target_timestamp"].dt.month
 
-        frame["target_is_weekend"] = (frame["target_day_of_week"] >= 5).astype(int)
+        frame["target_is_weekend"] = (frame["target_day_of_week"] >= 5).astype("int8")
 
-        supervised_frames.append(frame)
+        frames.append(frame)
 
     result = pd.concat(
-        supervised_frames,
+        frames,
         ignore_index=True,
     )
 
-    # Ne conserver que les exemples dont la cible existe.
+    # Conserver uniquement les exemples dont la cible existe.
     result = result.loc[
         result["target_consumption_kw"].notna()
         & (result["target_timestamp"] <= df["timestamp"].max())
@@ -153,8 +177,8 @@ def build_inference_features(
             raise ValueError(f"Aucune heure exploitable disponible pour {site_id}")
 
         if forecast_origin is not None:
-            # En mode explicite, on exige que l'heure
-            # demandée soit réellement exploitable.
+            # En mode explicite, l'origine demandée doit
+            # être réellement disponible et exploitable.
             valid_hours = valid_hours.loc[valid_hours["timestamp"] == forecast_origin]
 
             if valid_hours.empty:

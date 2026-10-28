@@ -7,7 +7,12 @@ import httpx
 import pandas as pd
 import pytest
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "compare_data_quality_x_sensors.py"
+SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "scripts"
+    / "explorations"
+    / "compare_data_quality_x_sensors.py"
+)
 
 SITES = [f"SITE{i:03d}" for i in range(1, 8)]
 SENSORS = ["consumption", "electrical", "temperature", "humidity", "network"]

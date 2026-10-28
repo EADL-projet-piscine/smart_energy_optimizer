@@ -68,7 +68,7 @@ def test_asks_for_the_maximum_page_by_default(fake_api):
         client.get_readings()
 
     assert FakeServer.last_path == "/api/v1/readings"
-    assert FakeServer.last_query == {"limit": ["1000"]}
+    assert FakeServer.last_query == {"limit": ["288"]}
 
 
 def test_sends_every_filter_in_the_query_string(fake_api):

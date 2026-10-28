@@ -320,7 +320,7 @@ def main() -> None:
 
         initialize_champion(
             model_name=MODEL_NAME,
-            version=model_info.registered_model_version,
+            model_version=model_info.registered_model_version,
         )
 
         # Traçabilité du dataset source sans conserver

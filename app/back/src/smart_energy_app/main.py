@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 
+from smart_energy_app.auth.comptes import router as comptes_router
 from smart_energy_app.auth.dependencies import check_configuration
 from smart_energy_app.auth.routes import router as auth_router
 from smart_energy_app.consommation.planificateur import refresh_loop
@@ -46,6 +47,7 @@ app = FastAPI(
 )
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentification"])
+app.include_router(comptes_router, prefix="/api/comptes", tags=["Comptes"])
 # Chaque route de ces routeurs déclare l'appelant (CurrentPrincipal) : 401 sans session
 # valide quand l'authentification est activée, et seulement les sites de son périmètre.
 app.include_router(consommation_router, prefix="/api/consommations", tags=["Consommations"])

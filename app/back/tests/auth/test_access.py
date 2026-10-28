@@ -105,7 +105,10 @@ def protected_routes() -> list[tuple[str, str]]:
         if not path.startswith("/api/") or path in ("/api/auth/login", "/api/auth/logout"):
             continue
         for method in operations:
-            routes.append((method.upper(), path.replace("{site_id}", "SITE001")))
+            concrete = path.replace("{site_id}", "SITE001").replace(
+                "{user_id}", "00000000-0000-0000-0000-000000000001"
+            )
+            routes.append((method.upper(), concrete))
     return routes
 
 

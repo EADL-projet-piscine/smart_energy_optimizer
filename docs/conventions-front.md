@@ -18,8 +18,8 @@ Trois couches, du plus bas au plus haut :
 | Affichage | `src/components/`, `src/screens/` | Composants React. Pas d'appel réseau. |
 
 Un composant n'appelle jamais `fetch` directement : il consomme un hook
-(`useSummary`, `useHistory`, `useForecasts`) qui s'en charge. Cela permet de
-tester toute la logique de données sans monter de composant.
+(`useSummary`, `useHistory`, `useForecasts`, `useSession`) qui s'en charge.
+Cela permet de tester toute la logique de données sans monter de composant.
 
 La frontière entre un service et un hook est celle du **quoi** et du
 **quand**. `history.ts` sait aller chercher l'historique et le transformer
@@ -38,7 +38,7 @@ src/
 │   ├── ui/                Briques génériques : Card, Metric, Banner, Badge…
 │   ├── Icons.tsx          Icônes SVG
 │   └── ConsumptionChart.tsx
-├── screens/               Écrans : Dashboard, SiteDetail
+├── screens/               Écrans : Dashboard, SiteDetail, connexion, comptes
 ├── services/              Modèle, normalisation, formatage, hooks
 │   ├── model.ts           Les types partagés
 │   ├── normalize.ts       Lecture défensive du résumé de la source
@@ -47,10 +47,12 @@ src/
 │   ├── summary.ts         ┐
 │   ├── details.ts         │ un service par endpoint,
 │   ├── history.ts         │ plus son hook
-│   ├── forecasts.ts       ┘
+│   ├── forecasts.ts       │
+│   ├── session.ts         ┘
 │   ├── useSummary.ts
 │   ├── useHistory.ts
-│   └── useForecasts.ts
+│   ├── useForecasts.ts
+│   └── useSession.ts
 ├── data/                  Jeux de données de démonstration
 ├── tests/                 Tests, en miroir de l'arborescence ci-dessus
 └── styles.css             Thème : variables CSS et classes Tailwind
@@ -125,6 +127,7 @@ regarde pas qui est la bonne. Voir la section suivante.
 | `details.ts` | `GET /api/consommations/sites` | par site : qualité de la mesure, causes d'absence, grandeurs électriques |
 | `history.ts` | `GET /api/consommations/historique` | les 24 dernières heures, par site et pour le parc |
 | `forecasts.ts` | `GET /api/previsions` | les prévisions à venir, par site et pour le parc |
+| `session.ts` | `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/logout` | la session : faut-il se connecter, qui est connecté, quels sites il voit |
 
 **Le résumé dit *combien*, le détail dit *pourquoi*.** Les deux portent
 `consumption_kw`, et c'est le seul recouvrement : la consommation affichée à
@@ -143,6 +146,18 @@ panne du compteur. Avoir conclu l'inverse a produit un écran qui annonçait
 `/api/previsions` existe aussi en version par site
 (`/api/previsions/{site_id}`), inutilisée : l'écran affiche le parc et les
 sept sites ensemble, un seul appel suffit.
+
+**Session.** `useSession` décide de l'écran : connexion ou dashboard. Le jeton
+vit dans un cookie `HttpOnly` que le dashboard ne lit jamais ; `fetchJson`
+l'envoie avec chaque appel. Une réponse 401, d'où qu'elle vienne (session
+expirée au bout de 15 minutes), émet `UNAUTHORIZED_EVENT` et ramène à l'écran
+de connexion. Si l'API est ouverte (`AUTH_ENABLED=false`) ou ne connaît pas
+`/api/auth/me`, le dashboard s'affiche comme avant. Le filtrage par site est
+fait par l'API : le dashboard affiche ce qu'il reçoit.
+
+Les prévisions héritent de ce filtrage sans rien en savoir : un lecteur ne
+reçoit que les prévisions de ses sites, et `sumBySite` n'additionne que
+celles-là. Le total du parc d'un `viewer` est donc celui de **son** parc.
 
 ### Ce qui voyage dans l'enveloppe
 
@@ -476,11 +491,16 @@ src/tests/
     ├── history.test.ts
     ├── normalize.test.ts
     ├── series.test.ts
+    ├── session.test.ts
     ├── summary.test.ts
     ├── useForecasts.test.ts
     ├── useHistory.test.ts
+    ├── useSession.test.ts
     └── useSummary.test.ts
 ```
+
+Les écrans de connexion et de gestion des comptes ont eux aussi leurs tests
+dans `screens/`.
 
 Ils tournent avec **Vitest** et ne font **aucun appel réseau réel** : le
 module `api/client` est simulé. Les composants sont montés avec Testing
@@ -535,8 +555,13 @@ Chaque hook vérifie au minimum qu'il n'appelle plus rien après le
 démontage : un timer qui survit à son composant est une fuite silencieuse.
 
 **Un écran qui consomme un nouveau hook doit le simuler dans ses tests.**
-`Dashboard.test.tsx` simule `useSummary`, `useHistory` et `useForecasts` :
-en oublier un laisserait le vrai hook partir sur le réseau depuis un test.
+`Dashboard.test.tsx` simule `useSummary`, `useHistory`, `useForecasts` et
+`useSession` : en oublier un laisserait le vrai hook partir sur le réseau
+depuis un test.
+
+Un hook simulé est aussi le seul moyen de tester un écran protégé sans
+monter une session : `useSession` rendu avec un utilisateur donné place
+l'écran dans l'état voulu, rôle compris.
 
 ### Couverture
 

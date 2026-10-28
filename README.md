@@ -654,6 +654,13 @@ MLflow reste limité à `127.0.0.1`.
 
    Les autres comptes se créent ensuite depuis l'écran « Comptes ».
 
+**Contrôle après déploiement.** Après chaque déploiement, le job `verify` de
+`deploy.yml` vérifie le site depuis un runner GitHub, donc depuis Internet :
+HTTPS avec un certificat valide, redirection du HTTP, en-têtes de sécurité du
+`Caddyfile`, réponse 401 de l'API sans session, ports 22, 5000, 5432 et 8000
+fermés. Le déploiement échoue au moindre écart. Le même contrôle se lance à la
+main : `deploy/smoke_test.sh <le fqdn>`.
+
 ## Configuration
 
 Les paramètres sont lus depuis les variables d'environnement, ou depuis le

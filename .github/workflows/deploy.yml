@@ -161,6 +161,8 @@ jobs:
     if: needs.resolve.outputs.deploy == 'true'
     runs-on: self-hosted
     environment: production
+    outputs:
+      site-domain: ${{ steps.site.outputs.domain }}
 
     steps:
       - name: Checkout the version to deploy
@@ -227,3 +229,35 @@ jobs:
             ps
 
           echo "Deployed ${IMAGE_TAG}, the newest complete image set of main." >> "$GITHUB_STEP_SUMMARY"
+
+      # The domain served by Caddy comes from the .env file of the VM, the one source the
+      # deployment already uses: the verify job needs no setting of its own.
+      - name: Read the domain of the site
+        id: site
+        shell: bash
+        run: |
+          set -euo pipefail
+          domain=$(grep -E '^SITE_DOMAIN=' "$HOME/enervision/.env" | tail -n 1 | cut -d= -f2- | tr -d "\"' \r")
+          echo "domain=${domain}" >> "$GITHUB_OUTPUT"
+
+  # Checks the site from a GitHub-hosted runner, that is from the Internet, as a visitor
+  # would: the self-hosted runner, on the VM itself, would not see what the NSG lets in.
+  verify:
+    name: Check the site from the Internet
+    needs: [resolve, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout the deployed version
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.commit }}
+
+      - name: HTTPS, redirect, headers, API behind authentication, closed ports
+        env:
+          SITE_DOMAIN: ${{ needs.deploy.outputs.site-domain }}
+        run: bash deploy/smoke_test.sh

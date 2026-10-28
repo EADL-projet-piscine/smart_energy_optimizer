@@ -631,6 +631,29 @@ dernière version validée. Ainsi :
 Seuls les runs qui déploient apparaissent dans l'environnement GitHub
 `production`.
 
+**HTTPS.** En production, seul le conteneur `proxy` (Caddy,
+`deploy/Caddyfile`) est joignable depuis Internet, sur les ports 443 et 80. Il
+obtient et renouvelle seul le certificat Let's Encrypt du nom DNS de la VM, et
+redirige le HTTP vers le HTTPS. Le front, l'API, le service ML et la base ne
+publient plus aucun port : ils ne se parlent que par le réseau Docker, et
+MLflow reste limité à `127.0.0.1`.
+
+**Mise en service** (une fois, avec l'accès à l'abonnement et à la VM) :
+
+1. `terraform apply` dans `infra/` : nom DNS de l'IP publique et ouverture des
+   ports 80 et 443. `terraform output -raw fqdn` donne l'adresse du site.
+2. Dans `~/enervision/.env` sur la VM : `SITE_DOMAIN=<le fqdn>`.
+3. Dans `~/enervision/back.env` : `AUTH_ENABLED=true` et
+   `JWT_SECRET=<openssl rand -hex 32>`.
+4. Lancer le déploiement (_Run workflow_). Au premier démarrage, Caddy demande
+   le certificat ; le site répond alors sur `https://<le fqdn>`.
+5. Créer le premier administrateur, mot de passe saisi au clavier :
+
+       docker exec -it enervision-back python -m smart_energy_app.auth.create_user \
+         --email admin@example.com --name "Administrateur" --role admin
+
+   Les autres comptes se créent ensuite depuis l'écran « Comptes ».
+
 ## Configuration
 
 Les paramètres sont lus depuis les variables d'environnement, ou depuis le
@@ -711,9 +734,9 @@ ne sait pas se connecter). Elle répond au constat C1 de l'audit de sécurité.
 Les tests `tests/auth/` vérifient à chaque pull request les 401 de chaque route,
 les 403 hors périmètre, le filtrage des réponses et la connexion sur une vraie
 base. **Production** : `AUTH_ENABLED` et `JWT_SECRET` vont dans le `back.env`
-de la VM. Le cookie `Secure` exige le HTTPS, absent aujourd'hui (constat C6) ;
-d'ici là, la connexion ne fonctionne pas en production sans
-`AUTH_COOKIE_SECURE=false`, qui ferait circuler la session en clair.
+de la VM, et le cookie `Secure` exige le HTTPS de Caddy (voir _Déploiement_,
+« Mise en service »). Ne pas contourner avec `AUTH_COOKIE_SECURE=false` : la
+session circulerait en clair.
 
 ### Dashboard (`app/front/.env`)
 

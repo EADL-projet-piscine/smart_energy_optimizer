@@ -1,7 +1,27 @@
 services:
+  # Seul service publié : HTTPS (443), et HTTP (80) pour Let's Encrypt et la
+  # redirection. Les autres ne sont joignables que par le réseau Docker.
+  proxy:
+    image: caddy:2.11.6-alpine
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?SITE_DOMAIN must be set}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificats et clés : les perdre forcerait à en redemander, et Let's Encrypt
+      # limite le nombre de certificats par semaine.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - front
+    restart: unless-stopped
+
   back:
     image: ${BACK_IMAGE:?BACK_IMAGE must be set}
     build: null
+    ports: !reset []
     env_file:
       - path: /home/egrondin/enervision/back.env
         required: false
@@ -10,6 +30,7 @@ services:
   ml:
     image: ${ML_IMAGE:?ML_IMAGE must be set}
     build: null
+    ports: !reset []
     restart: unless-stopped
     env_file:
       - path: /home/egrondin/enervision/ml.env
@@ -29,9 +50,15 @@ services:
 
   front:
     image: ${FRONT_IMAGE:?FRONT_IMAGE is not set}
+    ports: !reset []
     restart: unless-stopped
 
   db:
+    ports: !reset []
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

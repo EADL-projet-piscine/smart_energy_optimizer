@@ -89,7 +89,7 @@ jobs:
           # but not the commits of the merged branches, which never have images.
           for commit in $(git rev-list --first-parent --max-count="$SEARCH_DEPTH" HEAD); do
             complete=true
-            for service in back ml ml-predict mlflow front; do
+            for service in back ml ml-predict ml-train mlflow front; do
               if ! image_exists "${IMAGE_PREFIX}/${service}:${commit}"; then
                 complete=false
                 break

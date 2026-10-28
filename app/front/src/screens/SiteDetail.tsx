@@ -35,6 +35,11 @@ function mainAlert(site: Site): Alert | null {
   return site.alerts.find((alert) => alert.severity === 'critique') ?? site.alerts[0] ?? null
 }
 
+/** Couleur portée par une alerte, du bandeau jusqu'à ses recommandations. */
+function alertAccent(alert: Alert): 'danger' | 'ambre' {
+  return alert.severity === 'critique' ? 'danger' : 'ambre'
+}
+
 /** Couleur du badge de qualité : rouge si rien n'arrive, ambre sinon. */
 function qualityTone(quality: string | null): 'ok' | 'ambre' | 'alert' {
   if (quality === 'good') return 'ok'
@@ -128,6 +133,37 @@ function Installation({ detail }: { detail: Detail }) {
           }
         />
       </div>
+    </div>
+  )
+}
+
+/** Ce qu'il y a à faire face à une alerte, dans l'ordre où l'API le donne.
+ *
+ * La couleur est celle du bandeau juste au-dessus : les conseils répondent à
+ * cette alerte-là, et la même teinte le dit sans qu'il faille l'écrire.
+ *
+ * Rien ici ne reprend la mesure ni le pourcentage, que le bandeau porte déjà.
+ * L'ordre vient du serveur, qui seul sait lequel est le plus urgent pour ce
+ * type de site.
+ */
+function Recommendations({ alert }: { alert: Alert }) {
+  if (alert.recommendations.length === 0) return null
+  return (
+    <div className="mt-3">
+      <Subtitle>Recommandations</Subtitle>
+      <List>
+        {alert.recommendations.map((recommendation, index) => (
+          <Row key={recommendation.action} accent={alertAccent(alert)} layout="columns">
+            <Bullet>{index + 1}</Bullet>
+            <div>
+              <strong className="block text-sm">{recommendation.action}</strong>
+              {recommendation.detail && (
+                <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{recommendation.detail}</p>
+              )}
+            </div>
+          </Row>
+        ))}
+      </List>
     </div>
   )
 }
@@ -279,11 +315,16 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
           </div>
 
           {/* Au-dessus du graphique, et non par-dessus : une alerte posée sur
-              la courbe cache précisément ce qu'elle commente. */}
+              la courbe cache précisément ce qu'elle commente. Les conseils
+              suivent immédiatement le bandeau, dans sa couleur : ils
+              répondent à cette alerte et à aucune autre. */}
           {main && (
-            <Banner tone={main.severity === 'critique' ? 'danger' : 'ambre'}>
-              <strong className="font-[650]">{main.title}</strong>&nbsp;: {main.message}
-            </Banner>
+            <>
+              <Banner tone={main.severity === 'critique' ? 'danger' : 'ambre'}>
+                <strong className="font-[650]">{main.title}</strong>&nbsp;: {main.message}
+              </Banner>
+              <Recommendations alert={main} />
+            </>
           )}
 
           <div className="mt-2">
@@ -312,7 +353,7 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 <Subtitle>Alertes</Subtitle>
                 <List>
                   {others.map((alert) => (
-                    <Row key={alert.id} accent={alert.severity === 'critique' ? 'danger' : 'ambre'}>
+                    <Row key={alert.id} accent={alertAccent(alert)}>
                       <strong className="block text-sm">{alert.title}</strong>
                       <p className="mt-[3px] text-[13px] leading-snug text-secondaire">{alert.message}</p>
                     </Row>
@@ -320,32 +361,6 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
                 </List>
               </div>
             )}
-
-            <div>
-              <Subtitle>Recommandations</Subtitle>
-              {site.recommendations.length === 0 ? (
-                <Caption>Aucune recommandation pour ce site.</Caption>
-              ) : (
-                <List>
-                  {site.recommendations.map((recommendation, index) => (
-                    <Row key={recommendation.id}>
-                      <Bullet>{index + 1}</Bullet>
-                      <div>
-                        <strong className="block text-sm">{recommendation.title}</strong>
-                        <p className="mt-[3px] text-[13px] leading-snug text-secondaire">
-                          {recommendation.detail}
-                        </p>
-                      </div>
-                      {recommendation.saving && (
-                        <em className="text-[13px] font-bold whitespace-nowrap text-hausse not-italic">
-                          {recommendation.saving}
-                        </em>
-                      )}
-                    </Row>
-                  ))}
-                </List>
-              )}
-            </div>
           </div>
         </div>
       )}

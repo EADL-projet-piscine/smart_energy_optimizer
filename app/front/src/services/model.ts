@@ -8,18 +8,23 @@ export type SeriesPoint = {
   forecastKw: number | null
 }
 
+/** Un conseil associé à une alerte : une action à mener.
+ *
+ * Jamais la mesure ni le pourcentage, que le bandeau porte déjà. `detail` est
+ * facultatif — l'API l'omet quand le conseil se suffit à lui-même.
+ */
+export type Recommendation = {
+  action: string
+  detail?: string
+}
+
 export type Alert = {
   id: string
   severity: Severity
   title: string
   message: string
-}
 
-export type Recommendation = {
-  id: string
-  title: string
-  detail: string
-  saving: string | null
+  recommendations: Recommendation[]
 }
 
 export type Site = {
@@ -49,7 +54,6 @@ export type Site = {
   peakAt: string | null
   comment: string | null
   alerts: Alert[]
-  recommendations: Recommendation[]
 }
 
 export type ParkSummary = {

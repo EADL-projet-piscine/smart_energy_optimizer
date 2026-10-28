@@ -154,7 +154,7 @@ describe('normalizeSummary — values', () => {
   })
 })
 
-describe('normalizeSummary — alerts and recommendations', () => {
+describe('normalizeSummary — alerts', () => {
   it('translates severities and attaches a fleet alert to its site, only once', () => {
     const result = normalizeSummary({
       sites: [
@@ -195,34 +195,14 @@ describe('normalizeSummary — alerts and recommendations', () => {
     expect(result?.sites[0].alerts).toEqual([])
   })
 
-  it('formats the saving of a recommendation in euros', () => {
+  it('gives an empty list of advice to an alert relayed by the source', () => {
+    // Only capacity alerts, computed by the business API, carry advice. The
+    // key exists all the same: one case for the screen instead of two.
     const result = normalizeSummary({
-      sites: [
-        {
-          site_id: 'SITE001',
-          current_kw: 300,
-          recommendations: [
-            {
-              title: 'Décaler le préchauffage',
-              description: 'Lancer le chauffage à 6 h.',
-              estimated_savings_eur: 350,
-            },
-            { title: 'Éteindre les enseignes', economie: '−120 €/mois' },
-            { id: 'vide' },
-          ],
-        },
-      ],
+      sites: [{ site_id: 'SITE001', current_kw: 1, alerts: [{ message: 'À noter' }] }],
     })
 
-    expect(result?.sites[0].recommendations).toEqual([
-      {
-        id: 'reco-0',
-        title: 'Décaler le préchauffage',
-        detail: 'Lancer le chauffage à 6 h.',
-        saving: '−350 €',
-      },
-      { id: 'reco-1', title: 'Éteindre les enseignes', detail: '', saving: '−120 €/mois' },
-    ])
+    expect(result?.sites[0].alerts[0].recommendations).toEqual([])
   })
 })
 
@@ -412,5 +392,50 @@ describe('attachCapacityAlerts', () => {
     const result = attachCapacityAlerts(baseSummary(), [{ ...ALERT, site_id: 'SITE999' }])
 
     expect(result.sites.every((site) => site.alerts.length === 0)).toBe(true)
+  })
+})
+
+describe('attachCapacityAlerts — advice', () => {
+  const ADVISED = {
+    site_id: 'SITE007',
+    severity: 'critique',
+    message: 'La capacité de l’installation est dépassée',
+    raised_at: '2026-10-26T13:50:01+00:00',
+    load_percent: 103.2,
+    capacity_kw: 950,
+    recommandations: [
+      { action: 'Décaler ou interrompre un cycle de production' },
+      { action: 'Délester les usages non essentiels', detail: 'Éclairage de zones inoccupées' },
+    ],
+  }
+
+  function advice(raw: unknown) {
+    return attachCapacityAlerts(baseSummary(), [raw]).sites[1].alerts[0].recommendations
+  }
+
+  it('keeps the advice in the order the API gives it', () => {
+    // The order is a business decision — which action comes first for this
+    // type of site — and belongs to the server, not to the screen.
+    expect(advice(ADVISED).map((item) => item.action)).toEqual([
+      'Décaler ou interrompre un cycle de production',
+      'Délester les usages non essentiels',
+    ])
+  })
+
+  it('omits the explanation rather than emptying it', () => {
+    expect(advice(ADVISED)[0]).toEqual({ action: 'Décaler ou interrompre un cycle de production' })
+    expect(advice(ADVISED)[1].detail).toBe('Éclairage de zones inoccupées')
+  })
+
+  it('discards an entry without an action', () => {
+    // Advice with nothing to do is not advice.
+    const result = advice({ ...ADVISED, recommandations: [{ detail: 'sans action' }, 'x', null] })
+
+    expect(result).toEqual([])
+  })
+
+  it('accepts an alert that carries none', () => {
+    // A back end predating this ticket does not send the key.
+    expect(advice({ ...ADVISED, recommandations: undefined })).toEqual([])
   })
 })

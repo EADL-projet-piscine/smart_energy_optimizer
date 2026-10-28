@@ -24,8 +24,9 @@ function site(id: string, critical = false): Site {
     series: [],
     peakAt: null,
     comment: null,
-    alerts: critical ? [{ id: `${id}-a`, severity: 'critique', title: 'Urgent', message: 'message' }] : [],
-    recommendations: [],
+    alerts: critical
+      ? [{ id: `${id}-a`, severity: 'critique', title: 'Urgent', message: 'message', recommendations: [] }]
+      : [],
   }
 }
 

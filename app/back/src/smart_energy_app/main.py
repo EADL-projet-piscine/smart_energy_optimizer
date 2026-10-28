@@ -11,6 +11,7 @@ from smart_energy_app.consommation.planificateur import refresh_loop
 from smart_energy_app.consommation.routes import router as consommation_router
 from smart_energy_app.db import database_available
 from smart_energy_app.previsions.routes import router as previsions_router
+from smart_energy_app.recommandations.repository import recommendations
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,6 +25,10 @@ async def lifespan(app: FastAPI):
     check_configuration()
     if database_available():
         logger.info("Connexion à la base établie")
+        # Le référentiel de recommandations ne change pas à l'exécution : il
+        # est lu une fois ici plutôt qu'à chaque alerte. S'il échoue, la
+        # première alerte réessaiera — l'application démarre quand même.
+        recommendations.load()
     else:
         logger.warning("Démarrage sans base de données : vérifier DATABASE_URL")
 
@@ -54,6 +59,8 @@ app.include_router(consommation_router, prefix="/api/consommations", tags=["Cons
 # Les prévisions viennent de la base, pas de l'API source : elles ne passent
 # donc pas par le planificateur et n'ont pas d'état en mémoire à rafraîchir.
 app.include_router(previsions_router, prefix="/api/previsions", tags=["Prévisions"])
+# Les recommandations n'ont pas de routeur : elles voyagent avec les alertes,
+# dans la réponse de /api/consommations.
 
 
 @app.get("/health")

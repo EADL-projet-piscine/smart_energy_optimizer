@@ -28,6 +28,10 @@ class SiteDetails:
     def __init__(self) -> None:
         self.by_site: dict[str, dict[str, Any]] = {}
         self.site_ids: list[str] = []
+        # Type de chaque site, lu une fois avec la liste des identifiants.
+        # Il ne vient pas du détail par site, qui le porte aussi : un site
+        # dont la mesure échoue garde ainsi son type.
+        self.site_types: dict[str, str] = {}
 
     def age_seconds(self, site_id: str) -> float | None:
         entry = self.by_site.get(site_id)
@@ -38,6 +42,10 @@ class SiteDetails:
     def is_stale(self, site_id: str) -> bool:
         age = self.age_seconds(site_id)
         return age is None or age > settings.consumption_staleness_s
+
+    def site_type(self, site_id: str) -> str | None:
+        """Type du site, ou None tant que le référentiel n'a pas été lu."""
+        return self.site_types.get(site_id)
 
     def as_payload(self, site_id: str) -> dict[str, Any] | None:
         entry = self.by_site.get(site_id)
@@ -73,6 +81,26 @@ def _extract_site_ids(payload: Any) -> list[str]:
     return ids
 
 
+def _extract_site_types(payload: Any) -> dict[str, str]:
+    """Tire les types de site de la même réponse.
+
+    Aussi défensive que l'extraction des identifiants : un type absent laisse
+    le site hors du dictionnaire, et les recommandations retomberont sur leur
+    repli plutôt que de disparaître.
+    """
+    if not isinstance(payload, list):
+        return {}
+    types: dict[str, str] = {}
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        site_id = item.get("site_id") or item.get("id")
+        site_type = item.get("site_type")
+        if isinstance(site_id, str) and site_id and isinstance(site_type, str) and site_type:
+            types[site_id] = site_type
+    return types
+
+
 async def _load_site_ids() -> list[str]:
     """Charge la liste des sites une seule fois : le parc ne change pas."""
     if state.site_ids:
@@ -83,8 +111,18 @@ async def _load_site_ids() -> list[str]:
         logger.warning("Référentiel des sites indisponible : %s", error)
         return []
     state.site_ids = _extract_site_ids(payload)
+    state.site_types = _extract_site_types(payload)
     if not state.site_ids:
         logger.warning("Référentiel des sites illisible : aucun identifiant trouvé")
+    elif len(state.site_types) < len(state.site_ids):
+        # Pas bloquant : les recommandations de ces sites retomberont sur le
+        # repli. Mais c'est une dérive du contrat de la source, et elle doit
+        # se voir dans les journaux.
+        logger.warning(
+            "Type de site absent pour %d site(s) sur %d",
+            len(state.site_ids) - len(state.site_types),
+            len(state.site_ids),
+        )
     return state.site_ids
 
 

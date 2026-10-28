@@ -87,6 +87,26 @@ function parseSeries(value: unknown): SeriesPoint[] {
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 }
 
+/** Un conseil de l'API métier.
+ *
+ * `action` est obligatoire : un conseil sans action à mener n'est pas un
+ * conseil. `detail` est omis plutôt que vidé, pour que l'écran n'ait pas à
+ * distinguer une explication absente d'une chaîne vide.
+ */
+function parseRecommendation(value: unknown): Recommendation | null {
+  if (!isObject(value)) return null
+  const action = toText(pick(value, ['action', 'titre', 'title', 'label']))
+  if (!action) return null
+  const detail = toText(pick(value, ['detail', 'description', 'message', 'texte']))
+  return detail === null ? { action } : { action, detail }
+}
+
+function parseRecommendations(value: unknown): Recommendation[] {
+  return toArray(value)
+    .map((item) => parseRecommendation(item))
+    .filter((item): item is Recommendation => item !== null)
+}
+
 function parseAlert(value: unknown, index: number): Alert | null {
   if (!isObject(value)) return null
   const message = toText(pick(value, ['message', 'description', 'detail', 'texte', 'content']))
@@ -97,24 +117,9 @@ function parseAlert(value: unknown, index: number): Alert | null {
     severity: toSeverity(pick(value, ['severite', 'severity', 'level', 'niveau', 'priority'])),
     title,
     message: message ?? title,
-  }
-}
-
-function parseRecommendation(value: unknown, index: number): Recommendation | null {
-  if (!isObject(value)) return null
-  const title = toText(pick(value, ['titre', 'title', 'label', 'name', 'action']))
-  const detail = toText(pick(value, ['description', 'detail', 'message', 'texte', 'content']))
-  if (!title && !detail) return null
-  const savingEur = toNumber(
-    pick(value, ['estimated_savings_eur', 'economie_eur', 'savings_eur', 'gain_eur']),
-  )
-  const savingLabel = toText(pick(value, ['economie', 'gain', 'savings']))
-  return {
-    id: toText(pick(value, ['id', 'recommendation_id'])) ?? `reco-${index}`,
-    title: title ?? 'Recommandation',
-    detail: detail ?? '',
-    saving:
-      savingLabel ?? (savingEur === null ? null : `−${new Intl.NumberFormat('fr-FR').format(savingEur)} €`),
+    // Les alertes relayées par la source n'en portent pas : seules les alertes
+    // de capacité, calculées par l'API métier, sont accompagnées de conseils.
+    recommendations: parseRecommendations(pick(value, ['recommandations', 'recommendations'])),
   }
 }
 
@@ -141,9 +146,6 @@ function parseSite(value: unknown, index: number): Site | null {
   const alerts = toArray(pick(value, ['alertes', 'alerts']))
     .map((alert, alertIndex) => parseAlert(alert, alertIndex))
     .filter((alert): alert is Alert => alert !== null)
-  const recommendations = toArray(pick(value, ['recommandations', 'recommendations', 'actions']))
-    .map((recommendation, recoIndex) => parseRecommendation(recommendation, recoIndex))
-    .filter((recommendation): recommendation is Recommendation => recommendation !== null)
 
   return {
     id,
@@ -178,7 +180,6 @@ function parseSite(value: unknown, index: number): Site | null {
     peakAt: toText(pick(value, ['peak_at', 'forecast_peak_at', 'horodatage_pointe'])),
     comment: toText(pick(value, ['commentaire', 'comment', 'caption', 'summary'])),
     alerts,
-    recommendations,
   }
 }
 
@@ -328,6 +329,8 @@ const CAPACITY_TITLES: Record<string, string> = {
  *
  * Le message du serveur dit ce qui se passe ; on y ajoute de quoi en juger :
  * la charge constatée, la capacité du site, et depuis quand l'alerte dure.
+ * Les conseils, eux, sont repris tels quels et dans l'ordre : c'est l'API qui
+ * décide lesquels s'appliquent et lequel passe en premier.
  */
 function parseCapacityAlert(value: unknown): { siteId: string; alert: Alert } | null {
   if (!isObject(value)) return null
@@ -364,6 +367,7 @@ function parseCapacityAlert(value: unknown): { siteId: string; alert: Alert } | 
       // Le message du serveur redirait le titre ; seuls les chiffres
       // permettent de juger, on ne garde qu'eux.
       message: details.length === 0 ? message : `${details.join(', ')}.`,
+      recommendations: parseRecommendations(value.recommandations),
     },
   }
 }

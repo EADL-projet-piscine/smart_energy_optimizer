@@ -111,20 +111,10 @@ export function demoSummary(): ParkSummary {
           severity: 'critique',
           title: 'Nouvelle alerte critique',
           message: 'SITE002 — dépassement de seuil prévu dans deux heures, 1 040 kW pour un seuil à 930 kW.',
-        },
-      ],
-      recommendations: [
-        {
-          id: 'reco-site002-four',
-          title: 'Décaler le four de recuit après 21 h',
-          detail: 'La pointe de 18 h repasse sous le seuil de 930 kW.',
-          saving: '−180 €',
-        },
-        {
-          id: 'reco-site002-ventilation',
-          title: 'Écrêter la ventilation des halls de 17 h à 19 h',
-          detail: 'Effacement d’environ 90 kW sur le créneau critique.',
-          saving: '−90 kW',
+          recommendations: [
+            { action: 'Décaler ou interrompre un cycle de production' },
+            { action: 'Délester les usages non essentiels' },
+          ],
         },
       ],
     },
@@ -144,14 +134,6 @@ export function demoSummary(): ParkSummary {
       peakAt: null,
       comment: null,
       alerts: [],
-      recommendations: [
-        {
-          id: 'reco-site003',
-          title: 'Reporter les lots de calcul non critiques après 20 h',
-          detail: 'Le data center reste sous son seuil de 900 kW sur le créneau du soir.',
-          saving: '−40 €',
-        },
-      ],
     },
     {
       id: 'SITE005',
@@ -169,14 +151,6 @@ export function demoSummary(): ParkSummary {
       peakAt: null,
       comment: null,
       alerts: [],
-      recommendations: [
-        {
-          id: 'reco-site005',
-          title: 'Lisser le préchauffage de l’eau sanitaire',
-          detail: 'Avancer la charge du ballon hors du créneau 17 h–19 h.',
-          saving: '−25 €',
-        },
-      ],
     },
     {
       id: 'SITE007',
@@ -194,14 +168,6 @@ export function demoSummary(): ParkSummary {
       peakAt: null,
       comment: null,
       alerts: [],
-      recommendations: [
-        {
-          id: 'reco-site007',
-          title: 'Enchaîner les presses après 19 h',
-          detail: 'Évite d’additionner leur appel de puissance avec le reste du parc.',
-          saving: '−60 kW',
-        },
-      ],
     },
     {
       id: 'SITE001',
@@ -219,14 +185,6 @@ export function demoSummary(): ParkSummary {
       peakAt: null,
       comment: null,
       alerts: [],
-      recommendations: [
-        {
-          id: 'reco-site001',
-          title: 'Couper l’éclairage de façade dès 18 h',
-          detail: 'Gain modeste, applicable dès ce soir sans toucher à l’exploitation.',
-          saving: '−8 €',
-        },
-      ],
     },
     {
       id: 'SITE004',
@@ -249,14 +207,7 @@ export function demoSummary(): ParkSummary {
           severity: 'moyenne',
           title: 'Relevé interrompu',
           message: 'SITE004 — aucun relevé depuis plus de deux heures. Ce site est exclu du total du parc.',
-        },
-      ],
-      recommendations: [
-        {
-          id: 'reco-site004',
-          title: 'Vérifier la passerelle de télérelève',
-          detail: 'Le site ne remonte plus de mesure. Contrôler l’alimentation et le lien radio.',
-          saving: null,
+          recommendations: [],
         },
       ],
     },
@@ -281,15 +232,7 @@ export function demoSummary(): ParkSummary {
           severity: 'moyenne',
           title: 'Relevé interrompu',
           message: 'SITE006 — aucun relevé depuis plus de deux heures. Ce site est exclu du total du parc.',
-        },
-      ],
-      recommendations: [
-        {
-          id: 'reco-site006',
-          title: 'Contrôler l’alimentation du compteur',
-          detail:
-            'Le relevé est interrompu. Le site reste exclu du total tant que la chaîne de mesure est coupée.',
-          saving: null,
+          recommendations: [],
         },
       ],
     },

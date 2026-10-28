@@ -23,6 +23,17 @@ MESSAGES = {
     MOYENNE: "Le site approche de sa capacité",
 }
 
+# Situation correspondante dans le référentiel de recommandations.
+#
+# Un dictionnaire explicite plutôt qu'un `f"capacite_{severity}"` : une
+# gravité renommée casserait la clé construite sans la moindre erreur, et les
+# conseils disparaîtraient en silence. Ici, le couple est écrit noir sur
+# blanc, et le test qui vérifie que chaque situation a des conseils l'attrape.
+SITUATIONS = {
+    CRITIQUE: "capacite_critique",
+    MOYENNE: "capacite_moyenne",
+}
+
 
 @dataclass
 class CapacityAlert:

@@ -1,5 +1,6 @@
 /** Opérations sur les séries datées, partagées par l'historique et les prévisions. */
 
+import { lastMeasuredIndex } from './format'
 import type { SeriesPoint } from './model'
 
 /** La grandeur portée par un point : ce qui a été mesuré, ou ce qui est prévu. */
@@ -70,7 +71,7 @@ export function mergeSeries(measured: SeriesPoint[], forecast: SeriesPoint[]): S
  * prétend rien prévoir, on prolonge la ligne jusqu'à ce qui est déjà constaté.
  */
 export function connectForecast(series: SeriesPoint[]): SeriesPoint[] {
-  const lastMeasured = series.findLastIndex((item) => item.measuredKw !== null)
+  const lastMeasured = lastMeasuredIndex(series)
   if (lastMeasured === -1) return series
 
   const hasForecastAhead = series.slice(lastMeasured + 1).some((item) => item.forecastKw !== null)

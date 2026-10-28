@@ -146,6 +146,16 @@ export function forecastPeak(series: SeriesPoint[], afterIndex = -1): { at: stri
   return forecastPeak(series)
 }
 
+/** Dernier créneau prévu après `afterIndex` : jusqu'où porte la prévision.
+ *
+ * « Aucun pic » sans horizon est une demi-réponse — aucun pic jusqu'à quand ? */
+export function forecastHorizon(series: SeriesPoint[], afterIndex = -1): string | null {
+  for (let index = series.length - 1; index > afterIndex; index -= 1) {
+    if (series[index].forecastKw !== null) return series[index].at
+  }
+  return null
+}
+
 function peakSentence(threshold: number, peak: number, hour: number, scope: 'parc' | 'site'): string {
   if (peak > threshold && scope === 'parc') {
     return `Le seuil contractuel serait dépassé vers ${hour} h avec une pointe prévue à ${formatNumber(peak)} kW.`

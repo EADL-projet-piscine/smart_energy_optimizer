@@ -8,6 +8,7 @@ import { Metric } from '../components/ui/Metric'
 import { Bullet, List, Row } from '../components/ui/Row'
 import { Caption, Subtitle } from '../components/ui/Text'
 import {
+  forecastHorizon,
   forecastPeak,
   formatDayHour,
   formatKw,
@@ -177,18 +178,16 @@ function SiteRow({ site, detail, series, open, onToggle }: RowProps) {
   // et seule celle-là mérite un tiret. Sans capacité connue il n'y a rien à
   // comparer, donc rien à qualifier de pic.
   const notable = peak !== null && peakTone !== 'defaut'
-  const lastForecast = series.findLast(
-    (point) => point.forecastKw !== null && point !== series[measuredIndex],
-  )
+  const horizon = forecastHorizon(series, measuredIndex)
 
   let peakValue = '—'
   let peakDetail: string | undefined
   if (notable && peak && peakPct !== null) {
     peakValue = formatKw(peak.value)
     peakDetail = `${formatDayHour(peak.at)} · ${formatNumber(peakPct)} % de la capacité`
-  } else if (peak && lastForecast) {
+  } else if (peak && horizon) {
     peakValue = 'Aucun'
-    peakDetail = `jusqu’à ${formatDayHour(lastForecast.at)}`
+    peakDetail = `jusqu’à ${formatDayHour(horizon)}`
   }
 
   return (

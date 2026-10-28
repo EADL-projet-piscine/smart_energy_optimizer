@@ -1,10 +1,11 @@
 import logging
 from datetime import timedelta
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException
 
-from smart_energy_app.alertes.capacite import capacity_alerts
+from smart_energy_app.alertes.capacite import SITUATIONS, capacity_alerts
 from smart_energy_app.auth import CurrentPrincipal, Principal, forbidden_site
 from smart_energy_app.config import settings
 from smart_energy_app.consommation.details import state as details_state
@@ -12,6 +13,7 @@ from smart_energy_app.consommation.historique import load_history
 from smart_energy_app.consommation.last_readings import last_readings
 from smart_energy_app.consommation.payload import number_of, site_id_of, sites_of
 from smart_energy_app.consommation.service import state
+from smart_energy_app.recommandations.repository import recommendations
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,28 @@ def _visible_summary(data: dict, principal: Principal) -> dict:
     }
 
 
+def _with_recommendations(alertes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attache à chaque alerte les conseils de sa situation et de son type de site.
+
+    La correspondance se fait ici et non à l'écran : déduire une situation
+    d'une gravité serait une règle métier dans le dashboard, qui n'en porte
+    aucune.
+
+    La clé est toujours présente, même vide : au dashboard de ne rien afficher
+    plutôt que d'avoir à distinguer une absence de clé d'une liste vide.
+    """
+    enrichies = []
+    for alerte in alertes:
+        situation = SITUATIONS.get(alerte.get("severity", ""))
+        conseils = (
+            recommendations.for_situation(situation, details_state.site_type(alerte["site_id"]))
+            if situation is not None
+            else []
+        )
+        enrichies.append({**alerte, "recommandations": conseils})
+    return enrichies
+
+
 # Chemin vide : le préfixe du routeur porte déjà « /api/consommations ».
 # Un « / » ici produirait une barre finale et une redirection 307 à chaque appel.
 @router.get("", summary="Consommation courante de tous les sites")
@@ -62,8 +86,10 @@ def consumption_summary(principal: CurrentPrincipal) -> dict:
         # pouvoir distinguer une mesure de l'instant d'un souvenir.
         "last_readings": principal.visible(last_readings.as_payload()),
         # Calculées depuis la charge constatée, contrairement à celles de
-        # l'API source qui en sont décorrélées.
-        "alertes": principal.visible_items(capacity_alerts.as_payload()),
+        # l'API source qui en sont décorrélées. Les conseils sont attachés
+        # après le filtrage : inutile d'en calculer pour une alerte que
+        # l'appelant ne verra pas.
+        "alertes": _with_recommendations(principal.visible_items(capacity_alerts.as_payload())),
     }
 
 

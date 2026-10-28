@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -87,8 +88,7 @@ def main() -> None:
     X_val = df_validation[FEATURE_COLUMNS]
     y_val = df_validation["target_consumption_kw"]
 
-    # Stockage local des expériences.
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     pipeline = create_pipeline()

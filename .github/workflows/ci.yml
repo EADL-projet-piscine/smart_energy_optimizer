@@ -87,8 +87,10 @@ jobs:
               - 'ml/src/**'
               - 'ml/tests/**'
               - 'ml/scripts/**'
+              - 'ml/Dockerfile.predict'
               - 'ml/pyproject.toml'
               - 'ml/Dockerfile'
+              - 'ml/.dockerignore'
               - 'pyproject.toml'
             front:
               - 'app/front/**'
@@ -104,6 +106,7 @@ jobs:
               - 'ml/pyproject.toml'
               - 'ml/Dockerfile'
               - 'ml/Dockerfile.mlflow'
+              - 'ml/Dockerfile.predict'
               - 'docker-compose*.yml'
               - 'tests/perf/**'
               - 'app/front/**'
@@ -114,6 +117,7 @@ jobs:
               - 'ml/pyproject.toml'
               - 'ml/Dockerfile'
               - 'ml/Dockerfile.mlflow'
+              - 'ml/Dockerfile.predict'
               - 'docker-compose.yml'
               - 'docker-compose.deploy.yml'
               - 'app/front/**'
@@ -485,6 +489,10 @@ jobs:
           - service: front
             context: app/front
             dockerfile: Dockerfile
+          
+          - service: ml-predict
+            context: ml
+            dockerfile: Dockerfile.predict
 
     steps:
       - uses: actions/checkout@v5
@@ -537,6 +545,7 @@ jobs:
       BACK_IMAGE: ghcr.io/${{ github.repository }}/back:${{ github.sha }}
       ML_IMAGE: ghcr.io/${{ github.repository }}/ml:${{ github.sha }}
       MLFLOW_IMAGE: ghcr.io/${{ github.repository }}/mlflow:${{ github.sha }}
+      ML_PREDICT_IMAGE: ghcr.io/${{ github.repository }}/ml-predict:${{ github.sha }}
       FRONT_IMAGE: ghcr.io/${{ github.repository }}/front:${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -554,6 +563,7 @@ jobs:
             echo "BACK_IMAGE=${BACK_IMAGE,,}"
             echo "ML_IMAGE=${ML_IMAGE,,}"
             echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}"
+            echo "ML_PREDICT_IMAGE=${ML_PREDICT_IMAGE,,}"
             echo "FRONT_IMAGE=${FRONT_IMAGE,,}"
           } >> "$GITHUB_ENV"
 
@@ -617,7 +627,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [back, ml, mlflow, front]
+        service: [back, ml, mlflow, ml-predict, front]
     steps:
       - uses: actions/download-artifact@v8
         with:

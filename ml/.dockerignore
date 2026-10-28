@@ -8,5 +8,6 @@ data/
 models/
 notebooks/
 tests/
-scripts/
+scripts/*
+!scripts/predict.py
 .git/

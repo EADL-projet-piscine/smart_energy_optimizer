@@ -16,3 +16,8 @@ output "appi_connection_string" {
   value     = azurerm_application_insights.appi.connection_string
   sensitive = true
 }
+
+# La commande à lancer sur votre PC pour ouvrir Grafana
+output "grafana_tunnel" {
+  value = "ssh -L 3000:localhost:3000 ${var.admin_username}@${azurerm_public_ip.public_ip.ip_address}  puis ouvrir http://localhost:3000"
+}

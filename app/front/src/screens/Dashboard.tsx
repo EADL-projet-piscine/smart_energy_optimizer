@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ConsumptionChart } from '../components/ConsumptionChart'
-import { IconBolt, IconMoon, IconSun } from '../components/Icons'
+import { IconBolt, IconLogout, IconMoon, IconSun, IconUsers } from '../components/Icons'
 import { Banner } from '../components/ui/Banner'
 import { Card } from '../components/ui/Card'
 import { IconButton } from '../components/ui/IconButton'
@@ -17,7 +17,15 @@ import { useHistory } from '../services/useHistory'
 import { useSummary } from '../services/useSummary'
 import { SiteDetail } from './SiteDetail'
 
-export function Dashboard() {
+/** L'utilisateur connecté, absent quand l'API est ouverte. */
+export type SignedInAccount = {
+  name: string
+  onSignOut: () => void
+  /** Présent pour un administrateur seulement. */
+  onOpenAccounts?: () => void
+}
+
+export function Dashboard({ account = null }: { account?: SignedInAccount | null }) {
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
   )
@@ -74,6 +82,21 @@ export function Dashboard() {
           <span>EnerVision</span>
         </div>
         <div className="flex gap-1 rounded-[14px] border border-bordure bg-pilule p-1 shadow-[0_1px_0_rgba(255,255,255,0.03)]">
+          {account && (
+            <>
+              <span className="self-center px-2 text-[13px] text-secondaire max-[680px]:hidden">
+                {account.name}
+              </span>
+              {account.onOpenAccounts && (
+                <IconButton onClick={account.onOpenAccounts} aria-label="Gérer les comptes">
+                  <IconUsers />
+                </IconButton>
+              )}
+              <IconButton onClick={account.onSignOut} aria-label="Se déconnecter">
+                <IconLogout />
+              </IconButton>
+            </>
+          )}
           <IconButton
             onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
             aria-label={theme === 'dark' ? 'Activer le mode clair' : 'Activer le mode sombre'}

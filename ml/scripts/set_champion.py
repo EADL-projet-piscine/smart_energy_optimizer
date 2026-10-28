@@ -1,10 +1,11 @@
 import argparse
+import os
 
 import mlflow
 from mlflow import MlflowClient
 
 MODEL_NAME = "smart-energy-rf-global"
-TRACKING_URI = "sqlite:///mlflow.db"
+TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 
 
 def main() -> None:

@@ -38,21 +38,23 @@ src/
 │   ├── ui/                Briques génériques : Card, Metric, Banner, Badge…
 │   ├── Icons.tsx          Icônes SVG
 │   └── ConsumptionChart.tsx
-├── screens/               Écrans : Dashboard, SiteDetail, connexion, comptes
+├── screens/               Dashboard, SiteDetail, Login, Accounts
 ├── services/              Modèle, normalisation, formatage, hooks
 │   ├── model.ts           Les types partagés
 │   ├── normalize.ts       Lecture défensive du résumé de la source
 │   ├── format.ts          Formatage et règles d'affichage
 │   ├── series.ts          Opérations sur les séries datées
 │   ├── summary.ts         ┐
-│   ├── details.ts         │ un service par endpoint,
-│   ├── history.ts         │ plus son hook
-│   ├── forecasts.ts       │
-│   ├── session.ts         ┘
+│   ├── details.ts         │
+│   ├── history.ts         │ un service par endpoint,
+│   ├── forecasts.ts       │ plus son hook
+│   ├── session.ts         │
+│   ├── accounts.ts        ┘
 │   ├── useSummary.ts
 │   ├── useHistory.ts
 │   ├── useForecasts.ts
-│   └── useSession.ts
+│   ├── useSession.ts
+│   └── useAccounts.ts
 ├── data/                  Jeux de données de démonstration
 ├── tests/                 Tests, en miroir de l'arborescence ci-dessus
 └── styles.css             Thème : variables CSS et classes Tailwind
@@ -128,6 +130,7 @@ regarde pas qui est la bonne. Voir la section suivante.
 | `history.ts` | `GET /api/consommations/historique` | les 24 dernières heures, par site et pour le parc |
 | `forecasts.ts` | `GET /api/previsions` | les prévisions à venir, par site et pour le parc |
 | `session.ts` | `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/logout` | la session : faut-il se connecter, qui est connecté, quels sites il voit |
+| `accounts.ts` | `GET`, `POST`, `PATCH /api/comptes` | les comptes : création, nom, rôle, sites, activation, mot de passe |
 
 **Le résumé dit *combien*, le détail dit *pourquoi*.** Les deux portent
 `consumption_kw`, et c'est le seul recouvrement : la consommation affichée à
@@ -158,6 +161,10 @@ fait par l'API : le dashboard affiche ce qu'il reçoit.
 Les prévisions héritent de ce filtrage sans rien en savoir : un lecteur ne
 reçoit que les prévisions de ses sites, et `sumBySite` n'additionne que
 celles-là. Le total du parc d'un `viewer` est donc celui de **son** parc.
+
+**Comptes.** `accounts.ts` et `useAccounts` servent le seul écran réservé à
+un rôle. Le front cache le bouton aux non-administrateurs, mais c'est l'API
+qui décide : elle répond 403, et un écran caché n'est pas un écran protégé.
 
 ### Ce qui voyage dans l'enveloppe
 
@@ -482,9 +489,12 @@ src/tests/
 │       ├── Badge.test.ts
 │       └── Text.test.tsx
 ├── screens/
+│   ├── Accounts.test.tsx
 │   ├── Dashboard.test.tsx
+│   ├── Login.test.tsx
 │   └── SiteDetail.test.tsx
 └── services/
+    ├── accounts.test.ts
     ├── details.test.ts
     ├── forecasts.test.ts
     ├── format.test.ts
@@ -493,14 +503,12 @@ src/tests/
     ├── series.test.ts
     ├── session.test.ts
     ├── summary.test.ts
+    ├── useAccounts.test.ts
     ├── useForecasts.test.ts
     ├── useHistory.test.ts
     ├── useSession.test.ts
     └── useSummary.test.ts
 ```
-
-Les écrans de connexion et de gestion des comptes ont eux aussi leurs tests
-dans `screens/`.
 
 Ils tournent avec **Vitest** et ne font **aucun appel réseau réel** : le
 module `api/client` est simulé. Les composants sont montés avec Testing

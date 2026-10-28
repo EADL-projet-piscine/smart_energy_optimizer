@@ -210,9 +210,11 @@ PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 
 #### Voir des prévisions à l'écran
 
-La table `predictions` est vide tant que le service ML n'a rien produit, et
-le dashboard n'affiche alors aucune courbe de prévision. `db/seeds` pose un
-jeu de développement :
+Les prévisions de la table `predictions` sont écrites par le service ML
+(`ml/scripts/predict.py`, lancé par `.github/workflows/predict.yml`). Sur un
+poste de développement, cette table est le plus souvent vide, et le
+dashboard n'affiche alors aucune courbe de prévision. `db/seeds` pose un jeu
+de développement :
 
 ```bash
 docker compose exec -T db psql -U enervision -d enervision < db/seeds/dev_forecasts.sql

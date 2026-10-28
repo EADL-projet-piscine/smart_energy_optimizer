@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     alert_critical_pct: float = 100.0
     alert_medium_pct: float = 90.0
     alert_clear_pct: float = 85.0
+    # Authentification de l'API (voir smart_energy_app.auth). Désactivée par défaut tant
+    # que le dashboard ne sait pas se connecter : les routes restent alors ouvertes.
+    auth_enabled: bool = False
+    # Clé de signature des jetons, au moins 32 caractères. Obligatoire quand
+    # l'authentification est activée ; elle vient de l'environnement, jamais du code.
+    jwt_secret: SecretStr = SecretStr("")
+    jwt_ttl_minutes: int = 15
+    # Le navigateur n'envoie un cookie `Secure` qu'en HTTPS (et sur localhost).
+    # À désactiver seulement pour un serveur de développement en HTTP.
+    auth_cookie_secure: bool = True
 
 
 settings = Settings()

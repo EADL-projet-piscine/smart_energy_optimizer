@@ -15,7 +15,7 @@ import {
   sitesLabel,
   toIsoUtc,
 } from '../../services/format'
-import type { ParkSummary, SeriesPoint, Site } from '../../services/model'
+import type { Alert, ParkSummary, SeriesPoint, Site } from '../../services/model'
 
 // These tests assume TZ=Europe/Paris, set by the npm script: without it they
 // would pass on a French machine and fail in CI, which runs in UTC.
@@ -29,6 +29,11 @@ function normalize(value: string): string {
 
 function point(hour: number, measuredKw: number | null, forecastKw: number | null = null): SeriesPoint {
   return { at: `2026-10-22T${String(hour).padStart(2, '0')}:00:00Z`, measuredKw, forecastKw }
+}
+
+/** A bare alert: these tests only ever look at its severity. */
+function alert(severity: Alert['severity'], id = 'a'): Alert {
+  return { id, severity, title: 'x', message: 'y', recommendations: [] }
 }
 
 function site(overrides: Partial<Site> = {}): Site {
@@ -48,7 +53,6 @@ function site(overrides: Partial<Site> = {}): Site {
     peakAt: null,
     comment: null,
     alerts: [],
-    recommendations: [],
     ...overrides,
   }
 }
@@ -223,7 +227,7 @@ describe('completeSite — badge', () => {
         isTransmitting: false,
         thresholdKw: 100,
         forecast2hKw: 500,
-        alerts: [{ id: 'a', severity: 'critique', title: 'x', message: 'y' }],
+        alerts: [alert('critique')],
       }),
     )
 
@@ -239,17 +243,13 @@ describe('completeSite — badge', () => {
   })
 
   it('surfaces a critical alert when there is no overload', () => {
-    const result = completeSite(
-      site({ alerts: [{ id: 'a', severity: 'critique', title: 'x', message: 'y' }] }),
-    )
+    const result = completeSite(site({ alerts: [alert('critique')] }))
 
     expect(result.badge).toBe('Alerte critique')
   })
 
   it('ignores a medium alert', () => {
-    const result = completeSite(
-      site({ alerts: [{ id: 'a', severity: 'moyenne', title: 'x', message: 'y' }] }),
-    )
+    const result = completeSite(site({ alerts: [alert('moyenne')] }))
 
     expect(result.badge).toBeNull()
   })
@@ -337,14 +337,8 @@ describe('buildSummary', () => {
     const result = buildSummary(
       summary({
         sites: [
-          site({
-            id: 'A',
-            alerts: [
-              { id: '1', severity: 'critique', title: 'x', message: 'y' },
-              { id: '2', severity: 'moyenne', title: 'x', message: 'y' },
-            ],
-          }),
-          site({ id: 'B', alerts: [{ id: '3', severity: 'moyenne', title: 'x', message: 'y' }] }),
+          site({ id: 'A', alerts: [alert('critique', '1'), alert('moyenne', '2')] }),
+          site({ id: 'B', alerts: [alert('moyenne', '3')] }),
         ],
       }),
     )
@@ -366,9 +360,7 @@ describe('buildSummary', () => {
       summary({
         thresholdKw: 500,
         series: [point(8, 100), point(9, null, 900)],
-        sites: [
-          site({ id: 'SITE002', alerts: [{ id: '1', severity: 'critique', title: 'x', message: 'y' }] }),
-        ],
+        sites: [site({ id: 'SITE002', alerts: [alert('critique', '1')] })],
       }),
     )
 
@@ -381,9 +373,7 @@ describe('buildSummary', () => {
       summary({
         thresholdKw: 500,
         series: [point(8, 100), point(9, null, 300)],
-        sites: [
-          site({ id: 'SITE002', alerts: [{ id: '1', severity: 'critique', title: 'x', message: 'y' }] }),
-        ],
+        sites: [site({ id: 'SITE002', alerts: [alert('critique', '1')] })],
       }),
     )
 

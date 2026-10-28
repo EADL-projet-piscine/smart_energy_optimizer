@@ -1,7 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SiteDetail } from '../../screens/SiteDetail'
-import type { Alert, SiteDetail as Detail, DetailsBySite, SeriesPoint, Site } from '../../services/model'
+import type {
+  Alert,
+  SiteDetail as Detail,
+  DetailsBySite,
+  Recommendation,
+  SeriesPoint,
+  Site,
+} from '../../services/model'
 
 // The chart belongs to Recharts: replacing it isolates what we test and
 // avoids the zero-dimension warnings under jsdom.
@@ -9,8 +16,8 @@ vi.mock('../../components/ConsumptionChart', () => ({
   ConsumptionChart: () => <div data-testid="chart" />,
 }))
 
-function alert(severity: Alert['severity'], title: string): Alert {
-  return { id: title, severity, title, message: `message de ${title}` }
+function alert(severity: Alert['severity'], title: string, recommendations: Recommendation[] = []): Alert {
+  return { id: title, severity, title, message: `message de ${title}`, recommendations }
 }
 
 function site(overrides: Partial<Site> = {}): Site {
@@ -30,7 +37,6 @@ function site(overrides: Partial<Site> = {}): Site {
     peakAt: null,
     comment: null,
     alerts: [],
-    recommendations: [],
     ...overrides,
   }
 }
@@ -130,7 +136,8 @@ describe('SiteDetail', () => {
     fireEvent.click(row('Bureau Paris'))
 
     expect(row('Bureau Paris')).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('Aucune recommandation pour ce site.')).not.toBeInTheDocument()
+    // The panel content goes with it: the chart only exists inside it.
+    expect(screen.queryByTestId('chart')).not.toBeInTheDocument()
   })
 
   it('shows each open panel its own detail, not the last one', () => {
@@ -500,29 +507,94 @@ describe('SiteDetail — alerts', () => {
 })
 
 describe('SiteDetail — recommendations', () => {
-  it('displays the numbered recommendations with their saving', () => {
-    renderDetail([
-      site({
-        recommendations: [{ id: 'r1', title: 'Décaler le four', detail: 'Après 21 h', saving: '−180 €' }],
-      }),
-    ])
+  const ADVICE: Recommendation[] = [
+    { action: 'Délester les usages non essentiels', detail: 'Éclairage de zones inoccupées' },
+    { action: 'Passer le site en mode économie d’énergie' },
+    { action: 'Investiguer la cause de cette hausse anormale' },
+  ]
 
-    expect(screen.getByText('Décaler le four')).toBeInTheDocument()
-    expect(screen.getByText('−180 €')).toBeInTheDocument()
+  /** A site whose main alert carries the given advice. */
+  function advised(recommendations: Recommendation[]): Site {
+    return site({ alerts: [alert('critique', 'Capacité dépassée', recommendations)] })
+  }
+
+  it('lists the advice of the alert', () => {
+    renderDetail([advised(ADVICE)])
+
+    expect(screen.getByText('Recommandations')).toBeInTheDocument()
+    expect(screen.getByText('Délester les usages non essentiels')).toBeInTheDocument()
+    expect(screen.getByText('Investiguer la cause de cette hausse anormale')).toBeInTheDocument()
+  })
+
+  it('keeps the order the API gives', () => {
+    // Which action comes first is a business decision, and it belongs to the
+    // server: it alone knows what suits this type of site.
+    renderDetail([advised(ADVICE)])
+
+    const texte = screen.getByText('Recommandations').parentElement?.textContent ?? ''
+
+    expect(texte.indexOf('Délester')).toBeLessThan(texte.indexOf('mode économie'))
+    expect(texte.indexOf('mode économie')).toBeLessThan(texte.indexOf('Investiguer'))
+  })
+
+  it('numbers the advice', () => {
+    renderDetail([advised(ADVICE)])
+
     expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
   })
 
-  it('omits the saving when there is none', () => {
-    renderDetail([
-      site({ recommendations: [{ id: 'r1', title: 'Vérifier', detail: 'La passerelle', saving: null }] }),
-    ])
+  it('displays the explanation when there is one', () => {
+    renderDetail([advised(ADVICE)])
 
-    expect(screen.getByText('Vérifier')).toBeInTheDocument()
+    expect(screen.getByText('Éclairage de zones inoccupées')).toBeInTheDocument()
   })
 
-  it('says so when there is none at all', () => {
+  it('never repeats the figures of the banner', () => {
+    // The banner carries the load and the capacity; repeating them under it
+    // would pass a reminder off as a piece of advice.
+    renderDetail([advised(ADVICE)])
+
+    const texte = screen.getByText('Recommandations').parentElement?.textContent ?? ''
+
+    expect(texte).not.toMatch(/%/)
+    expect(texte).not.toMatch(/kW/)
+  })
+
+  it('displays no section when the API sends no advice', () => {
+    // An empty heading reads as a failure, not as nothing to do.
+    renderDetail([advised([])])
+
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.queryByText('Recommandations')).not.toBeInTheDocument()
+  })
+
+  it('displays no section without an alert', () => {
     renderDetail([site()])
 
-    expect(screen.getByText('Aucune recommandation pour ce site.')).toBeInTheDocument()
+    expect(screen.queryByText('Recommandations')).not.toBeInTheDocument()
+  })
+
+  it('gives each open panel its own advice', () => {
+    renderDetail(
+      [
+        site({
+          id: 'A',
+          name: 'Bureau Paris',
+          alerts: [alert('critique', 'Urgent A', [{ action: 'Délester les bureaux' }])],
+        }),
+        site({
+          id: 'B',
+          name: 'Usine Lyon',
+          alerts: [alert('critique', 'Urgent B', [{ action: 'Décaler un cycle de production' }])],
+        }),
+      ],
+      'A',
+    )
+
+    fireEvent.click(row('Usine Lyon'))
+
+    expect(screen.getByText('Délester les bureaux')).toBeInTheDocument()
+    expect(screen.getByText('Décaler un cycle de production')).toBeInTheDocument()
   })
 })

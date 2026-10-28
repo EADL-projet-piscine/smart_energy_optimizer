@@ -1,0 +1,77 @@
+
+name: ML - Daily Predictions
+
+on:
+  workflow_dispatch:
+
+  # À activer après validation de l'inférence et de PostgreSQL.
+  # schedule:
+  #   - cron: "0 1 * * *"
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  predict:
+    name: Run daily predictions
+    runs-on: self-hosted
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run predictions
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          PROD_ENV="$HOME/enervision/.env"
+          test -f "$PROD_ENV"
+
+          PROJECT=$(basename "$GITHUB_WORKSPACE" | tr '[:upper:]' '[:lower:]')
+
+          # Retrieve the image currently deployed for the ML service.
+          ML_IMAGE=$(docker ps \
+            --filter "label=com.docker.compose.project=${PROJECT}" \
+            --filter "label=com.docker.compose.service=ml" \
+            --format '{{.Image}}' | head -n 1)
+
+          if [[ -z "$ML_IMAGE" ]]; then
+            echo "::error::ML service not running in production"
+            exit 1
+          fi
+
+          # All images are published together with the same commit SHA.
+          IMAGE_TAG="${ML_IMAGE##*:}"
+          IMAGE_PREFIX="ghcr.io/$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+
+          export BACK_IMAGE="${IMAGE_PREFIX}/back:${IMAGE_TAG}"
+          export ML_IMAGE="${IMAGE_PREFIX}/ml:${IMAGE_TAG}"
+          export ML_PREDICT_IMAGE="${IMAGE_PREFIX}/ml-predict:${IMAGE_TAG}"
+          export MLFLOW_IMAGE="${IMAGE_PREFIX}/mlflow:${IMAGE_TAG}"
+          export FRONT_IMAGE="${IMAGE_PREFIX}/front:${IMAGE_TAG}"
+
+          echo "Using deployed image version: ${IMAGE_TAG}"
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            config --quiet
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            run --rm --no-build ml-predict --source api

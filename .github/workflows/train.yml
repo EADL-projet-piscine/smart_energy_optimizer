@@ -34,6 +34,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Diagnose Azure memory
+        shell: bash
+        run: |
+          echo "=== Available memory ==="
+          free -h
+
+          echo "=== Docker containers ==="
+          docker stats --no-stream
+
+          echo "=== Memory pressure ==="
+          cat /proc/pressure/memory
+
+          echo "=== Recent OOM events ==="
+          journalctl -k --since "30 minutes ago" --no-pager \
+            | grep -Ei 'out of memory|oom|killed process' \
+            || true
+
       - name: Train model
         shell: bash
         env:

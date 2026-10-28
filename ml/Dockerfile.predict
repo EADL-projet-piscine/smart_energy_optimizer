@@ -18,4 +18,4 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-CMD ["python", "/app/scripts/predict.py"]
+ENTRYPOINT ["python", "/app/scripts/predict.py"]

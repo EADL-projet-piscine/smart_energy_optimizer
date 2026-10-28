@@ -1,0 +1,93 @@
+
+name: ML - Train Model
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+# Empêche un entraînement de se superposer à un déploiement
+# ou à un autre job de production.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  train:
+    name: Train and register ML model
+    runs-on: self-hosted
+    timeout-minutes: 90
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Train model
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          PROD_ENV="$HOME/enervision/.env"
+          test -f "$PROD_ENV"
+
+          PROJECT=$(basename "$GITHUB_WORKSPACE" | tr '[:upper:]' '[:lower:]')
+
+          # Récupérer la version réellement déployée.
+          DEPLOYED_ML_IMAGE=$(docker ps \
+            --filter "label=com.docker.compose.project=${PROJECT}" \
+            --filter "label=com.docker.compose.service=ml" \
+            --format '{{.Image}}' | head -n 1)
+
+          if [[ -z "$DEPLOYED_ML_IMAGE" ]]; then
+            echo "::error::ML service not running in production"
+            exit 1
+          fi
+
+          IMAGE_TAG="${DEPLOYED_ML_IMAGE##*:}"
+          IMAGE_PREFIX="ghcr.io/$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+
+          export BACK_IMAGE="${IMAGE_PREFIX}/back:${IMAGE_TAG}"
+          export ML_IMAGE="${IMAGE_PREFIX}/ml:${IMAGE_TAG}"
+          export ML_PREDICT_IMAGE="${IMAGE_PREFIX}/ml-predict:${IMAGE_TAG}"
+          export ML_TRAIN_IMAGE="${IMAGE_PREFIX}/ml-train:${IMAGE_TAG}"
+          export MLFLOW_IMAGE="${IMAGE_PREFIX}/mlflow:${IMAGE_TAG}"
+          export FRONT_IMAGE="${IMAGE_PREFIX}/front:${IMAGE_TAG}"
+
+          echo "Training with deployed version: ${IMAGE_TAG}"
+
+          # Vérifier la configuration Compose.
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            config --quiet
+
+          # Garantir la présence de l'image d'entraînement.
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            pull ml-train
+
+          # Entraînement ponctuel.
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            run --rm --no-build \
+            -e TRAIN_ENVIRONMENT=production \
+            ml-train

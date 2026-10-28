@@ -67,6 +67,7 @@ services:
       mlflow server
       --backend-store-uri sqlite:////mlflow/mlflow.db
       --artifacts-destination /mlflow/artifacts
+      --allowed-hosts "mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
       --serve-artifacts
       --host 0.0.0.0
       --port 5000
@@ -91,6 +92,25 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mlflow:
+        condition: service_started
+    restart: "no"
+
+  ml-train:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile.train
+    image: smart-energy-ml-train:dev
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: smart-energy-forecasting
+      TRAIN_ENVIRONMENT: development
+    profiles:
+      - jobs
+    env_file:
+      - path: ./ml/.env
+        required: false
+    depends_on:
       mlflow:
         condition: service_started
     restart: "no"

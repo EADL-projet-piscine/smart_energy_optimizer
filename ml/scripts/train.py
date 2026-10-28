@@ -8,6 +8,9 @@ import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
+from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
+from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from smart_energy_ml.features.feature_engineering import (
@@ -46,6 +49,34 @@ def calculate_metrics(y_true, y_pred) -> dict:
         if denominator > 0
         else float("nan"),
     }
+
+
+def initialize_champion(model_name: str, version: str) -> None:
+    client = MlflowClient()
+
+    try:
+        champion = client.get_model_version_by_alias(
+            model_name,
+            "champion",
+        )
+
+        logger.info(
+            "Champion existant : version %s. Aucun changement.",
+            champion.version,
+        )
+        return
+
+    except MlflowException as exc:
+        if exc.error_code != RESOURCE_DOES_NOT_EXIST:
+            raise
+
+    client.set_registered_model_alias(
+        name=model_name,
+        alias="champion",
+        version=version,
+    )
+
+    logger.info("Champion initialisé : version %s", version)
 
 
 def main() -> None:
@@ -132,7 +163,7 @@ def main() -> None:
 
         logger.info("Enregistrement du modèle dans MLflow")
 
-        mlflow.sklearn.log_model(
+        model_info = mlflow.sklearn.log_model(
             sk_model=pipeline,
             name="model",
             registered_model_name=MODEL_NAME,
@@ -140,6 +171,11 @@ def main() -> None:
                 "numpy.dtype",
                 "sklearn.tree._tree.Tree",
             ],
+        )
+
+        initialize_champion(
+            model_name=MODEL_NAME,
+            version=model_info.registered_model_version,
         )
 
         dataset = mlflow.data.from_pandas(

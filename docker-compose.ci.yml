@@ -17,6 +17,9 @@ services:
   ml-predict:
     image: ${ML_PREDICT_IMAGE:?ML_PREDICT_IMAGE is not set}
 
+  ml-train:
+    image: ${ML_TRAIN_IMAGE:?ML_TRAIN_IMAGE is not set}
+
   # Built by CI so --no-build can start the complete stack on the runner.
   mlflow:
     image: ${MLFLOW_IMAGE:?MLFLOW_IMAGE is not set}

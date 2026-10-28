@@ -44,6 +44,14 @@ services:
       - path: /home/egrondin/enervision/ml.env
         required: false
 
+  ml-train:
+    image: ${ML_TRAIN_IMAGE:?ML_TRAIN_IMAGE must be set}
+    build: null
+    restart: "no"
+    env_file:
+      - path: /home/egrondin/enervision/ml.env
+        required: false
+
   mlflow:
     image: ${MLFLOW_IMAGE:?MLFLOW_IMAGE is not set}
     restart: unless-stopped

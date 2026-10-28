@@ -64,16 +64,11 @@ Un contrôle automatique met le code en forme et corrige les erreurs de
 style à chaque commit. À installer **une fois** après le clone :
 
 ```bash
-sudo apt install pre-commit     # ou : pip install pre-commit
-pre-commit install
+git config core.hooksPath .githooks
 ```
 
-Sous Windows : `pip install pre-commit` dans votre environnement virtuel,
-ou `pipx install pre-commit`.
-
-Si un commit échoue avec « files were modified by this hook », c'est que
-des fichiers ont été corrigés automatiquement : relancez `git add -A` puis
-le commit.
+Les hooks lancent `scripts/check.sh`, le même script que le job `lint` de la
+CI ; aucun Python n'est nécessaire. Détails dans _Vérifications locales_.
 
 ### 3. Configurer l'accès à l'API source
 
@@ -492,6 +487,9 @@ local.
 
 ## Intégration continue
 
+La référence complète du pipeline (CI, déploiement, prédiction, secrets,
+dépannage) est dans [`docs/pipeline-ci.md`](docs/pipeline-ci.md).
+
 Le workflow `.github/workflows/ci.yml` tourne sur chaque pull request, à chaque
 merge dans `main` et à la demande (*Run workflow*). Le job `changes` regarde
 les fichiers modifiés et ne lance que ce qui les concerne ; `lint` et `scan`
@@ -507,9 +505,9 @@ run :
 | `tests-ml` | Si `ml/` (code, tests, scripts, `pyproject.toml`, `Dockerfile`) ou `pyproject.toml` changent : `pytest` du service ML, couverture ≥ 80 % (artefact `ml-coverage`) |
 | `tests-front` | Si `app/front/` change : Node 22 et `TZ=Europe/Paris`, `npm ci`, contrôle des types et build de production, tests Vitest, seuils de couverture de `vitest.config.ts` (artefact `front-coverage`) |
 | `sonar-back`, `sonar-ml`, `sonar-front` | Analyse SonarQube du composant dont les tests viennent de tourner, avec leur couverture ; échoue si le _quality gate_ est rouge (voir ci-dessous) |
-| `build` | Si du code déployable ou l'environnement de test change : construit les images `back`, `ml`, `mlflow` et `front`, les scanne avec Trivy |
+| `build` | Si du code déployable ou l'environnement de test change : construit les images `back`, `ml`, `mlflow`, `front` et `ml-predict`, les scanne avec Trivy |
 | `perf` | Lance la stack avec ces images et une doublure de l'API EnerVision, puis exécute le test de charge k6 (`/health` et route métier) |
-| `publish` | Sur `main` seulement, après un changement déployable et si tous les autres jobs sont verts (Sonar compris) : publie les quatre images sur GHCR |
+| `publish` | Sur `main` seulement, après un changement déployable et si tous les autres jobs sont verts (Sonar compris) : publie les cinq images sur GHCR |
 
 **Ce qui lance quoi.** Les tests d'un composant sont _ignorés_ quand aucun de
 ses fichiers n'a changé : un job ignoré ne fait pas échouer la CI. Un test en
@@ -547,9 +545,11 @@ Les images publiées sont étiquetées avec le SHA de leur commit, sans `latest`
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/mlflow
     ghcr.io/eadl-projet-piscine/smart_energy_optimizer/front
+    ghcr.io/eadl-projet-piscine/smart_energy_optimizer/ml-predict
 
-GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
-pull request dont la CI est rouge.**
+`main` est protégée : pull request et relecture obligatoires. La règle
+n'exige pas encore une CI verte : **ne mergez pas une pull request dont la CI
+est rouge.**
 
 **Après un merge de `main` dans votre branche**, relancez les deux suites de
 tests avant de pousser, et `npx tsc --noEmit` côté front : une résolution de
@@ -653,6 +653,13 @@ MLflow reste limité à `127.0.0.1`.
          --email admin@example.com --name "Administrateur" --role admin
 
    Les autres comptes se créent ensuite depuis l'écran « Comptes ».
+
+**Contrôle après déploiement.** Après chaque déploiement, le job `verify` de
+`deploy.yml` vérifie le site depuis un runner GitHub, donc depuis Internet :
+HTTPS avec un certificat valide, redirection du HTTP, en-têtes de sécurité du
+`Caddyfile`, réponse 401 de l'API sans session, ports 22, 5000, 5432 et 8000
+fermés. Le déploiement échoue au moindre écart. Le même contrôle se lance à la
+main : `deploy/smoke_test.sh <le fqdn>`.
 
 ## Configuration
 

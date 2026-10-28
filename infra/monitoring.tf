@@ -3,6 +3,8 @@
 # Autorisé : Log Analytics, App Insights, paramètres de diagnostic.
 # Non autorisé : Data Collection Rules, Action Groups (donc pas d'agent
 # dans la VM ni d'alertes par email).
+# Visualisation : Prometheus + Grafana installés avec Docker sur la VM
+# (dossier monitoring-stack), qui lisent aussi les données Azure (partie 6).
 # =====================================================================
 
 # ---------------------------------------------------------------------
@@ -64,6 +66,13 @@ resource "azurerm_monitor_diagnostic_setting" "sa_blob" {
   metric {
     category = "Transaction"
   }
+
+  # Azure ajoute tout seul des réglages (Capacity, retention_policy) qui
+  # font croire à Terraform qu'il y a une différence à chaque plan.
+  # On lui dit d'ignorer les écarts sur les métriques.
+  lifecycle {
+    ignore_changes = [metric]
+  }
 }
 
 # ---------------------------------------------------------------------
@@ -109,4 +118,18 @@ resource "azurerm_application_insights" "appi" {
   tags = {
     user = var.student_id
   }
+}
+
+# ---------------------------------------------------------------------
+# 6. ACCÈS DE GRAFANA AUX DONNÉES AZURE
+#    Grafana (installé avec Docker sur applicatif-vm, voir le dossier
+#    monitoring-stack) lit les métriques Azure et le workspace en utilisant
+#    l'identité managée de la VM. Ce rôle lui donne le droit de LIRE
+#    (et seulement lire) les données de monitoring du groupe de ressources :
+#    métriques Azure et requêtes KQL sur le workspace.
+# ---------------------------------------------------------------------
+resource "azurerm_role_assignment" "vm_lecture_monitoring" {
+  scope                = azurerm_resource_group.rg.id
+  role_definition_name = "Monitoring Reader"
+  principal_id         = azurerm_linux_virtual_machine.applicatif-vm.identity[0].principal_id
 }

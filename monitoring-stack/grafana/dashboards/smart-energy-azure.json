@@ -1,0 +1,431 @@
+{
+  "uid": "smart-energy-azure",
+  "title": "Services Azure",
+  "description": "Data Factory, compte de stockage et VM, à partir du workspace Log Analytics.",
+  "tags": [
+    "smart-energy",
+    "azure"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Data Factory : ingestion des données",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "piechart",
+      "title": "Exécutions de pipelines par statut",
+      "description": "Combien de pipelines ont réussi, échoué ou été annulés sur la période choisie.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "union isfuzzy=true ADFPipelineRun\n| where $__timeFilter(TimeGenerated)\n| where Status in (\"Succeeded\", \"Failed\", \"Cancelled\")\n| summarize Executions = count() by Status",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Succeeded"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cancelled"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^Executions$/"
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Dernières exécutions de pipelines",
+      "description": "Le détail des dernières exécutions, les plus récentes en premier.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "union isfuzzy=true ADFPipelineRun\n| where $__timeFilter(TimeGenerated)\n| where Status in (\"Succeeded\", \"Failed\", \"Cancelled\")\n| project Debut = Start, Fin = End, Pipeline = PipelineName, Statut = Status\n| order by Debut desc\n| take 50",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Erreurs des activités Data Factory",
+      "description": "Le message d'erreur de chaque activité en échec : c'est ici qu'on comprend POURQUOI un pipeline a échoué.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "union isfuzzy=true ADFActivityRun\n| where $__timeFilter(TimeGenerated)\n| where Status == \"Failed\"\n| project Heure = TimeGenerated, Pipeline = PipelineName, Activite = ActivityName, Erreur = ErrorMessage\n| order by Heure desc\n| take 50",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Compte de stockage",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Opérations sur le compte de stockage",
+      "description": "Nombre d'opérations (lecture, écriture, listage...) par tranche de 15 minutes.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AzureMetrics\n| where $__timeFilter(TimeGenerated)\n| where ResourceProvider == \"MICROSOFT.STORAGE\" and MetricName == \"Transactions\"\n| summarize Operations = sum(Total) by bin(TimeGenerated, 15m)\n| order by TimeGenerated asc",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "time_series",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Opérations sur les fichiers par type et résultat",
+      "description": "Quels types d'opérations ont lieu sur les fichiers, et si elles réussissent.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "union isfuzzy=true StorageBlobLogs\n| where $__timeFilter(TimeGenerated)\n| summarize Nombre = count() by Operation = OperationName, Resultat = StatusText\n| order by Nombre desc",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "VM applicative vue par Azure",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "CPU de la VM (mesuré par Azure)",
+      "description": "Utilisation du processeur vue de l'extérieur par Azure. Le détail intérieur est dans le tableau de bord Node Exporter.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AzureMetrics\n| where $__timeFilter(TimeGenerated)\n| where ResourceProvider == \"MICROSOFT.COMPUTE\" and MetricName == \"Percentage CPU\"\n| summarize CPU = avg(Average) by bin(TimeGenerated, 5m)\n| order by TimeGenerated asc",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "time_series",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Crédits CPU restants (VM série B)",
+      "description": "Une VM B2s accumule des crédits au repos et les dépense en travaillant. À zéro, elle est bridée et devient très lente.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AzureMetrics\n| where $__timeFilter(TimeGenerated)\n| where ResourceProvider == \"MICROSOFT.COMPUTE\" and MetricName == \"CPU Credits Remaining\"\n| summarize Credits = avg(Average) by bin(TimeGenerated, 15m)\n| order by TimeGenerated asc",
+            "resources": [
+              "__WORKSPACE_ID__"
+            ],
+            "resultFormat": "time_series",
+            "dashboardTime": false
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

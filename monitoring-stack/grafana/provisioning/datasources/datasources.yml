@@ -1,0 +1,24 @@
+# Sources de données de Grafana, créées automatiquement au démarrage
+# (pas besoin de les configurer à la main dans l'interface)
+apiVersion: 1
+
+datasources:
+  # 1. Prometheus : l'intérieur de la VM (CPU, mémoire, disque, réseau)
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  # 2. Azure Monitor : les métriques Azure et le workspace Log Analytics
+  #    (stockage, Data Factory, métriques de la VM vues par Azure...)
+  #    Authentification par l'identité managée de la VM ("msi"), qui a reçu
+  #    le rôle Monitoring Reader grâce à Terraform. Aucun mot de passe.
+  - name: Azure Monitor
+    uid: azure-monitor
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    jsonData:
+      azureAuthType: msi
+      subscriptionId: ${AZURE_SUBSCRIPTION_ID}

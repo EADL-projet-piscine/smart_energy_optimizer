@@ -79,5 +79,15 @@ resource "azurerm_log_analytics_saved_search" "requetes" {
   log_analytics_workspace_id = azurerm_log_analytics_workspace.law.id
   category                   = "Smart Energy" # le dossier où elles apparaissent
   display_name               = each.value.titre
-  query                      = each.value.requete
+
+  # Azure modifie les retours à la ligne quand il enregistre une requête,
+  # ce qui faisait croire à Terraform qu'il fallait tout recréer à chaque
+  # plan. On envoie donc chaque requête sur une seule ligne : le KQL
+  # fonctionne pareil, les "|" séparent les étapes.
+  query = trimspace(replace(replace(each.value.requete, "\r", ""), "\n", " "))
+
+  # Réglages qu'Azure renvoie vides et que l'on ne gère pas
+  lifecycle {
+    ignore_changes = [tags, function_parameters]
+  }
 }

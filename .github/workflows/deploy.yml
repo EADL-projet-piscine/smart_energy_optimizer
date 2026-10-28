@@ -244,18 +244,20 @@ jobs:
   # would: the self-hosted runner, on the VM itself, would not see what the NSG lets in.
   verify:
     name: Check the site from the Internet
-    needs: [resolve, deploy]
+    needs: deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
     timeout-minutes: 10
 
     steps:
-      - name: Checkout the deployed version
+      # The check script comes from main, the version of this workflow, not from the deployed
+      # commit: a change to deploy/ publishes no image, so the deployed version can predate it.
+      - name: Checkout main
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          ref: ${{ needs.resolve.outputs.commit }}
+          sparse-checkout: deploy
 
       - name: HTTPS, redirect, headers, API behind authentication, closed ports
         env:

@@ -7,17 +7,30 @@ export const UNAUTHORIZED_EVENT = 'enervision:unauthorized'
 /** Réponse HTTP en erreur, avec son statut : l'appelant distingue un 401 d'une panne. */
 export class HttpError extends Error {
   readonly status: number
+  /** Le message de l'API (`detail`), quand elle en donne un en texte. */
+  readonly detail: string | null
 
-  constructor(status: number) {
+  constructor(status: number, detail: string | null = null) {
     super(`Statut ${status}`)
     this.status = status
+    this.detail = detail
+  }
+}
+
+/** Le `detail` d'une réponse en erreur de FastAPI ; rien si le corps n'en a pas. */
+async function detailOf(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { detail?: unknown }
+    return typeof body.detail === 'string' ? body.detail : null
+  } catch {
+    return null
   }
 }
 
 export async function fetchJson(
   path: string,
   signal?: AbortSignal,
-  method: 'GET' | 'POST' = 'GET',
+  method: 'GET' | 'POST' | 'PATCH' = 'GET',
   body?: unknown,
 ): Promise<unknown> {
   const controller = new AbortController()
@@ -40,7 +53,7 @@ export async function fetchJson(
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (response.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
-    if (!response.ok) throw new HttpError(response.status)
+    if (!response.ok) throw new HttpError(response.status, await detailOf(response))
     // 204 : réponse sans corps (connexion, déconnexion).
     if (response.status === 204) return null
     return (await response.json()) as unknown

@@ -60,6 +60,38 @@ export function formatHour(at: string): string {
   return `${String(date.getHours()).padStart(2, '0')}h00`
 }
 
+/** Minuit local du jour d'une date, pour compter les jours civils. */
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+/** Écart en jours civils locaux. L'arrondi absorbe les journées de 23 ou
+ * 25 heures des changements d'heure. */
+function dayGap(date: Date, now: Date): number {
+  return Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000)
+}
+
+/** Heure entamée, datée dès qu'il ne s'agit plus d'aujourd'hui.
+ *
+ * Les prévisions portent sur vingt-quatre heures : « 14h00 » seul ne dit pas
+ * si c'est dans deux heures ou dans vingt-deux, et se lit volontiers comme un
+ * moment déjà passé. `now` est injectable pour que les tests ne dépendent pas
+ * du jour où ils tournent.
+ */
+export function formatDayHour(at: string, now: Date = new Date()): string {
+  const date = new Date(toIsoUtc(at))
+  if (Number.isNaN(date.getTime())) return at
+
+  const hour = formatHour(at)
+  const gap = dayGap(date, now)
+  if (gap === 0) return hour
+  if (gap === 1) return `demain ${hour}`
+  if (gap === -1) return `hier ${hour}`
+  // Au-delà, le nom du jour suffit : l'horizon ne dépasse pas la journée
+  // suivante, et une date complète alourdirait la case pour rien.
+  return `${date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })} ${hour}`
+}
+
 /** Heure exacte, réservée à la mesure la plus récente : là, la minute compte. */
 export function formatTime(at: string): string {
   const date = new Date(toIsoUtc(at))
@@ -71,6 +103,26 @@ export function alertsLabel(critical: number, medium: number): string {
   const criticalPart = `${critical} critique${critical > 1 ? 's' : ''}`
   const mediumPart = `${medium} moyenne${medium > 1 ? 's' : ''}`
   return `${criticalPart} · ${mediumPart}`
+}
+
+/** Seuils de charge, repris de la configuration du back — `alert_medium_pct`
+ * et `alert_critical_pct` dans config.py. L'API ne les expose pas, ils sont
+ * donc recopiés ici : si l'un bouge là-bas, il doit bouger ici aussi. */
+const LOAD_MEDIUM_PCT = 90
+const LOAD_CRITICAL_PCT = 100
+
+/** Couleur d'une charge, aux mêmes seuils que les alertes de capacité.
+ *
+ * Le troisième seuil du back, 85 %, ne s'applique pas : il sert à éteindre une
+ * alerte déjà levée, pour qu'elle ne clignote pas quand la charge oscille
+ * autour de 90. Une valeur prévue n'a pas d'état antérieur, donc rien à
+ * éteindre.
+ */
+export function loadTone(percentage: number | null): 'defaut' | 'ambre' | 'danger' {
+  if (percentage === null) return 'defaut'
+  if (percentage >= LOAD_CRITICAL_PCT) return 'danger'
+  if (percentage >= LOAD_MEDIUM_PCT) return 'ambre'
+  return 'defaut'
 }
 
 /** Index du dernier point portant une mesure réelle, -1 si la série n'en a aucune. */
@@ -92,6 +144,16 @@ export function forecastPeak(series: SeriesPoint[], afterIndex = -1): { at: stri
   })
   if (best || afterIndex < 0) return best
   return forecastPeak(series)
+}
+
+/** Dernier créneau prévu après `afterIndex` : jusqu'où porte la prévision.
+ *
+ * « Aucun pic » sans horizon est une demi-réponse — aucun pic jusqu'à quand ? */
+export function forecastHorizon(series: SeriesPoint[], afterIndex = -1): string | null {
+  for (let index = series.length - 1; index > afterIndex; index -= 1) {
+    if (series[index].forecastKw !== null) return series[index].at
+  }
+  return null
 }
 
 function peakSentence(threshold: number, peak: number, hour: number, scope: 'parc' | 'site'): string {

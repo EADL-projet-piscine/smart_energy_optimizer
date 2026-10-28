@@ -1,6 +1,7 @@
 import { fetchJson } from '../api/client'
 import { toIsoUtc } from './format'
 import type { History, SeriesPoint } from './model'
+import { sumBySite } from './series'
 
 type RawPoint = {
   timestamp?: unknown
@@ -28,23 +29,6 @@ function toSeries(raw: unknown): SeriesPoint[] {
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 }
 
-/** Somme des sites à horodatage égal. Un horodatage sans aucune mesure reste null. */
-function sumPark(bySite: Record<string, SeriesPoint[]>): SeriesPoint[] {
-  const totals = new Map<string, number | null>()
-  for (const series of Object.values(bySite)) {
-    for (const point of series) {
-      if (point.measuredKw === null) {
-        if (!totals.has(point.at)) totals.set(point.at, null)
-        continue
-      }
-      totals.set(point.at, (totals.get(point.at) ?? 0) + point.measuredKw)
-    }
-  }
-  return [...totals.entries()]
-    .map(([at, measuredKw]) => ({ at, measuredKw, forecastKw: null }))
-    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-}
-
 export async function loadHistory(signal?: AbortSignal): Promise<History> {
   const body = await fetchJson('/api/consommations/historique', signal)
   const sites = (body as { sites?: unknown })?.sites
@@ -57,7 +41,7 @@ export async function loadHistory(signal?: AbortSignal): Promise<History> {
     bySite[siteId] = toSeries(raw)
   }
 
-  return { park: sumPark(bySite), bySite }
+  return { park: sumBySite(bySite, 'measuredKw'), bySite }
 }
 
 /** Prolonge la série jusqu'à la mesure courante.

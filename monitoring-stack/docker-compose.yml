@@ -1,0 +1,68 @@
+# =====================================================================
+# Stack de monitoring : node_exporter + Prometheus + Grafana
+# À lancer sur la VM avec : docker compose up -d
+#
+# - node_exporter : mesure l'intérieur de la VM (CPU, mémoire, disque, réseau)
+# - Prometheus    : récolte et stocke ces mesures
+# - Grafana       : affiche les tableaux de bord (Prometheus + Azure Monitor)
+#
+# Sécurité : aucun port n'est ouvert sur Internet. Grafana et Prometheus
+# n'écoutent que sur 127.0.0.1 (la VM elle-même) : on y accède depuis son
+# PC par un tunnel SSH.
+# =====================================================================
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: node-exporter
+    restart: unless-stopped
+    # Il doit voir la "vraie" machine, pas seulement l'intérieur du conteneur
+    pid: host
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - "/:/host:ro,rslave" # le disque de la VM, en lecture seule
+    # Pas de port publié : seul Prometheus (même réseau Docker) l'interroge
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d" # garde 15 jours de mesures
+    volumes:
+      - "./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "prometheus-data:/prometheus"
+    ports:
+      - "127.0.0.1:9090:9090" # accessible uniquement depuis la VM (ou le tunnel)
+    depends_on:
+      - node-exporter
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      # Compte administrateur de Grafana (mot de passe dans le fichier .env)
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Autorise Grafana à utiliser l'identité managée de la VM pour lire Azure
+      GF_AZURE_MANAGED_IDENTITY_ENABLED: "true"
+      # Utilisé dans la configuration de la source Azure Monitor
+      AZURE_SUBSCRIPTION_ID: ${AZURE_SUBSCRIPTION_ID}
+    volumes:
+      - "./grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "./grafana/dashboards:/etc/grafana/dashboards:ro" # les tableaux de bord en JSON
+      - "grafana-data:/var/lib/grafana"
+    ports:
+      - "127.0.0.1:3000:3000" # accessible uniquement depuis la VM (ou le tunnel)
+    depends_on:
+      - prometheus
+
+# Volumes Docker : les données survivent à un redémarrage des conteneurs
+volumes:
+  prometheus-data:
+  grafana-data:

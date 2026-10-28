@@ -13,15 +13,15 @@ def test_auth_none_without_user(monkeypatch):
 
 def test_auth_returns_credentials(monkeypatch):
     monkeypatch.setattr(settings, "enervision_user", "someone")
-    monkeypatch.setattr(settings, "enervision_password", SecretStr("s3cr3t"))
+    monkeypatch.setattr(settings, "enervision_password", SecretStr("secret"))
 
-    assert _auth() == ("someone", "s3cr3t")
+    assert _auth() == ("someone", "secret")
 
 
 def test_auth_does_not_leak_password(monkeypatch):
     """The password is a SecretStr: its value must only surface via get_secret_value."""
     monkeypatch.setattr(settings, "enervision_user", "someone")
-    monkeypatch.setattr(settings, "enervision_password", SecretStr("s3cr3t"))
+    monkeypatch.setattr(settings, "enervision_password", SecretStr("secret"))
 
-    assert "s3cr3t" not in str(settings.enervision_password)
-    assert "s3cr3t" not in repr(settings.enervision_password)
+    assert "secret" not in str(settings.enervision_password)
+    assert "secret" not in repr(settings.enervision_password)

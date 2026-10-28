@@ -89,7 +89,7 @@ jobs:
           # but not the commits of the merged branches, which never have images.
           for commit in $(git rev-list --first-parent --max-count="$SEARCH_DEPTH" HEAD); do
             complete=true
-            for service in back ml mlflow front; do
+            for service in back ml ml-predict mlflow front; do
               if ! image_exists "${IMAGE_PREFIX}/${service}:${commit}"; then
                 complete=false
                 break
@@ -188,6 +188,7 @@ jobs:
 
           export BACK_IMAGE="${IMAGE_PREFIX}/back:${IMAGE_TAG}"
           export ML_IMAGE="${IMAGE_PREFIX}/ml:${IMAGE_TAG}"
+          export ML_PREDICT_IMAGE="${IMAGE_PREFIX}/ml-predict:${IMAGE_TAG}"
           export MLFLOW_IMAGE="${IMAGE_PREFIX}/mlflow:${IMAGE_TAG}"
           export FRONT_IMAGE="${IMAGE_PREFIX}/front:${IMAGE_TAG}"
 
@@ -206,6 +207,12 @@ jobs:
             -f docker-compose.deploy.yml \
             --env-file "$PROD_ENV" \
             pull
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            pull ml-predict
 
           docker compose \
             -f docker-compose.yml \

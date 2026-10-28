@@ -75,6 +75,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  ml-predict:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile.predict
+    image: smart-energy-ml-predict:dev
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      DATABASE_URL: postgresql+psycopg://enervision_ml:enervision_ml@db:5432/enervision
+    profiles:
+      - jobs
+    env_file:
+      - path: ./ml/.env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    restart: "no"
+
   front:
     build:
       context: ./app/front

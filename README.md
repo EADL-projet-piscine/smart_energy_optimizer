@@ -24,11 +24,30 @@ lequel le projet est testé.
       front/  Dashboard
       back/   API métier — consommée par le dashboard
     ml/       Service de prédiction — modèle et API dédiée
+    db/
+      init/        Scripts joués une seule fois, à la création du volume
+      migrations/  Schéma, numérotées et rejouables
+      seeds/       Jeux de données de développement, lancés à la main
     infra/    Infrastructure (Terraform, Data Factory)
     docs/     Documentation du projet
 
 `app/back`, `app/front` et `ml` sont déployés séparément. Chaque service
 Python a son propre `pyproject.toml` et son propre environnement virtuel.
+
+Les trois dossiers de `db/` ne se ressemblent pas :
+
+- **`init/`** ne tourne qu'à la **création du volume** PostgreSQL, jamais
+  ensuite. C'est là que vivent l'application du schéma, la création des
+  rôles et les droits.
+- **`migrations/`** est le schéma lui-même, en fichiers numérotés. Chacun
+  doit pouvoir être rejoué sur une base qui l'a déjà reçu (`IF NOT EXISTS`,
+  `ADD COLUMN IF NOT EXISTS`) : c'est ce qui permet de rattraper une base
+  existante sans l'effacer.
+- **`seeds/`** ne s'exécute **jamais tout seul**, ni au démarrage, ni en CI,
+  ni au déploiement. Ce sont des jeux de données de développement, à lancer
+  à la main quand on en a besoin.
+
+Le détail du schéma est dans `db/README.md`.
 
 ## Démarrage
 
@@ -170,15 +189,42 @@ docker compose ps
 
 Attendre que la colonne `STATUS` indique `healthy`.
 
-Au premier démarrage, le conteneur crée la base `enervision`, les tables
-(`db/migrations`) et deux rôles : `enervision_app` pour l'API métier,
-`enervision_ml` pour les traitements. Le détail du schéma est dans
-`db/README.md`. Un volume déjà créé avant ce schéma ne relance pas
-l'initialisation : `sh scripts/apply_schema.sh` l'applique sans effacer les
-données.
+Au premier démarrage, le conteneur joue les scripts de `db/init` dans
+l'ordre : `01_schema.sh` applique les migrations, `02_roles.sh` crée les
+rôles `enervision_app` (API métier) et `enervision_ml` (traitements), puis
+`03_grants.sql` leur donne leurs droits. Le détail du schéma est dans
+`db/README.md`.
+
+**Ces scripts ne tournent qu'à la création du volume.** Sur un volume qui
+existe déjà, PostgreSQL les ignore en silence — c'est le comportement
+normal de l'image, pas une panne. Une base créée avant l'ajout d'une
+migration ou d'un rôle reste donc en arrière :
+
+```bash
+sh scripts/apply_schema.sh    # rattrape le schéma sans effacer les données
+docker compose down -v        # ou repart de zéro (efface tout)
+```
 
 PostgreSQL écoute sur le port **5433** de la machine (et non 5432, pour
 éviter les conflits avec une instance déjà installée).
+
+#### Voir des prévisions à l'écran
+
+Les prévisions de la table `predictions` sont écrites par le service ML
+(`ml/scripts/predict.py`, lancé par `.github/workflows/predict.yml`). Sur un
+poste de développement, cette table est le plus souvent vide, et le
+dashboard n'affiche alors aucune courbe de prévision. `db/seeds` pose un jeu
+de développement :
+
+```bash
+docker compose exec -T db psql -U enervision -d enervision < db/seeds/dev_forecasts.sql
+```
+
+Ce fichier ne s'exécute **jamais** automatiquement : ni au démarrage, ni en
+CI, ni au déploiement. Il se rejoue autant de fois qu'on veut, et son
+horizon part de l'heure où on l'applique — un jeu posé hier ne couvre plus
+grand chose aujourd'hui. Les prévisions qu'il écrit portent
+`model_version = 'dev'`, ce qui les distingue de celles du service ML.
 
 ### 7. Lancer l'application métier
 
@@ -375,9 +421,15 @@ fonctionne à l'identique sous Linux, macOS et Windows.
 Configuration ruff : ligne à 100 caractères, cible Python 3.12 (sections
 `[tool.ruff]` des `pyproject.toml`).
 
-Côté front, `npx tsc --noEmit` vérifie les types. Il n'attrape **ni** les
-chaînes de caractères **ni** les accès hors bornes de tableau : les deux ont
-déjà causé des bugs. Voir `docs/conventions-front.md`.
+Côté front, `npx tsc --noEmit` vérifie les types. **Vitest ne les vérifie
+pas** : il transpile sans contrôler, donc un code mal typé passe tous les
+tests en local et fait échouer la CI, qui lance `npm run build`. C'est
+arrivé avec `findLast` et `findLastIndex`, qui existent à l'exécution mais
+dépassent la cible ES2022 du projet.
+
+`tsc` lui-même n'attrape **ni** les chaînes de caractères **ni** les accès
+hors bornes de tableau : les deux ont déjà causé des bugs. Voir
+`docs/conventions-front.md`.
 
 ### Vérifications locales (hooks Git)
 
@@ -500,9 +552,14 @@ GitHub ne permet pas de protéger `main` sur ce dépôt : **ne mergez pas une
 pull request dont la CI est rouge.**
 
 **Après un merge de `main` dans votre branche**, relancez les deux suites de
-tests avant de pousser : une résolution de conflit peut ramener du code qui
-contredit vos modifications, sans qu'aucun marqueur n'apparaisse dans le
-fichier.
+tests avant de pousser, et `npx tsc --noEmit` côté front : une résolution de
+conflit peut ramener du code qui contredit vos modifications, sans qu'aucun
+marqueur n'apparaisse dans le fichier.
+
+**Testez sur une base neuve avant de toucher à `db/`.** Votre base locale
+porte un historique que le runner n'a pas : une migration qui marche chez
+vous peut échouer sur une base vide. `docker compose down -v && docker
+compose up -d --build` est la seule vérification qui le montre.
 
 ### SonarQube
 
@@ -617,6 +674,7 @@ par Git. Le fichier `.env.example` sert de modèle.
 | `HISTORY_HOURS`           | Profondeur de l'historique renvoyé, en heures                     | `24`                                                                                                                     |
 | `HISTORY_SITE_COUNT`      | Nombre de sites du parc, qui fixe le pas d'échantillonnage        | `7`                                                                                                                      |
 | `HISTORY_MARGIN_S`        | Marge sur l'heure courante, pour l'écart d'horloge avec la source | `300`                                                                                                                    |
+| `FORECAST_HOURS`          | Profondeur des prévisions renvoyées, en heures                    | `24`                                                                                                                     |
 | `ALERT_CRITICAL_PCT`      | Charge à partir de laquelle une alerte critique est levée, en %   | `100`                                                                                                                    |
 | `ALERT_MEDIUM_PCT`        | Charge à partir de laquelle une alerte moyenne est levée, en %    | `90`                                                                                                                     |
 | `ALERT_CLEAR_PCT`         | Charge sous laquelle une alerte s'éteint, en %                    | `85`                                                                                                                     |
@@ -629,6 +687,11 @@ Les trois seuils d'alerte vont par paire : celui d'extinction est
 volontairement plus bas que celui de levée. Avec un seuil unique, un site
 qui oscille autour de 90 % ferait clignoter son alerte à chaque cycle. Le
 détail de la règle est dans `docs/conventions-back.md`.
+
+`FORECAST_HOURS` ne peut pas dépasser **24** : la table `predictions`
+n'accepte pas d'horizon au-delà, et une valeur plus grande ne ferait
+qu'élargir une fenêtre vide. Le dashboard affiche ce que l'API lui donne,
+sans fenêtre à lui.
 
 ### Authentification de l'API
 
@@ -657,6 +720,16 @@ ne sait pas se connecter). Elle répond au constat C1 de l'audit de sécurité.
       docker compose exec back python -m smart_energy_app.auth.create_user \
         --email ada@example.com --name "Ada Lovelace" --role viewer \
         --site SITE001 --site SITE003
+
+- **Gestion des comptes** : une fois le premier administrateur créé par cette
+  commande, les autres comptes se gèrent depuis l'écran « Comptes » du
+  dashboard (bouton dans l'en-tête, administrateurs seulement), ou par
+  `GET`, `POST` et `PATCH /api/comptes` : création, nom, activation, rôle,
+  sites d'un lecteur et nouveau mot de passe. Rattacher un site à un client
+  le retire à son client précédent. Ces routes répondent 403 à un autre rôle,
+  et tant que `AUTH_ENABLED=false`. Un administrateur ne peut ni désactiver
+  son propre compte ni s'enlever le rôle `admin`. Chaque action est
+  journalisée avec son auteur, jamais avec un mot de passe.
 
 Les tests `tests/auth/` vérifient à chaque pull request les 401 de chaque route,
 les 403 hors périmètre, le filtrage des réponses et la connexion sur une vraie
@@ -711,6 +784,30 @@ votre machine. Arrêtez le programme qui l'occupe, ou changez le port dans
 **L'API répond `"database": "indisponible"`** — la base n'est pas joignable.
 Vérifiez `docker compose ps`, puis `docker compose logs db`.
 
+**`password authentication failed for user "enervision_app"`** — le rôle
+n'existe pas, ou n'a pas ce mot de passe. La cause est presque toujours la
+même : un volume PostgreSQL créé **avant** que les scripts de `db/init`
+n'existent ou ne changent. Ils ne rejouent jamais sur un volume existant,
+donc le rôle est resté tel qu'il était — ou n'a jamais été créé.
+
+Pour le confirmer, cherchez la trace de l'initialisation dans les logs :
+
+```bash
+docker compose logs db | grep initdb
+```
+
+```powershell
+docker compose logs db | Select-String "initdb"
+```
+
+Aucune ligne : les scripts n'ont pas tourné sur ce volume. Deux sorties,
+selon que vous tenez à vos données :
+
+```bash
+docker compose down -v && docker compose up -d       # repart de zéro
+sh scripts/apply_schema.sh                           # rattrape sans effacer
+```
+
 **Les logs affichent `l'API a répondu 401`** — les identifiants de l'API
 source manquent ou sont faux. Trois causes, dans l'ordre :
 
@@ -763,6 +860,21 @@ l'API métier. Dans l'ordre :
 Le dashboard n'affiche jamais de données inventées : s'il dit que l'API est
 injoignable, c'est qu'elle l'est.
 
+**Aucune courbe de prévision sur le graphique** — la table `predictions` est
+vide, ou ne contient plus rien à venir. Vérifiez ce qu'elle a en stock :
+
+```bash
+docker compose exec -T db psql -U enervision -d enervision \
+  -c "SELECT count(*), min(period_start), max(period_start) FROM predictions WHERE period_start >= now();"
+```
+
+Un compte à zéro renvoie à la section « Voir des prévisions à l'écran » :
+posez le jeu de développement. Si le compte est bon mais que rien ne
+s'affiche, regardez `curl -s localhost:8000/api/previsions | head -c 200` :
+une réponse vide pointe vers le back, une réponse pleine vers le front. Un
+**401** veut dire autre chose : `AUTH_ENABLED=true` et ce `curl` n'a pas de
+session — ce n'est pas un problème de prévisions.
+
 **Le dashboard fait deux appels réseau au lieu d'un** — c'est le mode strict
 de React, en développement uniquement. Pour le vérifier : `npm run build &&
 npm run preview`, un seul appel.
@@ -803,5 +915,16 @@ sur les pièges de l'API source, établis par la mesure.
 Celle du front est dans `docs/conventions-front.md`, à lire avant d'écrire
 du code dans `app/front`.
 
-À compléter avec l'équipe : nommage des branches, format des messages de
-commit, processus de revue.
+### Branches
+
+Une branche par ticket, nommée d'après le groupe, les initiales et le
+numéro du ticket :
+
+    EADL_2025_RENNES_G4/lf_80
+
+Renommer une branche déjà poussée coûte une suppression de la branche
+distante et une nouvelle pull request : autant la nommer juste du premier
+coup.
+
+À compléter avec l'équipe : format des messages de commit, processus de
+revue.

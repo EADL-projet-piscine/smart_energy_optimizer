@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -40,7 +41,7 @@ DATASET_PATH = BASE_DIR / "data/processed/readings_hourly_20250101_20260701.parq
 RAW_INFERENCE_DIR = BASE_DIR / "data/raw/inference"
 OUTPUT_DIR = BASE_DIR / "data/predictions"
 
-TRACKING_URI = f"sqlite:///{BASE_DIR / 'mlflow.db'}"
+TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 
 MODEL_NAME = "smart-energy-rf-global"
 

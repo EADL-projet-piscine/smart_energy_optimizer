@@ -44,6 +44,11 @@ SELECT upsert_site('SITE007', 'Usine Nantes Rezé', NULL, 950);
 -- applique à chaque site. Passer par upsert_prediction plutôt que par un
 -- INSERT direct exerce la fonction au passage : si sa signature change encore,
 -- ce fichier le dira.
+-- Le facteur par site fait couvrir au parc les quatre situations que l'écran
+-- sait distinguer : un site qui dépassera sa capacité, un qui entrera en
+-- alerte critique, un en alerte moyenne, et les autres au calme. Sans lui,
+-- toutes les courbes culminaient à 75 % et aucun seuil n'était jamais
+-- franchi — un jeu d'essai qui n'exerce aucun cas limite ne prouve rien.
 WITH origines AS (
   SELECT
     date_trunc('hour', now()) - interval '6 hours' AS ancienne,
@@ -55,6 +60,12 @@ SELECT upsert_prediction(
   ROUND((
     sites.capacity_kw
     * (0.45 + 0.30 * sin(pi() * (EXTRACT(HOUR FROM origine.depart + make_interval(hours => h)) - 6) / 14))
+    * CASE sites.site_id
+        WHEN 'SITE003' THEN 1.47  -- culmine vers 110 % : dépassement
+        WHEN 'SITE007' THEN 1.27  -- vers 95 %  : alerte critique
+        WHEN 'SITE002' THEN 1.17  -- vers 88 %  : sous le seuil, de peu
+        ELSE 0.93                 -- vers 70 %  : rien à signaler
+      END
     * CASE WHEN origine.rang = 0 THEN 1.08 ELSE 1.0 END
   )::numeric, 3),
   origine.depart,

@@ -75,4 +75,4 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.deploy.yml \
             --env-file "$PROD_ENV" \
-            run --rm --no-build ml-predict --source api
+            run --rm ml-predict --source api

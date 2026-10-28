@@ -88,6 +88,6 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.deploy.yml \
             --env-file "$PROD_ENV" \
-            run --rm --no-build \
+            run --rm \
             -e TRAIN_ENVIRONMENT=production \
             ml-train

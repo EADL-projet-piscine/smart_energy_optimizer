@@ -88,6 +88,8 @@ jobs:
               - 'ml/tests/**'
               - 'ml/scripts/**'
               - 'ml/Dockerfile.predict'
+              - 'ml/Dockerfile.train'
+              - 'ml/data/processed/readings_hourly_20250101_20260701.parquet'
               - 'ml/pyproject.toml'
               - 'ml/Dockerfile'
               - 'ml/.dockerignore'
@@ -107,6 +109,8 @@ jobs:
               - 'ml/Dockerfile'
               - 'ml/Dockerfile.mlflow'
               - 'ml/Dockerfile.predict'
+              - 'ml/Dockerfile.train'
+              - 'ml/data/processed/**'
               - 'docker-compose*.yml'
               - 'tests/perf/**'
               - 'app/front/**'
@@ -118,6 +122,9 @@ jobs:
               - 'ml/Dockerfile'
               - 'ml/Dockerfile.mlflow'
               - 'ml/Dockerfile.predict'
+              - 'ml/Dockerfile.train'
+              - 'ml/data/processed/**'
+              - 'ml/scripts/train.py'
               - 'docker-compose.yml'
               - 'docker-compose.deploy.yml'
               - 'app/front/**'
@@ -494,6 +501,10 @@ jobs:
             context: ml
             dockerfile: Dockerfile.predict
 
+          - service: ml-train
+            context: ml
+            dockerfile: Dockerfile.train
+
     steps:
       - uses: actions/checkout@v5
 
@@ -546,6 +557,7 @@ jobs:
       ML_IMAGE: ghcr.io/${{ github.repository }}/ml:${{ github.sha }}
       MLFLOW_IMAGE: ghcr.io/${{ github.repository }}/mlflow:${{ github.sha }}
       ML_PREDICT_IMAGE: ghcr.io/${{ github.repository }}/ml-predict:${{ github.sha }}
+      ML_TRAIN_IMAGE: ghcr.io/${{ github.repository }}/ml-train:${{ github.sha }}
       FRONT_IMAGE: ghcr.io/${{ github.repository }}/front:${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
@@ -564,6 +576,7 @@ jobs:
             echo "ML_IMAGE=${ML_IMAGE,,}"
             echo "MLFLOW_IMAGE=${MLFLOW_IMAGE,,}"
             echo "ML_PREDICT_IMAGE=${ML_PREDICT_IMAGE,,}"
+            echo "ML_TRAIN_IMAGE=${ML_TRAIN_IMAGE,,}"
             echo "FRONT_IMAGE=${FRONT_IMAGE,,}"
           } >> "$GITHUB_ENV"
 
@@ -627,7 +640,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [back, ml, mlflow, ml-predict, front]
+        service: [back, ml, mlflow, ml-predict, ml-train, front]
     steps:
       - uses: actions/download-artifact@v8
         with:

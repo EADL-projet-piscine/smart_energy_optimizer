@@ -4,10 +4,17 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .env
-data/
+
+# Données : seul le dataset d'entraînement est embarqué
+data/*
+!data/processed/
+data/processed/*
+!data/processed/readings_hourly_20250101_20260701.parquet
+
 models/
 notebooks/
 tests/
 scripts/*
 !scripts/predict.py
+!scripts/train.py
 .git/

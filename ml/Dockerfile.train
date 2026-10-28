@@ -1,0 +1,26 @@
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN groupadd --system appgroup \
+    && useradd --system --gid appgroup --create-home appuser
+
+COPY pyproject.toml ./
+COPY src ./src
+COPY scripts/train.py ./scripts/train.py
+
+# Dataset nécessaire à l'entraînement
+COPY data/processed/readings_hourly_20250101_20260701.parquet \
+     ./data/processed/readings_hourly_20250101_20260701.parquet
+
+RUN pip install --no-cache-dir .
+
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
+CMD ["python", "/app/scripts/train.py"]

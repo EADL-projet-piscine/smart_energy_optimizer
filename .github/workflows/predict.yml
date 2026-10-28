@@ -60,6 +60,7 @@ jobs:
           export ML_IMAGE="${IMAGE_PREFIX}/ml:${IMAGE_TAG}"
           export ML_PREDICT_IMAGE="${IMAGE_PREFIX}/ml-predict:${IMAGE_TAG}"
           export MLFLOW_IMAGE="${IMAGE_PREFIX}/mlflow:${IMAGE_TAG}"
+          export ML_TRAIN_IMAGE="${IMAGE_PREFIX}/ml-train:${IMAGE_TAG}"
           export FRONT_IMAGE="${IMAGE_PREFIX}/front:${IMAGE_TAG}"
 
           echo "Using deployed image version: ${IMAGE_TAG}"

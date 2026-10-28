@@ -112,6 +112,7 @@ jobs:
               - 'ml/Dockerfile.train'
               - 'ml/data/processed/**'
               - 'docker-compose*.yml'
+              - 'ml/scripts/**'
               - 'tests/perf/**'
               - 'app/front/**'
             deploy:

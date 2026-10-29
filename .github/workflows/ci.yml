@@ -560,6 +560,9 @@ jobs:
       ML_PREDICT_IMAGE: ghcr.io/${{ github.repository }}/ml-predict:${{ github.sha }}
       ML_TRAIN_IMAGE: ghcr.io/${{ github.repository }}/ml-train:${{ github.sha }}
       FRONT_IMAGE: ghcr.io/${{ github.repository }}/front:${{ github.sha }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+      ML_DB_PASSWORD: ${{ secrets.ML_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
 

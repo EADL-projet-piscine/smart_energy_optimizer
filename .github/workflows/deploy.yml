@@ -182,6 +182,9 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
           IMAGE_TAG: ${{ needs.resolve.outputs.commit }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+          ML_DB_PASSWORD: ${{ secrets.ML_DB_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail

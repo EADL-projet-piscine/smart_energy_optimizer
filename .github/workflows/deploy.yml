@@ -263,7 +263,17 @@ jobs:
           persist-credentials: false
           sparse-checkout: deploy
 
+      # The repository variable comes first. The domain is no secret, but GitHub drops a job
+      # output that contains the value of any secret: the output of the deploy job arrives
+      # empty as soon as a secret value (a short password, say) appears in the domain.
       - name: HTTPS, redirect, headers, API behind authentication, closed ports
         env:
-          SITE_DOMAIN: ${{ needs.deploy.outputs.site-domain }}
-        run: bash deploy/smoke_test.sh
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || needs.deploy.outputs.site-domain }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$SITE_DOMAIN" ]]; then
+            echo "::error::No site domain. Set the SITE_DOMAIN repository variable (Settings > Secrets and variables > Actions > Variables): the output of the deploy job is dropped when it contains the value of a secret."
+            exit 1
+          fi
+          bash deploy/smoke_test.sh

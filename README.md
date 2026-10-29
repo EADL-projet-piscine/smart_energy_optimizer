@@ -661,6 +661,14 @@ HTTPS avec un certificat valide, redirection du HTTP, en-têtes de sécurité du
 fermés. Le déploiement échoue au moindre écart. Le même contrôle se lance à la
 main : `deploy/smoke_test.sh <le fqdn>`.
 
+Le job `verify` lit le domaine dans la **variable de dépôt `SITE_DOMAIN`**
+(_Settings → Secrets and variables → Actions → Variables_), et à défaut dans
+le `.env` de la VM, transmis par le job `deploy`. La variable est à
+renseigner : GitHub retire une sortie de job qui contient la valeur d'un
+secret, et ce cas se produit dès qu'un secret, par exemple un mot de passe
+trop court, apparaît dans le nom de domaine. Le contrôle échoue alors faute
+de domaine.
+
 ## Configuration
 
 Les paramètres sont lus depuis les variables d'environnement, ou depuis le

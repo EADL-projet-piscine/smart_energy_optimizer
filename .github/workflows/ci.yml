@@ -145,7 +145,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: enervision
-          POSTGRES_PASSWORD: enervision
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: enervision
         ports:
           - 5432:5432
@@ -155,7 +155,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql+psycopg://enervision:enervision@localhost:5432/enervision
+      DATABASE_URL: postgresql+psycopg://enervision:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/enervision
       # Tests marked `db` fail instead of being skipped when the database is missing.
       REQUIRE_DB: "1"
     defaults:

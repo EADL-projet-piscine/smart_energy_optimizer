@@ -404,5 +404,5 @@ Le développement s'effectue sur des branches dédiées, avec intégration dans 
 
 ---
 
-**Smart Energy Optimizer — Piscine EADL**  
+**Smart Energy Optimizer — Piscine EADL**
 Documentation du service Machine Learning. Les procédures décrites reflètent l'état connu du projet au **30 octobre 2026**.

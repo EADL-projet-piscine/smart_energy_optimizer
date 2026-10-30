@@ -7,13 +7,25 @@ régénère à chaque appel, ils ne sont pas exploitables.
 PostgreSQL 16. Le conteneur `db` de `docker-compose.yml` crée la base
 `enervision` au premier démarrage, puis applique `db/init` :
 
-1. `01_schema.sh` exécute `db/migrations/*.sql` dans l'ordre des noms.
+1. `01_schema.sh` applique les migrations de `db/migrations/*.sql`, dans
+   l'ordre des noms, **qui ne l'ont pas encore été**, et note chacune dans la
+   table `schema_migrations`. Une migration notée n'est jamais rejouée.
 2. `02_roles.sh` crée les rôles de connexion. Les mots de passe viennent des
    variables `APP_DB_PASSWORD` et `ML_DB_PASSWORD`.
 3. `03_grants.sql` accorde les droits.
 
-Un volume déjà créé avant ce schéma ne relance pas ces scripts. Depuis la
-racine du dépôt :
+PostgreSQL ne lance ces scripts qu'à la création de la base. **En production,
+le déploiement les relance à chaque fois** (`deploy.yml`) : une nouvelle
+migration arrive en base avec le code qui en a besoin, et un mot de passe
+changé dans les secrets est appliqué aux rôles. Une base créée avant
+`schema_migrations` est reconnue à la première exécution : `01_schema.sh` y
+retrouve `001` à `003` à ce qu'elles ont créé, et n'applique que les manquantes.
+
+**Ajouter une migration** : un nouveau fichier `00N_….sql`, entouré de
+`BEGIN` / `COMMIT` ; ne jamais modifier une migration déjà appliquée, puisqu'elle
+ne sera pas rejouée.
+
+Sur un poste de développement, depuis la racine du dépôt :
 
 ```bash
 sh scripts/apply_schema.sh

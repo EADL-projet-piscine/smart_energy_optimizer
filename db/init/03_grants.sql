@@ -25,6 +25,10 @@ REVOKE INSERT, UPDATE, DELETE ON predictions FROM enervision_app;
 REVOKE INSERT, UPDATE, DELETE ON recommendations, recommendation_rules
   FROM enervision_app;
 
+-- Le suivi des migrations (01_schema.sh) n'appartient qu'au super-utilisateur, seul
+-- habilité à migrer le schéma.
+REVOKE ALL ON schema_migrations FROM enervision_app, enervision_ml;
+
 GRANT SELECT, INSERT, UPDATE ON sites, current, predictions TO enervision_ml;
 
 GRANT EXECUTE ON FUNCTION

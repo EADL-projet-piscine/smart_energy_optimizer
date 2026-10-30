@@ -48,7 +48,7 @@ services:
       MLFLOW_EXPERIMENT_NAME: smart-energy-forecasting
       DATABASE_URL: postgresql+psycopg://enervision_ml:${ML_DB_PASSWORD:?ML_DB_PASSWORD is not set}@db:5432/enervision
     env_file:
-      - path: .env
+      - path: ./ml/.env
         required: false
     ports:
       - "8001:8000"
@@ -88,7 +88,7 @@ services:
     profiles:
       - jobs
     env_file:
-      - path: .env
+      - path: ./ml/.env
         required: false
     depends_on:
       db:
@@ -109,7 +109,7 @@ services:
     profiles:
       - jobs
     env_file:
-      - path: .env
+      - path: ./ml/.env
         required: false
     depends_on:
       mlflow:

@@ -116,6 +116,7 @@ jobs:
               - 'tests/perf/**'
               - 'app/front/**'
             deploy:
+              - '.github/workflows/ci.yml'
               - 'app/back/**'
               - 'db/**'
               - 'ml/src/**'

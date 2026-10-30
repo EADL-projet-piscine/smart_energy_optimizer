@@ -640,6 +640,14 @@ redirige le HTTP vers le HTTPS. Le front, l'API, le service ML et la base ne
 publient plus aucun port : ils ne se parlent que par le réseau Docker, et
 MLflow reste limité à `127.0.0.1`.
 
+**Schéma de la base.** Avant de démarrer les services, le déploiement démarre
+la base et relance les scripts de `db/init` : les migrations en attente sont
+appliquées (et notées dans `schema_migrations`), les mots de passe des rôles
+sont alignés sur les secrets `APP_DB_PASSWORD` et `ML_DB_PASSWORD`, et les
+droits sont accordés sur les nouvelles tables. Sans cela, une migration
+ajoutée après la création de la base ne l'atteignait jamais. Le détail est
+dans `db/README.md`.
+
 **Mise en service** (une fois, avec l'accès à l'abonnement et à la VM) :
 
 1. `terraform apply` dans `infra/` : nom DNS de l'IP publique et ouverture des

@@ -220,6 +220,37 @@ jobs:
             --env-file "$PROD_ENV" \
             pull ml-predict ml-train
 
+          # The database first, then its schema, before the services that query it: the
+          # scripts of db/init run only when PostgreSQL creates the database, so a new
+          # migration would otherwise never reach the existing production database.
+          # 01_schema.sh applies the pending migrations only; 02_roles.sh sets the role
+          # passwords from the secrets (rotating a secret takes effect here); 03_grants.sql
+          # grants the rights on the new tables. All three can run again safely.
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            up -d --no-build --wait db
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            exec -T db sh /docker-entrypoint-initdb.d/01_schema.sh
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            exec -T db sh /docker-entrypoint-initdb.d/02_roles.sh
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.deploy.yml \
+            --env-file "$PROD_ENV" \
+            exec -T db psql -v ON_ERROR_STOP=1 --username enervision --dbname enervision \
+            -f /docker-entrypoint-initdb.d/03_grants.sql
+
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.deploy.yml \

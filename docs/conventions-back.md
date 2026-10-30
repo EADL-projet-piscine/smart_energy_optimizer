@@ -562,7 +562,7 @@ passaient en local, où la base avait déjà tout.
 Deux pièges que `schema_tools.py` traite :
 
 - il applique **toutes** les migrations du dossier, triées par nom, comme le
-  fait `db/init/01_schema.sh`. S'arrêter à la première laisserait un schéma
+  fait `db/init/01_schema.sh` sur une base neuve. S'arrêter à la première laisserait un schéma
   incomplet, avec toutes ses tables ;
 - il filtre les `BEGIN`/`COMMIT` des fichiers de migration. Rejoué depuis
   SQLAlchemy, qui a déjà ouvert une transaction, ce `COMMIT` validerait celle

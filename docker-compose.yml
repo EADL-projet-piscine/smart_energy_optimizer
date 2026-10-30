@@ -15,6 +15,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - ./db/migrations:/migrations:ro
+      - ./db/seeds:/seeds:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U enervision"]
       interval: 5s
@@ -47,7 +48,7 @@ services:
       MLFLOW_EXPERIMENT_NAME: smart-energy-forecasting
       DATABASE_URL: postgresql+psycopg://enervision_ml:${ML_DB_PASSWORD:?ML_DB_PASSWORD is not set}@db:5432/enervision
     env_file:
-      - path: ./ml/.env
+      - path: .env
         required: false
     ports:
       - "8001:8000"
@@ -87,7 +88,7 @@ services:
     profiles:
       - jobs
     env_file:
-      - path: ./ml/.env
+      - path: .env
         required: false
     depends_on:
       db:
@@ -108,7 +109,7 @@ services:
     profiles:
       - jobs
     env_file:
-      - path: ./ml/.env
+      - path: .env
         required: false
     depends_on:
       mlflow:

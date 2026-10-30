@@ -461,23 +461,20 @@ jobs:
             -Dsonar.coverage.exclusions=app/front/src/main.tsx,app/front/src/App.tsx,app/front/src/vite-env.d.ts,app/front/src/services/model.ts,app/front/src/data/**
             -Dsonar.qualitygate.wait=true
 
-  # Builds and scans each image, then hands it over to the next jobs. The component tests
-  # may be skipped (nothing changed there), but never failed.
+  # Builds and scans each image, then hands it over to the next jobs. It runs alongside lint,
+  # scan and the tests rather than after them: the build is then ready when the tests end.
+  # perf checks their results before using the images, and publish needs perf, so an image
+  # whose tests failed is built but never published.
   #
   # Every job downstream of a skipped one is skipped too, even through a job that runs: a
   # job that needs build, perf or publish must therefore state its own condition with
   # !cancelled() and check the result of the job it needs, not rely on the default success().
   build:
-    needs: [changes, lint, scan, tests-back, tests-ml, tests-front]
+    needs: changes
     timeout-minutes: 45
     if: >-
       !cancelled() &&
-      (needs.changes.outputs.perf == 'true' || github.event_name == 'workflow_dispatch') &&
-      needs.lint.result == 'success' &&
-      needs.scan.result == 'success' &&
-      (needs.tests-back.result == 'success' || needs.tests-back.result == 'skipped') &&
-      (needs.tests-ml.result == 'success' || needs.tests-ml.result == 'skipped') &&
-      (needs.tests-front.result == 'success' || needs.tests-front.result == 'skipped')
+      (needs.changes.outputs.perf == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -546,13 +543,20 @@ jobs:
 
   # Load test against the stack started from the built images. The back reads its data
   # from a local EnerVision stand-in (docker-compose.ci.yml), never from the real API.
+  # It is also the gate of publish: the component tests may be skipped (nothing changed
+  # there), but never failed.
   perf:
-    needs: [changes, build]
+    needs: [changes, lint, scan, tests-back, tests-ml, tests-front, build]
     timeout-minutes: 45
     if: >-
       !cancelled() &&
+      (needs.changes.outputs.perf == 'true' || github.event_name == 'workflow_dispatch') &&
       needs.build.result == 'success' &&
-      (needs.changes.outputs.perf == 'true' || github.event_name == 'workflow_dispatch')
+      needs.lint.result == 'success' &&
+      needs.scan.result == 'success' &&
+      (needs.tests-back.result == 'success' || needs.tests-back.result == 'skipped') &&
+      (needs.tests-ml.result == 'success' || needs.tests-ml.result == 'skipped') &&
+      (needs.tests-front.result == 'success' || needs.tests-front.result == 'skipped')
     runs-on: ubuntu-latest
     env:
       BACK_IMAGE: ghcr.io/${{ github.repository }}/back:${{ github.sha }}
@@ -567,9 +571,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Only the images the stack starts: ml-predict and ml-train are on-demand jobs (profile
+      # jobs), never started here. Their variables below stay set, as the compose files
+      # require them even for services that do not start.
       - uses: actions/download-artifact@v8
         with:
-          pattern: image-*
+          pattern: image-{back,ml,mlflow,front}
           path: /tmp/images
           merge-multiple: true
 

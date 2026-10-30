@@ -511,14 +511,16 @@ run :
 
 **Ce qui lance quoi.** Les tests d'un composant sont _ignorés_ quand aucun de
 ses fichiers n'a changé : un job ignoré ne fait pas échouer la CI. Un test en
-échec fait en revanche toujours échouer son job et empêche `build`. Modifier
+échec fait en revanche toujours échouer son job et empêche `perf`. Modifier
 `ci.yml` ou `sonar-project.properties` lance **tous** les jobs, pour qu'un
 changement de CI soit toujours testé ; un lancement manuel aussi (sauf
 `publish`, réservé aux merges dans `main`).
 
-Les étapes se suivent : `lint`, `scan` et les tests lancés → `build` → `perf`
-→ `publish`, qui attend aussi les analyses Sonar. Une image n'est donc publiée
-qu'après avoir passé tous les contrôles du commit : un jeu d'images publié est
+Les étapes se suivent : `build` tourne en même temps que `lint`, `scan` et les
+tests, pour être prêt quand ils finissent ; `perf` attend tous ces jobs et
+vérifie qu'aucun n'a échoué → `publish`, qui attend aussi les analyses Sonar.
+Une image peut donc être construite pour un commit dont un test échoue, mais
+elle n'est publiée qu'après tous les contrôles du commit : un jeu d'images publié est
 toujours une version validée (voir _Déploiement_ plus bas). Un commit de `main`
 qui ne change rien de déployable (documentation, tests ML, scripts) ne publie
 aucune image.

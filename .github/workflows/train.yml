@@ -55,6 +55,9 @@ jobs:
         shell: bash
         env:
           REPOSITORY: ${{ github.repository }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+          ML_DB_PASSWORD: ${{ secrets.ML_DB_PASSWORD }}
         run: |
           set -euo pipefail
 

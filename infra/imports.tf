@@ -13,7 +13,7 @@ import {
   id = "/subscriptions/${var.subscription_id}/resourceGroups/${local.resource_group_name}/providers/Microsoft.Network/virtualNetworks/vnet-${var.student_id}/subnets/snet-workload"
 }
 
-resource "azurerm_resource_group" "rg" {
+data "azurerm_resource_group" "rg" {
   name     = local.resource_group_name
   location = "francecentral"
 
@@ -30,7 +30,7 @@ resource "azurerm_resource_group" "rg" {
   }
 }
 
-resource "azurerm_virtual_network" "vnet" {
+data "azurerm_virtual_network" "vnet" {
   name                = "vnet-${var.student_id}"
   resource_group_name = azurerm_resource_group.rg.name
   location            = "francecentral"
@@ -41,7 +41,7 @@ resource "azurerm_virtual_network" "vnet" {
   }
 }
 
-resource "azurerm_subnet" "subnet" {
+data "azurerm_subnet" "subnet" {
   name                                           = "snet-workload"
   resource_group_name                            = azurerm_resource_group.rg.name
   virtual_network_name                           = azurerm_virtual_network.vnet.name
